@@ -231,7 +231,7 @@
     margin-top: 8px;
   }
 
-  .yearly-stats-card {
+  .yearly-stats-container :global(.yearly-stats-card) {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -241,13 +241,13 @@
     padding: 20px;
   }
 
-  .yearly-stats-header {
+  .yearly-stats-container :global(.yearly-stats-header) {
     display: flex;
     align-items: center;
     gap: 12px;
   }
 
-  .yearly-stats-header .year-badge {
+  .yearly-stats-container :global(.yearly-stats-header .year-badge) {
     padding: 4px 12px;
     border-radius: 10px;
     font-size: 16px;
@@ -256,27 +256,27 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   }
   
-  .yearly-stats-header h3 {
+  .yearly-stats-container :global(.yearly-stats-header h3) {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
   }
 
-  .yearly-stats-carousel {
+  .yearly-stats-container :global(.yearly-stats-carousel) {
     display: flex;
     gap: 16px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     padding-bottom: 8px;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;
   }
   
-  .yearly-stats-carousel::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+  .yearly-stats-container :global(.yearly-stats-carousel::-webkit-scrollbar) {
+    display: none;
   }
 
-  .stats-column {
+  .yearly-stats-container :global(.stats-column) {
     min-width: 260px;
     flex: 1;
     scroll-snap-align: start;
@@ -286,7 +286,7 @@
     padding: 16px;
   }
 
-  .stats-column-title {
+  .yearly-stats-container :global(.stats-column-title) {
     font-size: 11px;
     font-weight: 800;
     color: var(--text-muted);
@@ -298,19 +298,19 @@
     gap: 6px;
   }
 
-  .stats-list {
+  .yearly-stats-container :global(.stats-list) {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
 
-  .stats-item {
+  .yearly-stats-container :global(.stats-item) {
     display: flex;
     align-items: center;
     gap: 12px;
   }
 
-  .stats-rank {
+  .yearly-stats-container :global(.stats-rank) {
     font-size: 16px;
     font-weight: 800;
     color: rgba(255, 255, 255, 0.15);
@@ -318,13 +318,13 @@
     text-align: right;
   }
 
-  .stats-item-info {
+  .yearly-stats-container :global(.stats-item-info) {
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   
-  .stats-item-name {
+  .yearly-stats-container :global(.stats-item-name) {
     font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
@@ -333,7 +333,7 @@
     text-overflow: ellipsis;
   }
   
-  .stats-item-count {
+  .yearly-stats-container :global(.stats-item-count) {
     font-size: 12px;
     color: var(--text-muted);
     font-weight: 500;
@@ -463,10 +463,14 @@
               bodyColor: 'rgba(255,255,255,0.8)',
               borderColor: 'rgba(255, 255, 255, 0.1)',
               borderWidth: 1,
-              padding: 12,
+              padding: 16,
               cornerRadius: 12,
-              titleFont: { family: 'Outfit', weight: 'bold' as const, size: 14 },
-              bodyFont: { family: 'Inter', size: 12 },
+              usePointStyle: true,
+              boxWidth: 8,
+              boxHeight: 8,
+              boxPadding: 8,
+              titleFont: { family: 'Outfit', weight: 'bold' as const, size: 18 },
+              bodyFont: { family: 'Inter', size: 15 },
               callbacks: {
                 label: (context) => {
                   let label = context.dataset.label || '';
@@ -596,7 +600,13 @@
     }
 
     function initializeCheckboxes(totals: YearlyTotals) {
-      const years = Object.keys(totals).sort().reverse();
+      const years = Object.keys(totals)
+        .filter(y => {
+          const parsed = parseInt(y, 10);
+          return !isNaN(parsed) && parsed >= 2023;
+        })
+        .sort()
+        .reverse();
       years.forEach((year, idx) => { yearColorMap[year] = colors[idx % colors.length]; });
       
       checkboxGroup.innerHTML = years.map((year, idx) => {

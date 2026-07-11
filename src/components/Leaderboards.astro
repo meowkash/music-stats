@@ -131,8 +131,6 @@
   
   .range-highlight {
     position: absolute;
-    top: 0;
-    bottom: 0;
     left: 0;
     width: 60px;
     border-radius: 20px;
@@ -215,8 +213,6 @@
   
   .sub-tab-highlight {
     position: absolute;
-    top: 4px;
-    bottom: 4px;
     left: 4px;
     width: 33.333%;
     border-radius: 8px;
@@ -971,6 +967,8 @@
       if (!rangeHighlight || !btn) return;
       rangeHighlight.style.left = `${btn.offsetLeft}px`;
       rangeHighlight.style.width = `${btn.offsetWidth}px`;
+      rangeHighlight.style.top = `${btn.offsetTop}px`;
+      rangeHighlight.style.height = `${btn.offsetHeight}px`;
     }
 
     const subTabHighlight = document.getElementById('subTabHighlight') as HTMLDivElement;
@@ -978,6 +976,8 @@
       if (!subTabHighlight || !btn) return;
       subTabHighlight.style.left = `${btn.offsetLeft}px`;
       subTabHighlight.style.width = `${btn.offsetWidth}px`;
+      subTabHighlight.style.top = `${btn.offsetTop}px`;
+      subTabHighlight.style.height = `${btn.offsetHeight}px`;
     }
 
     // Set up range buttons events

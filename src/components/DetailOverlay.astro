@@ -584,6 +584,7 @@
     function handleTouchStart(e: TouchEvent) {
       if (window.innerWidth >= 768) return; // side drawer does not support swipe close
       startY = e.touches[0].clientY;
+      currentY = startY; // Reset currentY to prevent stale values from immediately closing the sheet
       isDragging = true;
       panel.style.transition = 'none'; // disable transitions while dragging
     }
@@ -593,8 +594,8 @@
       currentY = e.touches[0].clientY;
       const diffY = currentY - startY;
 
-      // Only allow drag downwards
-      if (diffY > 0) {
+      // Only allow drag downwards and add a threshold to prevent cancelling clicks
+      if (diffY > 10) {
         panel.style.transform = `translateY(${diffY}px)`;
       }
     }

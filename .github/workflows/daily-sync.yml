@@ -1,6 +1,9 @@
 name: Daily Sync and Deploy
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '0 2 * * *' # Runs at 2:00 AM UTC every day
   workflow_dispatch: # Allows manual trigger from GitHub UI
@@ -12,7 +15,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
-      
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

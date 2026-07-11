@@ -1,6 +1,6 @@
 {
-  "name": "Aakash's Music Stats",
-  "short_name": "Aakash's Music",
+  "name": "My Music Stats",
+  "short_name": "My Music Stats",
   "description": "A fun interactive tracker for my music listening history over the years.",
   "start_url": "/",
   "display": "standalone",
