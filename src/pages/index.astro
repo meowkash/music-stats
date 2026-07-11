@@ -153,8 +153,6 @@ import DetailOverlay from "../components/DetailOverlay.astro";
       transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
       visibility 0.35s;
     pointer-events: none;
-    max-width: 1000px;
-    margin: 0 auto;
     width: 100%;
     transition:
       padding 0.3s ease,
@@ -175,7 +173,7 @@ import DetailOverlay from "../components/DetailOverlay.astro";
   }
   @media (min-width: 1024px) {
     .panel-section {
-      padding: 32px 32px calc(env(safe-area-inset-bottom) + 110px) 32px;
+      padding: 32px 20px calc(env(safe-area-inset-bottom) + 110px) 20px;
     }
   }
 

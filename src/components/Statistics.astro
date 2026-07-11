@@ -226,9 +226,18 @@
   /* Yearly Stats Carousel */
   .yearly-stats-container {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 24px;
     margin-top: 8px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+  }
+  
+  .yearly-stats-container::-webkit-scrollbar {
+    display: none;
   }
 
   .yearly-stats-container :global(.yearly-stats-card) {
@@ -239,6 +248,9 @@
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 20px;
     padding: 20px;
+    flex-shrink: 0;
+    width: 100%;
+    scroll-snap-align: start;
   }
 
   .yearly-stats-container :global(.yearly-stats-header) {
@@ -262,24 +274,15 @@
     color: var(--text-primary);
   }
 
-  .yearly-stats-container :global(.yearly-stats-carousel) {
+  .yearly-stats-container :global(.yearly-stats-columns) {
     display: flex;
+    flex-direction: column;
     gap: 16px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    padding-bottom: 8px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  
-  .yearly-stats-container :global(.yearly-stats-carousel::-webkit-scrollbar) {
-    display: none;
   }
 
   .yearly-stats-container :global(.stats-column) {
-    min-width: 260px;
+    min-width: 0;
     flex: 1;
-    scroll-snap-align: start;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 16px;
@@ -291,11 +294,29 @@
     font-weight: 800;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 16px;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+
+  /* Swipe Hint */
+  .swipe-hint {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 8px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 8px;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
   }
 
   .yearly-stats-container :global(.stats-list) {
@@ -311,11 +332,7 @@
   }
 
   .yearly-stats-container :global(.stats-rank) {
-    font-size: 16px;
-    font-weight: 800;
-    color: rgba(255, 255, 255, 0.15);
-    width: 20px;
-    text-align: right;
+    display: none;
   }
 
   .yearly-stats-container :global(.stats-item-info) {
@@ -342,6 +359,7 @@
 
 <script>
   import Chart from 'chart.js/auto';
+  import { generateScrobbleRowHTML, applyCountGlows } from '../utils/ui';
 
   interface YearlyTotals {
     [year: string]: number[];
@@ -351,6 +369,7 @@
     let rawTotals: YearlyTotals | null = null;
     let rawStats: any = null;
     let metaDict: any = null;
+    let artworkCache: Record<string, string> = {};
     
     let chart: Chart | null = null;
     let activeMode = 'cumulative';
@@ -378,14 +397,18 @@
 
     async function loadData() {
       try {
-        const [totalsRes, statsRes, metaRes] = await Promise.all([
+        const [totalsRes, statsRes, metaRes, artworkRes] = await Promise.all([
           fetch('/data/yearly-totals.json'),
           fetch('/data/yearly-stats.json'),
-          fetch('/data/meta.json')
+          fetch('/data/meta.json'),
+          fetch('/data/artwork.json')
         ]);
         rawTotals = await totalsRes.json();
         rawStats = await statsRes.json();
         metaDict = await metaRes.json();
+        if (artworkRes.ok) {
+          artworkCache = await artworkRes.json();
+        }
       } catch (err) {
         console.error('Failed to load statistics data:', err);
       }
@@ -515,19 +538,50 @@
           const id = item[0];
           const count = item[1];
           let name = 'Unknown';
-          if (type === 'tracks' && metaDict.tracks[id]) name = metaDict.tracks[id][0];
-          else if (type === 'albums' && metaDict.albums[id]) name = metaDict.albums[id];
-          else if (type === 'artists' && metaDict.artists[id]) name = metaDict.artists[id];
-          
-          return `
-            <div class="stats-item">
-              <div class="stats-rank">${idx + 1}</div>
-              <div class="stats-item-info">
-                <span class="stats-item-name">${name}</span>
-                <span class="stats-item-count">${count.toLocaleString()} plays</span>
-              </div>
-            </div>
-          `;
+          let subtitle = '';
+          let imgUrl = null;
+          let rowType = 'artist';
+
+          if (type === 'tracks' && metaDict.tracks[id]) {
+            name = metaDict.tracks[id][0];
+            const albumId = metaDict.tracks[id][1];
+            const artistId = metaDict.tracks[id][2];
+            const artistName = metaDict.artists[artistId] || 'Unknown Artist';
+            const albumName = metaDict.albums[albumId] || 'Unknown Album';
+            subtitle = artistName;
+            rowType = 'album';
+            imgUrl = artworkCache[`${albumName}|${artistName}`] || artworkCache[`${name}|${artistName}`] || artworkCache[artistName];
+          }
+          else if (type === 'albums' && metaDict.albums[id]) {
+            name = metaDict.albums[id];
+            const trackEntry = metaDict.tracks.find((t: any) => t && t[1] == id);
+            if (trackEntry) {
+              const artistName = metaDict.artists[trackEntry[2]];
+              subtitle = artistName;
+              imgUrl = artworkCache[`${name}|${artistName}`] || artworkCache[artistName];
+            } else {
+              subtitle = 'Album';
+              imgUrl = artworkCache[name];
+            }
+            rowType = 'album';
+          }
+          else if (type === 'artists' && metaDict.artists[id]) {
+            name = metaDict.artists[id];
+            subtitle = 'Artist';
+            imgUrl = artworkCache[name];
+            rowType = 'artist';
+          }
+
+          const idStr = id.toString();
+
+          return generateScrobbleRowHTML({
+            type: rowType,
+            id: idStr,
+            name: name,
+            subtitle: subtitle,
+            imgUrl: imgUrl || null,
+            count: count
+          }, false);
         }).join('');
 
         return `
@@ -536,7 +590,7 @@
               <span class="year-badge" style="background-color: ${color};">${year}</span>
               <h3>Top Activity</h3>
             </div>
-            <div class="yearly-stats-carousel">
+            <div class="yearly-stats-columns">
               <div class="stats-column">
                 <div class="stats-column-title">Top Songs</div>
                 <div class="stats-list">
@@ -558,45 +612,27 @@
             </div>
           </div>
         `;
-      }).join('');
+      });
       
-      container.innerHTML = html;
+      const swipeHint = sortedSelectedYears.length > 1 ? 
+        '<div class="swipe-hint"><span>←</span> Swipe to see other years <span>→</span></div>' : '';
+
+      container.innerHTML = html.join('') + swipeHint;
+
+      applyCountGlows(container);
     }
 
-    function addYear(year: string) {
-      if (!rawTotals || !chart) return;
-      const ds = buildDataset(year, rawTotals);
-      if (!ds) return;
-      datasetMap.set(year, ds);
-      chart.data.datasets.push(ds);
-      chart.update();
-      renderYearlyStats();
-    }
-
-    function removeYear(year: string) {
-      if (!chart) return;
-      const ds = datasetMap.get(year);
-      if (ds) {
-        const idx = chart.data.datasets.indexOf(ds);
-        if (idx !== -1) chart.data.datasets.splice(idx, 1);
-        datasetMap.delete(year);
-      }
-      chart.update();
-      renderYearlyStats();
-    }
-
-    function rebuildAllDatasets() {
-      if (!rawTotals || !chart) return;
+    function updateChart() {
       datasetMap.clear();
-      chart.data.datasets = [];
+      chart!.data.datasets = [];
       for (const year of selectedYears) {
-        const ds = buildDataset(year, rawTotals);
+        const ds = buildDataset(year, rawTotals!);
         if (ds) {
           datasetMap.set(year, ds);
-          chart.data.datasets.push(ds);
+          chart!.data.datasets.push(ds);
         }
       }
-      chart.update();
+      chart!.update();
     }
 
     function initializeCheckboxes(totals: YearlyTotals) {
@@ -625,29 +661,40 @@
           </label>
         `;
       }).join('');
-
-      const labels = checkboxGroup.querySelectorAll('.checkbox-label');
-      labels.forEach(lbl => {
-        const input = lbl.querySelector('input') as HTMLInputElement;
-        const year = lbl.getAttribute('data-year') as string;
-        lbl.addEventListener('click', (e) => {
-          if (e.target !== input) return;
-          if (input.checked) {
-            lbl.classList.add('checked');
-            selectedYears.add(year);
-            addYear(year);
-          } else {
-            lbl.classList.remove('checked');
-            selectedYears.delete(year);
-            removeYear(year);
-          }
-        });
-      });
     }
 
-    // Chart Mode Toggle
-    const modeBtns = document.querySelectorAll('.mode-btn');
+    // Event Listeners
+    document.getElementById('yearCheckboxes')?.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.tagName !== 'INPUT') return;
+
+      const year = target.value;
+      if (target.checked) {
+        selectedYears.add(year);
+      } else {
+        selectedYears.delete(year);
+      }
+      
+      target.closest('label')?.classList.toggle('checked', target.checked);
+      updateChart();
+      renderYearlyStats();
+    });
     
+    document.getElementById('yearlyStatsContainer')?.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const entity = target.closest('.clickable-entity');
+      if (entity) {
+        const type = entity.getAttribute('data-type');
+        const idStr = entity.getAttribute('data-id');
+        if (type && idStr && idStr !== '0') {
+          window.dispatchEvent(new CustomEvent('open-entity-details', {
+            detail: { type, id: parseInt(idStr, 10) }
+          }));
+        }
+      }
+    });
+
+    const modeBtns = document.querySelectorAll('.mode-btn');
     function syncModeHighlight(btn: HTMLElement) {
       if (!modeSliderHighlight || !btn) return;
       modeSliderHighlight.style.left = `${btn.offsetLeft}px`;

@@ -1019,21 +1019,6 @@
     });
 
     // Sub-Tab switcher events
-    const tabBtns = document.querySelectorAll('.sub-tab-btn');
-    tabBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-tab');
-        if (!tab) return;
-
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        syncSubTabHighlight(btn as HTMLElement);
-
-        activeTab = tab;
-        updateLeaderboard();
-      });
-    });
-
     let searchDebounce: NodeJS.Timeout;
     searchInput.addEventListener('input', (e) => {
       const val = (e.target as HTMLInputElement).value;

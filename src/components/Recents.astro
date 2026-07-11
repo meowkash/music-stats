@@ -15,7 +15,7 @@
 <style>
   .recents-container {
     width: 100%;
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -123,6 +123,8 @@
 </style>
 
 <script>
+  import { generateScrobbleRowHTML, applyCountGlows } from '../utils/ui';
+
   interface RecentScrobble {
     uts: number;
     artist: string;
@@ -131,16 +133,6 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    // Escape HTML utility function to prevent XSS
-    function escapeHTML(str: string): string {
-      return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
     // Relative time formatting
     function formatRelativeTime(uts: number): string {
       const diff = Math.floor(Date.now() / 1000) - uts;
@@ -174,52 +166,25 @@
           return;
         }
 
-        // Map artist name to ID lookup
-        const artistIdsByName: Record<string, number> = {};
-        if (meta && meta.artists) {
-          for (const [idStr, name] of Object.entries(meta.artists)) {
-            artistIdsByName[(name as string).toLowerCase()] = parseInt(
-              idStr,
-              10,
-            );
-          }
-        }
-
         container.innerHTML = list
           .map((item) => {
             const imgUrl =
               artworkCache[`${item.album}|${item.artist}`] ||
               artworkCache[item.artist];
-            const highResImg = imgUrl
-              ? imgUrl.replace("/300x300/", "/500x500/") // Keep last.fm upgrade
-              : null;
-            const thumbContent = highResImg
-              ? `<img src="${highResImg}" alt="Cover">`
-              : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                 <path d="M9 18V5l12-2v13"></path>
-                 <circle cx="6" cy="18" r="3"></circle>
-                 <circle cx="18" cy="16" r="3"></circle>
-               </svg>`;
-
-            const artistId = artistIdsByName[item.artist.toLowerCase()] || 0;
-
-            return `
-            <div class="scrobble-row clickable-recent-row" data-type="artist" data-id="${artistId}">
-              <div class="scrobble-row-thumb">
-                ${thumbContent}
-              </div>
-              <div class="scrobble-row-info">
-                <span class="scrobble-row-title">${escapeHTML(item.track)}</span>
-                <span class="scrobble-row-subtitle">${escapeHTML(item.artist)} • ${escapeHTML(item.album)}</span>
-              </div>
-              <span class="scrobble-row-right">${formatRelativeTime(item.uts)}</span>
-            </div>
-          `;
+            
+            return generateScrobbleRowHTML({
+              type: 'artist',
+              id: 0,
+              name: item.track,
+              subtitle: `${item.artist} • ${item.album}`,
+              imgUrl: imgUrl || null,
+              count: formatRelativeTime(item.uts)
+            }, false);
           })
           .join("");
 
         // Wire click triggers
-        const rows = container.querySelectorAll(".clickable-recent-row");
+        const rows = container.querySelectorAll(".clickable-entity");
         rows.forEach((row) => {
           row.addEventListener("click", () => {
             const type = row.getAttribute("data-type");
