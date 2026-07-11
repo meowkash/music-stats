@@ -1,0 +1,927 @@
+---
+// DetailOverlay component for immersive artist/album detail views
+---
+
+<div class="overlay-backdrop" id="detailsOverlayBackdrop"></div>
+
+<div class="details-overlay-panel" id="detailsOverlayPanel">
+  <!-- Mobile top drag handle -->
+  <div class="sheet-drag-handle" id="sheetDragHandle"></div>
+
+  <div class="overlay-background-blur" id="overlayBgBlur"></div>
+  <div class="overlay-content-wrapper">
+    <!-- Close header bar -->
+    <div class="overlay-nav-bar" id="overlayNavBar">
+      <button class="nav-circle-btn" id="overlayCloseBtn" aria-label="Go Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Main Header Details -->
+    <div class="overlay-header" id="overlayHeader">
+      <div class="overlay-artwork-wrapper">
+        <img id="overlayArtwork" src="" alt="Artwork" />
+        <div class="overlay-artwork-fallback hidden" id="overlayArtworkFallback">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 18V5l12-2v13"></path>
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="overlay-header-content">
+        <h3 class="overlay-title" id="overlayTitle">-</h3>
+        <p class="overlay-subtitle" id="overlaySubtitle">-</p>
+        <p class="overlay-metadata" id="overlayMetadata">-</p>
+        
+        <!-- Action buttons removed for non-player app view -->
+      </div>
+    </div>
+
+    <!-- Track List Section -->
+    <div class="overlay-songs-section">
+      <div class="overlay-songs-list" id="overlaySongsList">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- Albums Section -->
+    <div class="overlay-albums-section hidden" id="overlayAlbumsSection">
+      <h4 id="overlayAlbumsHeader">Albums</h4>
+      <div class="overlay-albums-list" id="overlayAlbumsList">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Backdrop overlay (dimmed background) */
+  .overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .overlay-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Responsive Detail Panel Sheet */
+  .details-overlay-panel {
+    position: fixed;
+    z-index: 200;
+    background: #0a0a0f;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    transition: transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Mobile style: Bottom Sheet */
+  @media (max-width: 767px) {
+    .details-overlay-panel {
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: 8dvh;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      transform: translateY(100%);
+    }
+    
+    .overlay-header, .overlay-artwork-wrapper {
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      overflow: hidden;
+    }
+
+    .sheet-drag-handle {
+      display: block;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40px;
+      height: 5px;
+      border-radius: 2.5px;
+      background: rgba(255, 255, 255, 0.45);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      flex-shrink: 0;
+      cursor: grab;
+      z-index: 50;
+    }
+  }
+
+  /* Desktop style: Side pullover drawer */
+  @media (min-width: 768px) {
+    .details-overlay-panel {
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 480px;
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      transform: translateX(100%);
+    }
+
+    .sheet-drag-handle {
+      display: none;
+    }
+  }
+
+  .details-overlay-panel.visible {
+    transform: none !important;
+  }
+
+  /* Ambient Blurred Artwork Color Backdrop */
+  .overlay-background-blur {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 380px;
+    background-size: cover;
+    background-position: center;
+    filter: blur(40px) saturate(1.4);
+    opacity: 0.45;
+    z-index: 0;
+    pointer-events: none;
+    transition: background-image 0.3s ease;
+  }
+
+  .overlay-background-blur::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 15%, #0a0a0f 85%);
+  }
+
+  /* Layout wrappers */
+  .overlay-content-wrapper {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 20px calc(env(safe-area-inset-bottom) + 40px) 20px;
+    width: 100%;
+    min-height: 100%;
+  }
+
+  .overlay-nav-bar {
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    z-index: 10;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    height: 44px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .nav-circle-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  .nav-circle-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    transform: scale(1.05);
+  }
+
+  .nav-circle-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .overlay-header {
+    position: relative;
+    width: calc(100% + 40px); /* negate wrapper padding */
+    margin-left: -20px;
+    margin-right: -20px;
+    margin-top: -16px;
+    height: 50vh;
+    min-height: 320px;
+    max-height: 480px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    flex-direction: column;
+    justify-content: flex-end;
+    display: flex;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+
+  .overlay-header .overlay-artwork-wrapper {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    margin: 0;
+    z-index: 1;
+  }
+
+  .overlay-header .overlay-artwork-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .overlay-header .overlay-header-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 40px 20px 24px 20px;
+    background: linear-gradient(to top, rgba(10, 10, 15, 0.95) 0%, rgba(10, 10, 15, 0.6) 60%, rgba(10, 10, 15, 0) 100%);
+    z-index: 2;
+    text-align: center;
+    width: 100%;
+  }
+
+  .overlay-artwork-fallback {
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overlay-artwork-fallback svg {
+    width: 50px;
+    height: 50px;
+  }
+
+  .overlay-title {
+    font-family: var(--font-header);
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+    padding: 0 10px;
+  }
+
+  .overlay-subtitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-pink);
+    margin-bottom: 6px;
+  }
+
+  .clickable-artist-link {
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    border-bottom: 1px dashed rgba(255, 45, 85, 0.4);
+    display: inline-block;
+  }
+
+  .clickable-artist-link:hover {
+    color: #fff !important;
+    border-bottom-color: #fff;
+  }
+
+  .overlay-metadata {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+  }
+
+  /* Play Buttons */
+  .overlay-action-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 14px;
+    width: 100%;
+  }
+
+  .action-circle-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  .action-circle-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: scale(1.05);
+  }
+
+  .action-circle-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .action-play-btn {
+    flex: 1;
+    max-width: 140px;
+    height: 40px;
+    border-radius: 20px;
+    background: #fff;
+    border: none;
+    color: #000;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  .action-play-btn:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: scale(1.03);
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
+  }
+
+  .overlay-songs-section {
+    flex: 1;
+    margin-bottom: 12px;
+  }
+
+  .overlay-songs-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scrobble row overrides specifically for detail sheets (less padding on mobile) */
+  .details-overlay-panel :global(.scrobble-row) {
+    padding: 8px 10px;
+    gap: 10px;
+    border-radius: 6px;
+  }
+
+  /* Horizontal Scrolling albums section (Pic 3 Style) */
+  .overlay-albums-section {
+    margin-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 20px;
+    flex-shrink: 0;
+    width: 100%;
+  }
+
+  .overlay-albums-section h4 {
+    font-family: var(--font-header);
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+
+  .overlay-albums-list {
+    display: flex;
+    overflow-x: auto;
+    gap: 16px;
+    padding: 8px 0 16px 0;
+    scroll-behavior: smooth;
+    scrollbar-width: none; /* Firefox */
+    width: 100%;
+  }
+
+  .overlay-albums-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .overlay-albums-list :global(.overlay-album-card) {
+    flex-shrink: 0;
+    width: 130px;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  .overlay-albums-list :global(.overlay-album-card:hover) {
+    transform: translateY(-4px);
+  }
+
+  .overlay-albums-list :global(.overlay-album-card-artwork) {
+    width: 130px;
+    height: 130px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overlay-albums-list :global(.overlay-album-card-artwork img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .overlay-albums-list :global(.overlay-album-card-artwork svg) {
+    width: 32px;
+    height: 32px;
+    color: var(--text-muted);
+  }
+
+  .overlay-albums-list :global(.overlay-album-card-title) {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+    text-align: left;
+  }
+
+  .overlay-albums-list :global(.overlay-album-card-subtitle) {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+</style>
+
+<script>
+  interface MetaData {
+    artists: string[];
+    albums: string[];
+    tracks: [string, number, number][];
+  }
+
+  function init() {
+    // Elements Cache
+    const backdrop = document.getElementById('detailsOverlayBackdrop') as HTMLDivElement;
+    const panel = document.getElementById('detailsOverlayPanel') as HTMLDivElement;
+    const dragHandle = document.getElementById('sheetDragHandle') as HTMLDivElement;
+    const overlayArtwork = document.getElementById('overlayArtwork') as HTMLImageElement;
+    const overlayArtworkFallback = document.getElementById('overlayArtworkFallback') as HTMLDivElement;
+    const overlayTitle = document.getElementById('overlayTitle') as HTMLHeadingElement;
+    const overlaySubtitle = document.getElementById('overlaySubtitle') as HTMLParagraphElement;
+    const overlayMetadata = document.getElementById('overlayMetadata') as HTMLParagraphElement;
+    const overlaySongsList = document.getElementById('overlaySongsList') as HTMLDivElement;
+    const overlayBgBlur = document.getElementById('overlayBgBlur') as HTMLDivElement;
+    
+    const overlayAlbumsSection = document.getElementById('overlayAlbumsSection') as HTMLDivElement;
+    const overlayAlbumsHeader = document.getElementById('overlayAlbumsHeader') as HTMLHeadingElement;
+    const overlayAlbumsList = document.getElementById('overlayAlbumsList') as HTMLDivElement;
+    const overlayCloseBtn = document.getElementById('overlayCloseBtn') as HTMLButtonElement;
+
+    // Cache variables
+    let meta: MetaData | null = null;
+    let artworkCache: Record<string, string> = {};
+    let catalog: any = null;
+
+    let currentEntity: { type: string; id: number } | null = null;
+    const navHistory: { type: string; id: number }[] = [];
+
+    // Preloaders
+    async function loadMeta() {
+      if (meta) return meta;
+      try {
+        const [metaRes, artworkRes] = await Promise.all([
+          fetch('/data/meta.json'),
+          fetch('/data/artwork.json').catch(() => null)
+        ]);
+        meta = await metaRes.json();
+        if (artworkRes && artworkRes.ok) {
+          artworkCache = await artworkRes.json();
+        }
+        return meta;
+      } catch (err) {
+        console.error('Failed to load metadata in overlay:', err);
+        return null;
+      }
+    }
+
+    async function loadCatalog() {
+      if (catalog) return catalog;
+      try {
+        const res = await fetch('/data/catalog.json');
+        catalog = await res.json();
+        return catalog;
+      } catch (err) {
+        console.error('Failed to load catalog in overlay:', err);
+        return null;
+      }
+    }
+
+    function closeDetails() {
+      panel.classList.remove('visible');
+      backdrop.classList.remove('visible');
+      currentEntity = null;
+      navHistory.length = 0;
+      panel.style.transform = ''; // reset drag transforms
+    }
+
+    // Dismiss listeners
+    overlayCloseBtn.addEventListener('click', () => {
+      if (navHistory.length > 0) {
+        const prev = navHistory.pop()!;
+        openDetails(prev.type, prev.id, true);
+      } else {
+        closeDetails();
+      }
+    });
+
+    backdrop.addEventListener('click', closeDetails);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && panel.classList.contains('visible')) {
+        closeDetails();
+      }
+    });
+
+    // Touch Swipe Controller (Mobile bottom sheet close gesture)
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+
+    // We allow swiping down starting from either the drag handle or the top header area
+    const touchTarget = document.getElementById('overlayHeader') as HTMLDivElement;
+
+    function handleTouchStart(e: TouchEvent) {
+      if (window.innerWidth >= 768) return; // side drawer does not support swipe close
+      startY = e.touches[0].clientY;
+      isDragging = true;
+      panel.style.transition = 'none'; // disable transitions while dragging
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      if (!isDragging) return;
+      currentY = e.touches[0].clientY;
+      const diffY = currentY - startY;
+
+      // Only allow drag downwards
+      if (diffY > 0) {
+        panel.style.transform = `translateY(${diffY}px)`;
+      }
+    }
+
+    function handleTouchEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      panel.style.transition = ''; // restore smooth transition
+
+      const diffY = currentY - startY;
+      // Close sheet if dragged down past threshold (130px)
+      if (diffY > 130) {
+        closeDetails();
+      } else {
+        panel.style.transform = ''; // snap back
+      }
+    }
+
+    if (dragHandle) {
+      dragHandle.addEventListener('touchstart', handleTouchStart);
+      dragHandle.addEventListener('touchmove', handleTouchMove);
+      dragHandle.addEventListener('touchend', handleTouchEnd);
+    }
+    if (touchTarget) {
+      touchTarget.addEventListener('touchstart', handleTouchStart);
+      touchTarget.addEventListener('touchmove', handleTouchMove);
+      touchTarget.addEventListener('touchend', handleTouchEnd);
+    }
+
+    // Helper to get dominant color from image
+    function getDominantColor(imgEl: HTMLImageElement, callback: (rgb: {r: number, g: number, b: number}) => void) {
+      if (!imgEl.src || imgEl.src.includes('undefined')) {
+        callback({ r: 255, g: 107, b: 138 });
+        return;
+      }
+      
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        callback({ r: 255, g: 107, b: 138 });
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = imgEl.src;
+      img.onload = () => {
+        try {
+          canvas.width = 10;
+          canvas.height = 10;
+          ctx.drawImage(img, 0, 0, 10, 10);
+          const data = ctx.getImageData(0, 0, 10, 10).data;
+          
+          let r = 0, g = 0, b = 0, count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const max = Math.max(data[i], data[i+1], data[i+2]);
+            const min = Math.min(data[i], data[i+1], data[i+2]);
+            if (max - min > 30) {
+              r += data[i];
+              g += data[i+1];
+              b += data[i+2];
+              count++;
+            }
+          }
+          if (count === 0) {
+            for (let i = 0; i < data.length; i += 4) {
+              r += data[i];
+              g += data[i+1];
+              b += data[i+2];
+              count++;
+            }
+          }
+          
+          r = Math.round(r / count);
+          g = Math.round(g / count);
+          b = Math.round(b / count);
+          
+          // Convert to HSL to boost brightness/saturation cleanly
+          let rNorm = r / 255;
+          let gNorm = g / 255;
+          let bNorm = b / 255;
+          let maxColor = Math.max(rNorm, gNorm, bNorm);
+          let minColor = Math.min(rNorm, gNorm, bNorm);
+          let h = 0, s = 0, l = (maxColor + minColor) / 2;
+
+          if (maxColor !== minColor) {
+            let d = maxColor - minColor;
+            s = l > 0.5 ? d / (2 - maxColor - minColor) : d / (maxColor + minColor);
+            switch (maxColor) {
+              case rNorm: h = (gNorm - bNorm) / d + (gNorm < bNorm ? 6 : 0); break;
+              case gNorm: h = (bNorm - rNorm) / d + 2; break;
+              case bNorm: h = (rNorm - gNorm) / d + 4; break;
+            }
+            h /= 6;
+          }
+
+          // Boost lightness and saturation for contrast on dark background
+          if (l < 0.6) {
+            l = 0.6; // Ensure it's bright enough to read/glow
+          }
+          if (s > 0.05) {
+            s = Math.max(0.5, s * 1.3); // Ensure color vibrance
+          }
+
+          // Convert back to RGB
+          const hue2rgb = (p: number, q: number, t: number) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+          };
+
+          let rNew, gNew, bNew;
+          if (s === 0) {
+            rNew = gNew = bNew = l;
+          } else {
+            let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            let p = 2 * l - q;
+            rNew = hue2rgb(p, q, h + 1/3);
+            gNew = hue2rgb(p, q, h);
+            bNew = hue2rgb(p, q, h - 1/3);
+          }
+
+          r = Math.round(rNew * 255);
+          g = Math.round(gNew * 255);
+          b = Math.round(bNew * 255);
+
+          callback({ r, g, b });
+        } catch (e) {
+          callback({ r: 255, g: 107, b: 138 }); // CORS fallback
+        }
+      };
+      img.onerror = () => {
+        callback({ r: 255, g: 107, b: 138 });
+      };
+    }
+
+    // Dynamic Render Engine
+    const overlayHeader = document.getElementById('overlayHeader') as HTMLDivElement;
+
+    async function openDetails(type: string, id: number, isBack = false) {
+      if (!isBack && currentEntity) {
+        navHistory.push(currentEntity);
+      }
+      currentEntity = { type, id };
+
+      const [dictionary, catalogData] = await Promise.all([
+        loadMeta(),
+        loadCatalog()
+      ]);
+
+      if (!dictionary || !catalogData) return;
+
+      let name = '';
+      let subtitle = '';
+      let imgUrl: string | null = null;
+      let metadataStr = '';
+      let sortedTracks: { name: string; count: number }[] = [];
+      let albumsToRender: { id: number; name: string; scrobbles: number }[] = [];
+      let artistNameForArtworkLookup = '';
+
+      if (type === 'artist') {
+        const artistInfo = catalogData.artists[id];
+        name = artistInfo ? artistInfo.name : (dictionary.artists[id] || 'Unknown Artist');
+        subtitle = 'Artist';
+        imgUrl = artworkCache[name] || null;
+        
+        const scrobblesCount = artistInfo ? artistInfo.scrobbles : 0;
+        sortedTracks = artistInfo ? artistInfo.tracks : [];
+        albumsToRender = artistInfo ? artistInfo.albums : [];
+        artistNameForArtworkLookup = name;
+
+        metadataStr = `${sortedTracks.length} Songs • ${scrobblesCount.toLocaleString()} Scrobbles`;
+      } else if (type === 'album') {
+        const albumInfo = catalogData.albums[id];
+        name = albumInfo ? albumInfo.name : (dictionary.albums[id] || 'Unknown Album');
+        
+        const artistId = albumInfo ? albumInfo.artistId : 0;
+        const artistName = albumInfo ? albumInfo.artistName : (dictionary.artists[artistId] || 'Unknown Artist');
+        subtitle = artistName;
+        imgUrl = artworkCache[`${name}|${artistName}`] || artworkCache[artistName] || null;
+        
+        const scrobblesCount = albumInfo ? albumInfo.scrobbles : 0;
+        if (albumInfo && albumInfo.tracks) {
+          sortedTracks = Object.values(albumInfo.tracks).sort((a: any, b: any) => b.count - a.count);
+        }
+        artistNameForArtworkLookup = artistName;
+
+        metadataStr = `Album • ${scrobblesCount.toLocaleString()} Scrobbles`;
+
+        if (artistId) {
+          const artistInfo = catalogData.artists[artistId];
+          if (artistInfo && artistInfo.albums) {
+            albumsToRender = artistInfo.albums.filter((alb: any) => alb.id !== id);
+          }
+        }
+      }
+
+      // Populate elements
+      overlayTitle.textContent = name;
+      
+      // If Album view, make the subtitle a clickable link to the Artist
+      if (type === 'album') {
+        const albumInfo = catalogData.albums[id];
+        const artistId = albumInfo ? albumInfo.artistId : 0;
+        overlaySubtitle.innerHTML = `<span class="clickable-artist-link" data-artist-id="${artistId}">${escapeHTML(subtitle)}</span>`;
+        const link = overlaySubtitle.querySelector('.clickable-artist-link');
+        if (link) {
+          link.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const artistIdVal = parseInt(link.getAttribute('data-artist-id') || '0', 10);
+            if (artistIdVal) {
+              openDetails('artist', artistIdVal);
+            }
+          });
+        }
+      } else {
+        overlaySubtitle.textContent = subtitle;
+      }
+
+      overlayMetadata.textContent = metadataStr;
+
+      if (imgUrl) {
+        const highResImg = imgUrl.replace('/300x300/', '/500x500/');
+        overlayArtwork.src = highResImg;
+        overlayArtwork.style.display = 'block';
+        overlayArtworkFallback.classList.add('hidden');
+        overlayBgBlur.style.backgroundImage = `url('${highResImg}')`;
+      } else {
+        overlayArtwork.style.display = 'none';
+        overlayArtworkFallback.classList.remove('hidden');
+        overlayBgBlur.style.backgroundImage = 'none';
+        overlayBgBlur.style.backgroundColor = 'transparent';
+      }
+
+      // Populate Track List
+      if (sortedTracks.length === 0) {
+        overlaySongsList.innerHTML = '<div class="no-data" style="text-align:center; padding: 20px 0;">No tracks found</div>';
+      } else {
+        overlaySongsList.innerHTML = sortedTracks.map((track, idx) => {
+          return `
+            <div class="scrobble-row">
+              <span class="scrobble-row-rank">${idx + 1}</span>
+              <div class="scrobble-row-info">
+                <span class="scrobble-row-title">${escapeHTML(track.name)}</span>
+              </div>
+              <div class="scrobble-row-right">
+                <span class="scrobble-count-val">${track.count.toLocaleString()}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Populate Horizontal Scrolling related albums section
+      if (albumsToRender.length === 0) {
+        overlayAlbumsSection.classList.add('hidden');
+        overlayAlbumsList.innerHTML = '';
+      } else {
+        overlayAlbumsSection.classList.remove('hidden');
+        overlayAlbumsHeader.textContent = type === 'artist' ? 'Albums' : 'Other Albums by this Artist';
+        
+        overlayAlbumsList.innerHTML = albumsToRender.map(alb => {
+          const albImg = artworkCache[`${alb.name}|${artistNameForArtworkLookup}`] || artworkCache[artistNameForArtworkLookup] || null;
+          const highResAlbImg = albImg ? albImg.replace('/300x300/', '/500x500/') : null;
+          const thumbHtml = highResAlbImg 
+            ? `<img src="${highResAlbImg}" alt="" />`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+          return `
+            <div class="overlay-album-card" data-album-id="${alb.id}">
+              <div class="overlay-album-card-artwork">
+                ${thumbHtml}
+              </div>
+              <span class="overlay-album-card-title">${escapeHTML(alb.name)}</span>
+              <span class="overlay-album-card-subtitle">${alb.scrobbles.toLocaleString()} scrobbles</span>
+            </div>
+          `;
+        }).join('');
+
+        const cards = overlayAlbumsList.querySelectorAll('.overlay-album-card');
+        cards.forEach(card => {
+          card.addEventListener('click', () => {
+            const albIdStr = card.getAttribute('data-album-id');
+            if (albIdStr) {
+              openDetails('album', parseInt(albIdStr, 10));
+            }
+          });
+        });
+      }
+
+      // Apply dynamic colors glow
+      getDominantColor(overlayArtwork, (rgb) => {
+        const glowStyle = `color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b}); text-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.7); font-weight: 700;`;
+        const countSpanEls = overlaySongsList.querySelectorAll('.scrobble-count-val');
+        countSpanEls.forEach(el => {
+          el.setAttribute('style', glowStyle);
+        });
+        
+        panel.style.background = `linear-gradient(to bottom, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25) 0%, #0a0a0f 450px)`;
+      });
+
+      panel.classList.add('visible');
+      backdrop.classList.add('visible');
+    }
+
+    // Listen to global open event
+    window.addEventListener('open-entity-details', (e: any) => {
+      const { type, id } = e.detail;
+      openDetails(type, id);
+    });
+
+    function escapeHTML(str: string) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+</script>

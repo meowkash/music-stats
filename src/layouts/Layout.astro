@@ -1,0 +1,287 @@
+---
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const {
+	title,
+	description = "Interactive Last.FM scrobble analytics and charts.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+		/>
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="manifest" href="/manifest.json" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta
+			name="apple-mobile-web-app-status-bar-style"
+			content="black-translucent"
+		/>
+		<meta name="apple-mobile-web-app-title" content="Aakash's Music" />
+		<meta name="theme-color" content="#0a0a0f" />
+		<meta name="generator" content={Astro.generator} />
+		<meta name="description" content={description} />
+		<title>{title}</title>
+
+		<!-- Google Fonts -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<slot />
+
+		<script>
+			// Register Service Worker for PWA
+			if ("serviceWorker" in navigator) {
+				window.addEventListener("load", () => {
+					navigator.serviceWorker
+						.register("/sw.js")
+						.then((reg) =>
+							console.log(
+								"SW registered successfully:",
+								reg.scope,
+							),
+						)
+						.catch((err) =>
+							console.error("SW registration failed:", err),
+						);
+				});
+			}
+		</script>
+	</body>
+</html>
+
+<style is:global>
+	:root {
+		--bg-dark: #0a0a0f;
+		--panel-bg: rgba(255, 255, 255, 0.03);
+		--panel-border: rgba(255, 255, 255, 0.06);
+		--panel-border-hover: rgba(255, 255, 255, 0.12);
+		--text-primary: #ffffff;
+		--text-secondary: rgba(255, 255, 255, 0.6);
+		--text-muted: rgba(255, 255, 255, 0.35);
+		--accent-pink: #ff2d55;
+		--accent-pink-glow: rgba(255, 45, 85, 0.4);
+		--accent-cyan: #00f0ff;
+		--accent-cyan-glow: rgba(0, 240, 255, 0.4);
+		--accent-violet: #8b5cf6;
+		--accent-violet-glow: rgba(139, 92, 246, 0.4);
+
+		--font-header:
+			"Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+			sans-serif;
+		--font-body:
+			"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+			sans-serif;
+
+		--transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+	}
+
+	* {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
+	}
+
+	html,
+	body {
+		width: 100%;
+		height: 100dvh;
+		background-color: var(--bg-dark);
+		color: var(--text-primary);
+		font-family: var(--font-body);
+		overflow: hidden;
+		overscroll-behavior: none;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	/* Scrollbar Styling */
+	::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 3px;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.15);
+	}
+
+	/* Subtle glass card — provides layer separation */
+	.glass-card {
+		background: var(--panel-bg);
+		border: 1px solid var(--panel-border);
+		border-radius: 16px;
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		transition: var(--transition-smooth);
+	}
+
+	.glass-input {
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		color: #fff;
+		border-radius: 12px;
+		padding: 10px 16px;
+		font-family: var(--font-body);
+		font-size: 14px;
+		outline: none;
+		transition: var(--transition-smooth);
+	}
+
+	.glass-input:focus {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: var(--accent-pink);
+		box-shadow: 0 0 10px var(--accent-pink-glow);
+	}
+
+	/* Micro-animations */
+	.hover-scale {
+		transition: var(--transition-smooth);
+	}
+	.hover-scale:hover {
+		transform: translateY(-2px) scale(1.02);
+	}
+	.hover-scale:active {
+		transform: translateY(0) scale(0.98);
+	}
+
+	/* Reusable Apple Music style list items (global component) */
+	.scrobble-row {
+		display: flex;
+		align-items: center;
+		padding: 10px 16px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		gap: 14px;
+		background: transparent;
+		transition: var(--transition-smooth);
+		cursor: pointer;
+		border-radius: 8px;
+		width: 100%;
+		user-select: none;
+	}
+
+	.scrobble-row:last-child {
+		border-bottom: none;
+	}
+
+	.scrobble-row:hover {
+		background: rgba(255, 255, 255, 0.05);
+		transform: translateY(-1.5px);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	}
+
+	.scrobble-row a,
+	.scrobble-row a:hover,
+	.scrobble-row-title,
+	.scrobble-row-subtitle {
+		text-decoration: none !important;
+	}
+
+	.scrobble-row-rank {
+		width: 24px;
+		text-align: right;
+		color: var(--text-muted);
+		font-size: 14px;
+		font-weight: 500;
+		flex-shrink: 0;
+	}
+
+	.scrobble-row-thumb {
+		width: 44px;
+		height: 44px;
+		border-radius: 6px;
+		flex-shrink: 0;
+		overflow: hidden;
+		background: rgba(255, 255, 255, 0.04);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-muted);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.scrobble-row-thumb img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.scrobble-row-thumb svg {
+		width: 20px;
+		height: 20px;
+	}
+
+	.scrobble-row-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		overflow: hidden;
+		min-width: 0;
+	}
+
+	.scrobble-row-title {
+		font-size: 16px;
+		font-weight: 600;
+		color: #fff;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.scrobble-row-subtitle {
+		font-size: 14px;
+		color: var(--text-secondary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.scrobble-row-right {
+		font-size: 14px;
+		color: var(--text-muted);
+		font-weight: 500;
+		flex-shrink: 0;
+		text-align: right;
+		padding-left: 8px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	@media (max-width: 600px) {
+		.scrobble-row {
+			padding: 8px 10px;
+			gap: 10px;
+		}
+		.scrobble-row-thumb {
+			width: 40px;
+			height: 40px;
+		}
+		.scrobble-row-title {
+			font-size: 15px;
+		}
+		.scrobble-row-subtitle {
+			font-size: 13px;
+		}
+	}
+</style>

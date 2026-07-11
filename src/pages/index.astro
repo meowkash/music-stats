@@ -1,0 +1,207 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Dashboard from "../components/Dashboard.astro";
+import Leaderboards from "../components/Leaderboards.astro";
+import Recents from "../components/Recents.astro";
+import Statistics from "../components/Statistics.astro";
+import BottomNav from "../components/BottomNav.astro";
+import DetailOverlay from "../components/DetailOverlay.astro";
+---
+
+<Layout title="Aakash's Music Stats">
+  <div id="app-shell">
+    <!-- Compact Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <div class="logo-icon">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <h1>Aakash's Music</h1>
+      </div>
+    </header>
+
+    <!-- Main View Deck -->
+    <main class="view-deck">
+      <!-- Tab 1: Dashboard -->
+      <section class="panel-section active" id="view-dashboard">
+        <Dashboard />
+      </section>
+
+      <!-- Tab 1.5: Recents -->
+      <section class="panel-section" id="view-recents">
+        <Recents />
+      </section>
+
+      <!-- Tab 2: Leaderboards -->
+      <section class="panel-section" id="view-leaderboards">
+        <Leaderboards />
+      </section>
+
+      <!-- Tab 3: Statistics -->
+      <section class="panel-section" id="view-statistics">
+        <Statistics />
+      </section>
+    </main>
+
+    <!-- Apple Music Style Floating Bottom Navigation Bar -->
+    <BottomNav />
+  </div>
+
+  <!-- Reusable Details Overlay Sheet Drawer -->
+  <DetailOverlay />
+</Layout>
+
+<style>
+  /* App Shell — locks to viewport, no document scroll */
+  #app-shell {
+    height: 100dvh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    padding-top: env(safe-area-inset-top);
+    transition: padding 0.3s ease;
+  }
+
+  @media (min-width: 768px) {
+    #app-shell {
+      padding-left: 220px;
+    }
+  }
+
+  /* Header Styles */
+  .app-header {
+    flex-shrink: 0;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 90;
+  }
+
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: linear-gradient(
+      135deg,
+      var(--accent-pink),
+      var(--accent-violet)
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 2px 8px var(--accent-pink-glow);
+  }
+
+  .logo-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .header-logo h1 {
+    font-family: var(--font-header);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(to right, #fff 40%, var(--accent-pink) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* View Deck — fills remaining space, hides overflow */
+  .view-deck {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+  }
+
+  /* Each panel fills the deck and scrolls internally */
+  .panel-section {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition:
+      opacity 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+      transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+      visibility 0.35s;
+    pointer-events: none;
+    max-width: 1000px;
+    margin: 0 auto;
+    width: 100%;
+    transition:
+      padding 0.3s ease,
+      opacity 0.35s ease,
+      transform 0.35s ease;
+  }
+
+  /* Responsive padding for panel sections */
+  @media (max-width: 767px) {
+    .panel-section {
+      padding: 10px 10px calc(env(safe-area-inset-bottom) + 80px) 10px;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .panel-section {
+      padding: 20px 20px calc(env(safe-area-inset-bottom) + 100px) 20px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .panel-section {
+      padding: 32px 32px calc(env(safe-area-inset-bottom) + 110px) 32px;
+    }
+  }
+
+  .panel-section.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+</style>
+
+<script>
+  // Tab change handler — switches panel visibility
+  document.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("tab-change", (e: any) => {
+      const targetTab = e.detail.tab;
+
+      const sections = document.querySelectorAll(".panel-section");
+      sections.forEach((sec: any) => {
+        const secId = sec.getAttribute("id");
+        if (secId === `view-${targetTab}`) {
+          sec.classList.add("active");
+        } else {
+          sec.classList.remove("active");
+        }
+      });
+    });
+  });
+</script>

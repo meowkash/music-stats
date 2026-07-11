@@ -1,0 +1,378 @@
+---
+// BottomNav component
+---
+
+<nav class="bottom-nav-container">
+  <!-- Primary Navigation Buttons -->
+  <div class="main-tab-bar glass-card">
+    <div class="nav-slider-highlight" id="navSliderHighlight"></div>
+    <button class="tab-btn active" data-tab="dashboard" aria-label="Dashboard">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="9"></rect>
+        <rect x="14" y="3" width="7" height="5"></rect>
+        <rect x="14" y="12" width="7" height="9"></rect>
+        <rect x="3" y="16" width="7" height="5"></rect>
+      </svg>
+      <span class="tab-label">Dashboard</span>
+    </button>
+    
+    <button class="tab-btn" data-tab="leaderboards" aria-label="Leaderboards">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"></line>
+        <line x1="12" y1="20" x2="12" y2="4"></line>
+        <line x1="6" y1="20" x2="6" y2="14"></line>
+      </svg>
+      <span class="tab-label">Leaderboards</span>
+    </button>
+    
+    <button class="tab-btn" data-tab="recents" aria-label="Recent Plays">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      <span class="tab-label">Recents</span>
+    </button>
+    
+    <button class="tab-btn" data-tab="statistics" aria-label="Statistics">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+      <span class="tab-label">Statistics</span>
+    </button>
+  </div>
+</nav>
+
+<style>
+  /* Base Mobile View Layout */
+  .bottom-nav-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0 16px env(safe-area-inset-bottom) 16px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    transition: var(--transition-smooth);
+  }
+
+  /* Mini Player Accessory */
+  .mini-player-accessory {
+    width: 100%;
+    max-width: 500px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-radius: 16px;
+    background: rgba(18, 14, 32, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    pointer-events: auto; /* Enable interaction */
+  }
+
+  .accessory-left {
+    display: flex;
+    align-items: center;
+    margin-right: 12px;
+  }
+
+  .spinning-record {
+    width: 32px;
+    height: 32px;
+    color: var(--accent-pink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: spin 6s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Swiper middle element */
+  .swiper-container {
+    flex: 1;
+    height: 100%;
+    overflow-x: scroll;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    display: flex;
+    align-items: center;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .swiper-container::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .swiper-slide {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding-right: 8px;
+    user-select: none;
+  }
+
+  .slide-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    font-family: var(--font-body);
+  }
+
+  .slide-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    margin-top: 1px;
+    letter-spacing: -0.01em;
+  }
+
+  /* Swiper dots indicators */
+  .accessory-right {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+  }
+
+  .swiper-dots {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transition: var(--transition-smooth);
+    cursor: pointer;
+  }
+
+  .dot.active {
+    background: var(--accent-pink);
+    transform: scale(1.3);
+  }
+
+  /* Main Tab Bar */
+  .main-tab-bar {
+    width: 100%;
+    max-width: 500px;
+    height: 64px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 24px 24px 0 0;
+    background: rgba(14, 10, 26, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+    padding: 8px; /* Safe padding for absolute highlight */
+    pointer-events: auto; /* Enable interaction */
+    position: relative;
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex: 1; /* Equally divide space in 3 chunks */
+    height: 48px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    position: relative;
+    z-index: 2; /* Sit above the sliding highlight */
+  }
+
+  .tab-icon {
+    width: 20px;
+    height: 20px;
+    transition: var(--transition-smooth);
+  }
+
+  .tab-label {
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--font-body);
+    transition: var(--transition-smooth);
+  }
+
+  /* Active states */
+  .tab-btn.active {
+    color: var(--accent-pink);
+    text-shadow: 0 0 10px var(--accent-pink-glow);
+  }
+
+  .tab-btn.active .tab-icon {
+    stroke: var(--accent-pink);
+    filter: drop-shadow(0 0 4px var(--accent-pink-glow));
+  }
+
+  /* Apple Music Style sliding tab bar highlight pill */
+  .nav-slider-highlight {
+    position: absolute;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 16px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.4);
+    transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    pointer-events: none;
+    mix-blend-mode: overlay; /* Liquid glass adaptive color */
+  }
+
+  .tab-btn:hover {
+    color: #fff;
+  }
+
+  /* Desktop View: Left Side Bar */
+  @media (min-width: 768px) {
+    .bottom-nav-container {
+      width: 180px;
+      height: fit-content;
+      position: fixed;
+      top: 50%;
+      bottom: auto;
+      left: 24px;
+      right: auto;
+      transform: translateY(-50%);
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: stretch;
+      padding: 16px;
+      background: rgba(14, 10, 26, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      pointer-events: auto;
+    }
+
+    .mini-player-accessory {
+      display: none;
+    }
+
+    .main-tab-bar {
+      flex-direction: column;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      width: 100%;
+      gap: 8px;
+      padding: 0;
+      height: auto;
+      justify-content: flex-start;
+      align-items: stretch;
+      position: relative;
+    }
+
+    .tab-btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 12px;
+      padding: 0 16px;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+      gap: 12px;
+      flex: none;
+    }
+
+    .tab-label {
+      font-size: 15px;
+      font-weight: 500;
+      display: block;
+    }
+  }
+</style>
+
+<script>
+  // Setup Client-side Navigation Router
+  function initNav() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const highlight = document.getElementById('navSliderHighlight');
+    const activeTab = document.querySelector('.tab-btn.active') as HTMLElement;
+    console.log('initNav elements:', { tabsCount: tabs.length, highlight, activeTab });
+
+    function syncHighlight(activeBtn: HTMLElement) {
+      if (!highlight || !activeBtn) {
+        console.warn('syncHighlight skipped - missing elements:', { highlight, activeBtn });
+        return;
+      }
+      console.log('syncHighlight coordinates:', {
+        offsetLeft: activeBtn.offsetLeft,
+        offsetTop: activeBtn.offsetTop,
+        offsetWidth: activeBtn.offsetWidth,
+        offsetHeight: activeBtn.offsetHeight
+      });
+      highlight.style.left = `${activeBtn.offsetLeft}px`;
+      highlight.style.width = `${activeBtn.offsetWidth}px`;
+      highlight.style.top = `${activeBtn.offsetTop}px`;
+      highlight.style.height = `${activeBtn.offsetHeight}px`;
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetTab = tab.getAttribute('data-tab');
+        if (!targetTab) return;
+
+        // Update active class on buttons
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        syncHighlight(tab as HTMLElement);
+
+        // Fire custom event to notify parent layout to switch views
+        const event = new CustomEvent('tab-change', { detail: { tab: targetTab } });
+        window.dispatchEvent(event);
+      });
+    });
+
+    // Initial sync
+    if (activeTab) {
+      syncHighlight(activeTab);
+      // Wait for rendering layout calculations
+      setTimeout(() => syncHighlight(activeTab), 100);
+      setTimeout(() => syncHighlight(activeTab), 300);
+      setTimeout(() => syncHighlight(activeTab), 600);
+    }
+
+    // Resize sync
+    window.addEventListener('resize', () => {
+      const active = document.querySelector('.tab-btn.active') as HTMLElement;
+      if (active) syncHighlight(active);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initNav);
+  } else {
+    initNav();
+  }
+</script>

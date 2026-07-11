@@ -1,0 +1,778 @@
+---
+// Dashboard component
+---
+
+<div class="dashboard-container">
+  <!-- Stats Grid -->
+  <div class="stats-grid">
+    <div class="glass-card stat-card hover-scale">
+      <div class="stat-icon-wrapper pink">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9 18V5l12-2v13"></path>
+          <circle cx="6" cy="18" r="3"></circle>
+          <circle cx="18" cy="16" r="3"></circle>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">TOTAL SCROBBLES</span>
+        <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
+      </div>
+    </div>
+
+    <div class="glass-card stat-card hover-scale">
+      <div class="stat-icon-wrapper cyan">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">SCROBBLES THIS YEAR</span>
+        <h3 class="stat-value text-cyan" id="stat-year-scrobbles">-</h3>
+      </div>
+    </div>
+
+    <div class="glass-card stat-card hover-scale">
+      <div class="stat-icon-wrapper violet">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">ACTIVE DAYS</span>
+        <h3 class="stat-value text-violet" id="stat-active-days">-</h3>
+      </div>
+    </div>
+
+    <div class="glass-card stat-card hover-scale">
+      <div class="stat-icon-wrapper green">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-label">DAILY AVERAGE</span>
+        <h3 class="stat-value text-green" id="stat-daily-avg">-</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Grid Column (Recent Plays & Top Highlights) -->
+  <div class="main-dashboard-columns">
+    <!-- stats.fm Style Top Hits Carousels -->
+    <div class="glass-card highlights-section">
+      <div class="section-header">
+        <h4>Top Hits (Last 4 Weeks)</h4>
+      </div>
+      <div class="carousel-section" id="topHitsCarousels">
+        <div
+          style="text-align: center; color: var(--text-muted); padding: 40px 0;"
+        >
+          Loading carousels...
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Plays Feed Removed (Now in Recents.astro) -->
+  </div>
+</div>
+
+<style>
+  .dashboard-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .stat-card {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .stat-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+
+  .stat-icon-wrapper svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Stat wrapper colored gradients */
+  .stat-icon-wrapper.pink {
+    background: linear-gradient(135deg, var(--accent-pink), #e01e43);
+    box-shadow: 0 4px 12px var(--accent-pink-glow);
+  }
+  .stat-icon-wrapper.cyan {
+    background: linear-gradient(135deg, var(--accent-cyan), #00a3b0);
+    box-shadow: 0 4px 12px var(--accent-cyan-glow);
+  }
+  .stat-icon-wrapper.violet {
+    background: linear-gradient(135deg, var(--accent-violet), #7c3aed);
+    box-shadow: 0 4px 12px var(--accent-violet-glow);
+  }
+  .stat-icon-wrapper.green {
+    background: linear-gradient(135deg, #10b981, #047857);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  }
+
+  .stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .stat-value {
+    font-family: var(--font-header);
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+
+  .text-pink {
+    color: #ff6b8a;
+    text-shadow:
+      0 0 20px var(--accent-pink-glow),
+      0 0 40px rgba(255, 45, 85, 0.15);
+  }
+  .text-cyan {
+    color: #66f5ff;
+    text-shadow:
+      0 0 20px var(--accent-cyan-glow),
+      0 0 40px rgba(0, 240, 255, 0.15);
+  }
+  .text-violet {
+    color: #b794f6;
+    text-shadow:
+      0 0 20px var(--accent-violet-glow),
+      0 0 40px rgba(139, 92, 246, 0.15);
+  }
+  .text-green {
+    color: #6ee7b7;
+    text-shadow:
+      0 0 20px rgba(16, 185, 129, 0.4),
+      0 0 40px rgba(16, 185, 129, 0.15);
+  }
+
+  /* Stacked Full-Width Layout */
+  .main-dashboard-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-header h4 {
+    font-family: var(--font-header);
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  /* Highlights Section */
+  .highlights-section {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  /* stats.fm style carousels with global scoping for injected dynamic nodes */
+  .highlights-section :global(.carousel-section) {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+  }
+
+  .highlights-section :global(.carousel-wrapper) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .highlights-section :global(.carousel-title) {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .highlights-section :global(.carousel-scroll) {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 28px 24px 16px 24px;
+    margin: -28px -24px -12px -24px;
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: 24px;
+    scroll-padding-right: 24px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    width: calc(100% + 48px);
+  }
+
+  .highlights-section :global(.carousel-scroll::-webkit-scrollbar) {
+    display: none;
+  }
+
+  .highlights-section :global(.carousel-item) {
+    flex: 0 0 110px;
+    width: 110px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    scroll-snap-align: start;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+
+  .highlights-section :global(.carousel-item:hover) {
+    transform: translateY(-3px);
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper) {
+    position: relative;
+    width: 110px;
+    height: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    overflow: visible;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper.circle) {
+    border-radius: 50%;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper.square) {
+    border-radius: 10px;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper.circle img) {
+    border-radius: 50%;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper.square img) {
+    border-radius: 10px;
+  }
+
+  .highlights-section :global(.carousel-artwork-wrapper svg) {
+    width: 32px;
+    height: 32px;
+    color: var(--text-muted);
+  }
+
+  .highlights-section :global(.carousel-rank-badge) {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    color: #000;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    z-index: 2;
+  }
+
+  .highlights-section :global(.carousel-item-info) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+  }
+
+  .highlights-section :global(.carousel-item-title) {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .highlights-section :global(.carousel-item-subtitle) {
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .highlights-section :global(.carousel-item-plays) {
+    font-size: 14px;
+    color: var(--accent-pink);
+    font-weight: 700;
+  }
+
+  /* Responsive card padding overrides */
+  @media (max-width: 767px) {
+    .dashboard-container {
+      gap: 16px;
+    }
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .stat-card {
+      padding: 12px;
+      gap: 10px;
+      border-radius: 12px;
+    }
+    .stat-icon-wrapper {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+    }
+    .stat-icon-wrapper svg {
+      width: 18px;
+      height: 18px;
+    }
+    .stat-value {
+      font-size: 20px;
+    }
+    .highlights-section {
+      padding: 12px;
+      gap: 12px;
+      border-radius: 16px;
+    }
+    .highlights-section :global(.carousel-scroll) {
+      padding: 28px 16px 16px 16px;
+      margin: -28px -12px -12px -12px;
+      width: calc(100% + 24px);
+      scroll-padding-left: 16px;
+      scroll-padding-right: 16px;
+    }
+    .main-dashboard-columns {
+      gap: 16px;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .highlights-section {
+      padding: 18px;
+      border-radius: 16px;
+    }
+    .stat-card {
+      padding: 16px;
+    }
+  }
+</style>
+
+<script>
+  interface YearlyTotals {
+    [year: string]: number[];
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    // 1. Fetch yearly-totals.json and calculate high-level stats
+    async function loadDashboardStats() {
+      try {
+        const res = await fetch("/data/yearly-totals.json");
+        const totals: YearlyTotals = await res.json();
+
+        let totalScrobbles = 0;
+        let activeDays = 0;
+        let totalPossibleDays = 0;
+        let currentYearScrobbles = 0;
+
+        const currentYearStr = new Date().toISOString().split("-")[0];
+
+        // Loop years
+        for (const [yearStr, dayCounts] of Object.entries(totals)) {
+          const sum = dayCounts.reduce((acc, c) => acc + c, 0);
+          totalScrobbles += sum;
+
+          // Count days with scrobbles
+          activeDays += dayCounts.filter((count) => count > 0).length;
+
+          // Count historical days
+          totalPossibleDays += dayCounts.length;
+
+          if (yearStr === currentYearStr) {
+            currentYearScrobbles = sum;
+          }
+        }
+
+        // Calculate daily average
+        const dailyAverage =
+          totalPossibleDays > 0
+            ? Math.round((totalScrobbles / totalPossibleDays) * 10) / 10
+            : 0;
+
+        // Inject UI values
+        const totalEl = document.getElementById("stat-total-scrobbles");
+        const yearEl = document.getElementById("stat-year-scrobbles");
+        const activeEl = document.getElementById("stat-active-days");
+        const avgEl = document.getElementById("stat-daily-avg");
+
+        if (totalEl) totalEl.textContent = totalScrobbles.toLocaleString();
+        if (yearEl) yearEl.textContent = currentYearScrobbles.toLocaleString();
+        if (activeEl) activeEl.textContent = `${activeDays}`;
+        if (avgEl) avgEl.textContent = `${dailyAverage}`;
+      } catch (err) {
+        console.error("Failed to compute dashboard stats:", err);
+      }
+    }
+
+    // 3. Fetch year data JSONs and build stats.fm-style carousels
+    async function loadTopHitsCarousels() {
+      const container = document.getElementById("topHitsCarousels");
+      if (!container) return;
+
+      try {
+        const [recentRes, metaRes, artworkRes] = await Promise.all([
+          fetch("/data/recent.json"),
+          fetch("/data/meta.json"),
+          fetch("/data/artwork.json").catch(() => null),
+        ]);
+
+        const recentList: RecentScrobble[] = await recentRes.json();
+        const meta = await metaRes.json();
+        let artworkCache: Record<string, string> = {};
+        if (artworkRes && artworkRes.ok) {
+          artworkCache = await artworkRes.json();
+        }
+
+        const latestTimestamp =
+          recentList[0]?.uts || Math.floor(Date.now() / 1000);
+        // last 4 weeks = 28 days
+        const startTime = latestTimestamp - 28 * 24 * 60 * 60;
+
+        const startYear = new Date(startTime * 1000).getUTCFullYear();
+        const endYear = new Date(latestTimestamp * 1000).getUTCFullYear();
+        const yearsToLoad = Array.from(
+          new Set([String(startYear), String(endYear)]),
+        );
+
+        const yearCache: Record<string, any> = {};
+        await Promise.all(
+          yearsToLoad.map(async (y) => {
+            try {
+              const res = await fetch(`/data/year-${y}.json`);
+              if (res.ok) {
+                yearCache[y] = await res.json();
+              }
+            } catch (e) {}
+          }),
+        );
+
+        const trackCounts: Record<number, number> = {};
+        const startDate = new Date(startTime * 1000);
+        const endDate = new Date(latestTimestamp * 1000);
+
+        for (const year of yearsToLoad) {
+          const yearData = yearCache[year];
+          if (!yearData) continue;
+
+          for (const [dateStr, dayTracks] of Object.entries(yearData)) {
+            const currentDate = new Date(dateStr + "T12:00:00Z");
+            if (currentDate >= startDate && currentDate <= endDate) {
+              for (const [trackId, count] of dayTracks as any) {
+                trackCounts[trackId] = (trackCounts[trackId] || 0) + count;
+              }
+            }
+          }
+        }
+
+        const artistCounts: Record<number, number> = {};
+        const albumCounts: Record<number, { count: number; artistId: number }> =
+          {};
+        const songCounts: Record<number, number> = {};
+
+        for (const [trackIdStr, count] of Object.entries(trackCounts)) {
+          const trackId = parseInt(trackIdStr, 10);
+          const trackInfo = meta.tracks[trackId];
+          if (!trackInfo) continue;
+          const [trackName, artistId, albumId] = trackInfo;
+
+          songCounts[trackId] = (songCounts[trackId] || 0) + count;
+          artistCounts[artistId] = (artistCounts[artistId] || 0) + count;
+          if (albumId) {
+            if (!albumCounts[albumId]) {
+              albumCounts[albumId] = { count: 0, artistId };
+            }
+            albumCounts[albumId].count += count;
+          }
+        }
+
+        // Slice Top 10 Artists
+        const topArtists = Object.entries(artistCounts)
+          .map(([id, count]) => ({
+            id: parseInt(id, 10),
+            name: meta.artists[id],
+            count,
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+
+        // Slice Top 10 Songs
+        const topSongs = Object.entries(songCounts)
+          .map(([id, count]) => {
+            const [trackName, artistId, albumId] = meta.tracks[id];
+            return {
+              id: parseInt(id, 10),
+              name: trackName,
+              artistName: meta.artists[artistId],
+              albumName: meta.albums[albumId],
+              artistId,
+              albumId,
+              count,
+            };
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+
+        // Slice Top 10 Albums
+        const topAlbums = Object.entries(albumCounts)
+          .map(([id, data]) => ({
+            id: parseInt(id, 10),
+            name: meta.albums[id],
+            artistName: meta.artists[data.artistId],
+            artistId: data.artistId,
+            count: data.count,
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+
+        // Generate HTML
+        let html = "";
+
+        // Category 1: Top Artists
+        if (topArtists.length > 0) {
+          html += `
+            <div class="carousel-wrapper">
+              <span class="carousel-title">Top Artists</span>
+              <div class="carousel-scroll">
+                ${topArtists
+                  .map((item, idx) => {
+                    const img = artworkCache[item.name];
+                    const highResImg = img
+                      ? img.replace("/300x300/", "/500x500/")
+                      : null;
+                    const thumb = highResImg
+                      ? `<img src="${highResImg}" alt="">`
+                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>`;
+                    return `
+                    <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.id}">
+                      <div class="carousel-artwork-wrapper circle">
+                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        ${thumb}
+                      </div>
+                      <div class="carousel-item-info">
+                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
+                        <span class="carousel-item-plays">${item.count}</span>
+                      </div>
+                    </div>
+                  `;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          `;
+        }
+
+        // Category 2: Top Tracks
+        if (topSongs.length > 0) {
+          html += `
+            <div class="carousel-wrapper">
+              <span class="carousel-title">Top Tracks</span>
+              <div class="carousel-scroll">
+                ${topSongs
+                  .map((item, idx) => {
+                    const img =
+                      artworkCache[`${item.albumName}|${item.artistName}`] ||
+                      artworkCache[`${item.name}|${item.artistName}`] ||
+                      artworkCache[item.artistName];
+                    const highResImg = img
+                      ? img.replace("/300x300/", "/500x500/")
+                      : null;
+                    const thumb = highResImg
+                      ? `<img src="${highResImg}" alt="">`
+                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+                    return `
+                    <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.artistId}">
+                      <div class="carousel-artwork-wrapper square">
+                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        ${thumb}
+                      </div>
+                      <div class="carousel-item-info">
+                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
+                        <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
+                        <span class="carousel-item-plays">${item.count}</span>
+                      </div>
+                    </div>
+                  `;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          `;
+        }
+
+        // Category 3: Top Albums
+        if (topAlbums.length > 0) {
+          html += `
+            <div class="carousel-wrapper">
+              <span class="carousel-title">Top Albums</span>
+              <div class="carousel-scroll">
+                ${topAlbums
+                  .map((item, idx) => {
+                    const img =
+                      artworkCache[`${item.name}|${item.artistName}`] ||
+                      artworkCache[item.artistName];
+                    const highResImg = img
+                      ? img.replace("/300x300/", "/500x500/")
+                      : null;
+                    const thumb = highResImg
+                      ? `<img src="${highResImg}" alt="">`
+                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+                    return `
+                    <div class="carousel-item clickable-entity" data-type="album" data-id="${item.id}">
+                      <div class="carousel-artwork-wrapper square">
+                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        ${thumb}
+                      </div>
+                      <div class="carousel-item-info">
+                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
+                        <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
+                        <span class="carousel-item-plays">${item.count}</span>
+                      </div>
+                    </div>
+                  `;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          `;
+        }
+
+        container.innerHTML =
+          html || '<div class="no-data">No data found for last 4 weeks</div>';
+      } catch (err) {
+        console.error("Failed to load top hits carousels:", err);
+        container.innerHTML =
+          '<div class="no-data">Failed to load carousels</div>';
+      }
+    }
+
+    function escapeHTML(str: string) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Click handler for carousel navigation delegation
+    const carouselsEl = document.getElementById("topHitsCarousels");
+    if (carouselsEl) {
+      carouselsEl.addEventListener("click", (e) => {
+        const target = (e.target as HTMLElement).closest(".clickable-entity");
+        if (!target) return;
+        const type = target.getAttribute("data-type");
+        const idStr = target.getAttribute("data-id");
+        if (!type || !idStr) return;
+        window.dispatchEvent(
+          new CustomEvent("open-entity-details", {
+            detail: { type, id: parseInt(idStr, 10) },
+          }),
+        );
+      });
+    }
+
+    // Load elements initially
+    loadDashboardStats();
+    loadTopHitsCarousels();
+
+    // Redraw feed on tab focus
+    window.addEventListener("tab-change", (e: any) => {
+      if (e.detail.tab === "dashboard") {
+        loadDashboardStats();
+        loadTopHitsCarousels();
+      }
+    });
+  });
+</script>
