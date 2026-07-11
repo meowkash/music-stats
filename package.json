@@ -1,14 +1,14 @@
 {
-  "name": "lastfm-stats",
+  "name": "music-stats",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.9",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "astro dev",
     "build": "node scripts/process-data.js && astro build",
-    "deploy": "npm run build && npx wrangler pages deploy dist/ --project-name lastfm-stats",
+    "deploy": "npm run build && npx wrangler pages deploy dist/ --project-name music-stats",
     "preview": "astro preview",
     "astro": "astro"
   },

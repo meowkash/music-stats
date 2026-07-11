@@ -1,0 +1,71 @@
+name: Daily Sync and Deploy
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Runs at 2:00 AM UTC every day
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  sync_and_deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Ensure Data Directory Exists
+        run: mkdir -p src/data
+
+      - name: Download Database from Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 cp s3://music-stats/scrobbles.csv src/data/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No scrobbles.csv found in R2"
+          aws s3 cp s3://music-stats/artwork.json src/data/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No artwork.json found in R2"
+
+      - name: Fetch Latest Scrobbles
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
+        run: node scripts/fetch-lastfm.js
+
+      - name: Process Initial Data
+        run: node scripts/process-data.js
+
+      - name: Backfill Missing Artwork
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
+        run: node scripts/backfill-artwork.js
+
+      - name: Final Process Data & Build
+        run: npm run build
+
+      - name: Upload Updated Database back to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 cp src/data/scrobbles.csv s3://music-stats/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          aws s3 cp src/data/artwork.json s3://music-stats/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'lastfm-stats' # Must match your Cloudflare Pages project name
+          directory: 'dist'
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,49 @@
+name: Daily Last.FM Scrobbles Sync
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC (11 PM PDT / 2 AM EDT)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+
+permissions:
+  contents: write # Required to push the updated CSV back to the repo
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Sync Scrobbles from Last.FM
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
+        run: node scripts/fetch-lastfm.js
+
+      - name: Commit and Push Changes
+        run: |
+          # Check if CSV has modified rows
+          if git diff --quiet src/data/scrobbles.csv; then
+            echo "No new scrobbles fetched. Exiting."
+            exit 0
+          fi
+          
+          echo "New scrobbles found. Committing changes..."
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add src/data/scrobbles.csv
+          git commit -m "chore: update scrobbles database [skip ci]"
+          git push
