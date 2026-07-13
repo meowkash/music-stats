@@ -292,28 +292,29 @@
   .overlay-subtitle {
     font-size: 15px;
     font-weight: 600;
-    color: var(--accent-pink);
+    color: var(--text-secondary);
     margin-bottom: 6px;
   }
 
-  .clickable-artist-link {
+  .clickable-entity-link {
     cursor: pointer;
     transition: var(--transition-smooth);
-    border-bottom: 1px dashed rgba(255, 45, 85, 0.4);
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
     display: inline-block;
   }
 
-  .clickable-artist-link:hover {
+  .clickable-entity-link:hover {
     color: #fff !important;
-    border-bottom-color: #fff;
+    border-bottom-color: #fff !important;
   }
 
   .overlay-metadata {
-    font-size: 11px;
-    color: var(--text-muted);
+    font-size: 13px;
+    color: #fff;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.4);
   }
 
   /* Play Buttons */
@@ -484,6 +485,8 @@
 </style>
 
 <script>
+  import { getArtworkUrl, getColorForUrl } from '../utils/ui';
+
   interface MetaData {
     artists: string[];
     albums: string[];
@@ -755,15 +758,15 @@
       let subtitle = '';
       let imgUrl: string | null = null;
       let metadataStr = '';
-      let sortedTracks: { name: string; count: number }[] = [];
+      let sortedTracks: { name: string; count: number }[] | null = [];
       let albumsToRender: { id: number; name: string; scrobbles: number }[] = [];
       let artistNameForArtworkLookup = '';
 
       if (type === 'artist') {
         const artistInfo = catalogData.artists[id];
         name = artistInfo ? artistInfo.name : (dictionary.artists[id] || 'Unknown Artist');
-        subtitle = 'Artist';
-        imgUrl = artworkCache[name] || null;
+        subtitle = '';
+        imgUrl = getArtworkUrl('artist', name, name, '', artworkCache);
         
         const scrobblesCount = artistInfo ? artistInfo.scrobbles : 0;
         sortedTracks = artistInfo ? artistInfo.tracks : [];
@@ -778,7 +781,7 @@
         const artistId = albumInfo ? albumInfo.artistId : 0;
         const artistName = albumInfo ? albumInfo.artistName : (dictionary.artists[artistId] || 'Unknown Artist');
         subtitle = artistName;
-        imgUrl = artworkCache[`${name}|${artistName}`] || artworkCache[artistName] || null;
+        imgUrl = getArtworkUrl('album', name, artistName, name, artworkCache);
         
         const scrobblesCount = albumInfo ? albumInfo.scrobbles : 0;
         if (albumInfo && albumInfo.tracks) {
@@ -794,29 +797,69 @@
             albumsToRender = artistInfo.albums.filter((alb: any) => alb.id !== id);
           }
         }
+      } else if (type === 'track') {
+        const trackInfo = dictionary.tracks[id];
+        name = trackInfo ? trackInfo[0] : 'Unknown Track';
+        
+        const artistId = trackInfo ? trackInfo[1] : 0;
+        const albumId = trackInfo ? trackInfo[2] : 0;
+        const artistName = dictionary.artists[artistId] || 'Unknown Artist';
+        const albumName = dictionary.albums[albumId] || 'Unknown Album';
+        
+        subtitle = `${albumName} • ${artistName}`;
+        imgUrl = getArtworkUrl('track', name, artistName, albumName, artworkCache);
+        
+        const scrobblesCount = catalogData.tracks[id] || 0;
+        
+        sortedTracks = null; // Hide songs list
+        artistNameForArtworkLookup = artistName;
+        metadataStr = `Song • ${scrobblesCount.toLocaleString()} Scrobbles`;
+
+        if (artistId) {
+          const artistInfo = catalogData.artists[artistId];
+          if (artistInfo && artistInfo.albums) {
+            albumsToRender = artistInfo.albums;
+          }
+        }
       }
 
       // Populate elements
       overlayTitle.textContent = name;
       
-      // If Album view, make the subtitle a clickable link to the Artist
+      const colorObj = getColorForUrl(imgUrl);
+      let linkStyle = '';
+      if (colorObj) {
+        linkStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); border-bottom-color: rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.5);`;
+      }
+      
       if (type === 'album') {
         const albumInfo = catalogData.albums[id];
         const artistId = albumInfo ? albumInfo.artistId : 0;
-        overlaySubtitle.innerHTML = `<span class="clickable-artist-link" data-artist-id="${artistId}">${escapeHTML(subtitle)}</span>`;
-        const link = overlaySubtitle.querySelector('.clickable-artist-link');
-        if (link) {
-          link.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const artistIdVal = parseInt(link.getAttribute('data-artist-id') || '0', 10);
-            if (artistIdVal) {
-              openDetails('artist', artistIdVal);
-            }
-          });
-        }
+        overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(subtitle)}</span>`;
+      } else if (type === 'track') {
+        const trackInfo = dictionary.tracks[id];
+        const artistId = trackInfo ? trackInfo[1] : 0;
+        const albumId = trackInfo ? trackInfo[2] : 0;
+        const artistName = dictionary.artists[artistId] || 'Unknown Artist';
+        const albumName = dictionary.albums[albumId] || 'Unknown Album';
+        
+        overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="album" data-id="${albumId}" style="${linkStyle}">${escapeHTML(albumName)}</span> <span style="color: #fff; opacity: 0.4; margin: 0 4px;">•</span> <span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(artistName)}</span>`;
       } else {
         overlaySubtitle.textContent = subtitle;
       }
+
+      // Add event listeners to the generated links
+      const links = overlaySubtitle.querySelectorAll('.clickable-entity-link');
+      links.forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const targetType = link.getAttribute('data-type');
+          const targetId = parseInt(link.getAttribute('data-id') || '0', 10);
+          if (targetType && targetId) {
+            openDetails(targetType, targetId);
+          }
+        });
+      });
 
       overlayMetadata.textContent = metadataStr;
 
@@ -834,22 +877,29 @@
       }
 
       // Populate Track List
-      if (sortedTracks.length === 0) {
-        overlaySongsList.innerHTML = '<div class="no-data" style="text-align:center; padding: 20px 0;">No tracks found</div>';
+      const overlaySongsSection = overlaySongsList.parentElement;
+      if (sortedTracks === null) {
+        if (overlaySongsSection) overlaySongsSection.classList.add('hidden');
+        overlaySongsList.innerHTML = '';
       } else {
-        overlaySongsList.innerHTML = sortedTracks.map((track, idx) => {
-          return `
-            <div class="scrobble-row">
-              <span class="scrobble-row-rank">${idx + 1}</span>
-              <div class="scrobble-row-info">
-                <span class="scrobble-row-title">${escapeHTML(track.name)}</span>
+        if (overlaySongsSection) overlaySongsSection.classList.remove('hidden');
+        if (sortedTracks.length === 0) {
+          overlaySongsList.innerHTML = '<div class="no-data" style="text-align:center; padding: 20px 0;">No tracks found</div>';
+        } else {
+          overlaySongsList.innerHTML = sortedTracks.map((track, idx) => {
+            return `
+              <div class="scrobble-row">
+                <span class="scrobble-row-rank">${idx + 1}</span>
+                <div class="scrobble-row-info">
+                  <span class="scrobble-row-title">${escapeHTML(track.name)}</span>
+                </div>
+                <div class="scrobble-row-right">
+                  <span class="scrobble-count-val">${track.count.toLocaleString()}</span>
+                </div>
               </div>
-              <div class="scrobble-row-right">
-                <span class="scrobble-count-val">${track.count.toLocaleString()}</span>
-              </div>
-            </div>
-          `;
-        }).join('');
+            `;
+          }).join('');
+        }
       }
 
       // Populate Horizontal Scrolling related albums section
@@ -861,7 +911,7 @@
         overlayAlbumsHeader.textContent = type === 'artist' ? 'Albums' : 'Other Albums by this Artist';
         
         overlayAlbumsList.innerHTML = albumsToRender.map(alb => {
-          const albImg = artworkCache[`${alb.name}|${artistNameForArtworkLookup}`] || artworkCache[artistNameForArtworkLookup] || null;
+          const albImg = getArtworkUrl('album', alb.name, artistNameForArtworkLookup, alb.name, artworkCache);
           const highResAlbImg = albImg ? albImg.replace('/300x300/', '/500x500/') : null;
           const thumbHtml = highResAlbImg 
             ? `<img src="${highResAlbImg}" alt="" />`

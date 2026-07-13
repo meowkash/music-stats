@@ -22,11 +22,28 @@ function escapeHTML(str: string): string {
   );
 }
 
+export function getArtworkUrl(
+  type: string,
+  name: string,
+  artistName: string,
+  albumName: string,
+  artworkCache: Record<string, string>
+): string | null {
+  if (type === 'track') {
+    return artworkCache[`${name}|${artistName}`] || artworkCache[`${albumName}|${artistName}`] || artworkCache[artistName] || null;
+  } else if (type === 'album') {
+    return artworkCache[`${name}|${artistName}`] || artworkCache[artistName] || null;
+  } else if (type === 'artist') {
+    return artworkCache[name] || null;
+  }
+  return null;
+}
+
 export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean = true): string {
   const highResImg = data.imgUrl ? data.imgUrl.replace('/300x300/', '/500x500/') : null;
   const thumbContent = highResImg 
     ? `<img src="${escapeHTML(highResImg)}" alt="" crossorigin="anonymous" />`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+    : `<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.05);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 22px; height: 22px; color: rgba(255,255,255,0.4);"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>`;
 
   const rankHtml = showRank ? `<span class="scrobble-row-rank">${data.rank}</span>` : '';
   const countColorStyle = data.color ? `color: ${data.color}; text-shadow: 0 0 10px ${data.color}80;` : '';
@@ -49,55 +66,64 @@ export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean
   `;
 }
 
+let colorsCache: Record<string, {r: number, g: number, b: number}> | null = null;
+let colorsPromise: Promise<void> | null = null;
+
+export async function loadColorsCache() {
+  if (colorsCache) return;
+  if (!colorsPromise) {
+    colorsPromise = fetch('/data/colors.json')
+      .then(res => res.json())
+      .then(data => { colorsCache = data; })
+      .catch(e => { console.error('Failed to load colors.json', e); colorsCache = {}; });
+  }
+  await colorsPromise;
+}
+
 export function getDominantColor(imgEl: HTMLImageElement, callback: (rgb: {r: number, g: number, b: number}) => void) {
+  const fallback = { r: 255, g: 255, b: 255 };
   if (!imgEl.src || imgEl.src.includes('undefined')) {
-    callback({ r: 255, g: 107, b: 138 });
+    callback(fallback);
     return;
   }
   
-  const img = new Image();
-  img.crossOrigin = "Anonymous";
-  img.src = imgEl.src;
-  
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      callback({ r: 255, g: 107, b: 138 });
+  if (colorsCache) {
+    // Try to get exactly matching URL first, or just find it by ignoring origin
+    let url = imgEl.src;
+    try {
+      const parsed = new URL(url);
+      url = parsed.origin + parsed.pathname; // remove search params
+    } catch(e) {}
+    
+    const applyColor = (color: {r: number, g: number, b: number}) => {
+      // Ensure good contrast for dark colors by treating as missing/white if too dark
+      const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+      if (brightness < 30) {
+        callback(fallback);
+      } else {
+        callback(color);
+      }
+    };
+    
+    // Exact match
+    if (colorsCache[url]) {
+      applyColor(colorsCache[url]);
       return;
     }
     
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
-    
-    let r = 0, g = 0, b = 0;
-    try {
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let count = 0;
-      for (let i = 0; i < data.length; i += 16) {
-        r += data[i];
-        g += data[i + 1];
-        b += data[i + 2];
-        count++;
-      }
-      if (count > 0) {
-        callback({
-          r: Math.floor(r / count),
-          g: Math.floor(g / count),
-          b: Math.floor(b / count)
-        });
-        return;
-      }
-    } catch (e) {
-      // Ignore CORS or tainted canvas issues
+    // Fallback URL
+    const fallbackUrl = url.replace('/500x500/', '/300x300/');
+    if (colorsCache[fallbackUrl]) {
+      applyColor(colorsCache[fallbackUrl]);
+      return;
     }
-    callback({ r: 255, g: 107, b: 138 });
-  };
-
-  img.onerror = () => {
-    callback({ r: 255, g: 107, b: 138 });
-  };
+    
+    // Fallback if not found in cache
+    callback(fallback);
+  } else {
+    // If cache not loaded yet, just use fallback (should call loadColorsCache() on app load)
+    callback(fallback);
+  }
 }
 
 export function applyCountGlows(container: HTMLElement) {
@@ -114,4 +140,26 @@ export function applyCountGlows(container: HTMLElement) {
       countEl.setAttribute('data-colored', 'true');
     });
   });
+}
+
+export function getColorForUrl(url: string | null): {r: number, g: number, b: number} | null {
+  if (!url || !colorsCache) return null;
+  let cleanUrl = url;
+  try {
+    const parsed = new URL(url);
+    cleanUrl = parsed.origin + parsed.pathname;
+  } catch(e) {}
+  
+  let color = colorsCache[cleanUrl];
+  if (!color) {
+    color = colorsCache[cleanUrl.replace('/500x500/', '/300x300/')];
+  }
+  
+  if (color) {
+    const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+    if (brightness >= 30) {
+      return color;
+    }
+  }
+  return null;
 }

@@ -93,13 +93,13 @@
     <!-- stats.fm Style Top Hits Carousels -->
     <div class="glass-card highlights-section">
       <div class="section-header">
-        <h4>Top Hits (Last 4 Weeks)</h4>
+        <h4 style="font-size: 14px">Over the last month...</h4>
       </div>
       <div class="carousel-section" id="topHitsCarousels">
         <div
           style="text-align: center; color: var(--text-muted); padding: 40px 0;"
         >
-          Loading carousels...
+          Loading...
         </div>
       </div>
     </div>
@@ -441,6 +441,8 @@
 </style>
 
 <script>
+  import { getArtworkUrl, getColorForUrl } from "../utils/ui";
+
   interface YearlyTotals {
     [year: string]: number[];
   }
@@ -627,22 +629,45 @@
               <div class="carousel-scroll">
                 ${topArtists
                   .map((item, idx) => {
-                    const img = artworkCache[item.name];
+                    const img = getArtworkUrl(
+                      "artist",
+                      item.name,
+                      item.name,
+                      "",
+                      artworkCache,
+                    );
                     const highResImg = img
                       ? img.replace("/300x300/", "/500x500/")
                       : null;
                     const thumb = highResImg
                       ? `<img src="${highResImg}" alt="">`
                       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>`;
+
+                    const colorObj = getColorForUrl(img);
+                    let playsStyle = "";
+                    if (colorObj)
+                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
+
+                    let rankStyle = "";
+                    if (idx === 0)
+                      rankStyle =
+                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                    else if (idx === 1)
+                      rankStyle =
+                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                    else if (idx === 2)
+                      rankStyle =
+                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+
                     return `
                     <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.id}">
                       <div class="carousel-artwork-wrapper circle">
-                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
                         ${thumb}
                       </div>
                       <div class="carousel-item-info">
                         <span class="carousel-item-title">${escapeHTML(item.name)}</span>
-                        <span class="carousel-item-plays">${item.count}</span>
+                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
                       </div>
                     </div>
                   `;
@@ -661,26 +686,46 @@
               <div class="carousel-scroll">
                 ${topSongs
                   .map((item, idx) => {
-                    const img =
-                      artworkCache[`${item.albumName}|${item.artistName}`] ||
-                      artworkCache[`${item.name}|${item.artistName}`] ||
-                      artworkCache[item.artistName];
+                    const img = getArtworkUrl(
+                      "track",
+                      item.name,
+                      item.artistName,
+                      item.albumName,
+                      artworkCache,
+                    );
                     const highResImg = img
                       ? img.replace("/300x300/", "/500x500/")
                       : null;
                     const thumb = highResImg
                       ? `<img src="${highResImg}" alt="">`
                       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+                    const colorObj = getColorForUrl(img);
+                    let playsStyle = "";
+                    if (colorObj)
+                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
+
+                    let rankStyle = "";
+                    if (idx === 0)
+                      rankStyle =
+                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                    else if (idx === 1)
+                      rankStyle =
+                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                    else if (idx === 2)
+                      rankStyle =
+                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+
                     return `
-                    <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.artistId}">
+                    <div class="carousel-item clickable-entity" data-type="track" data-id="${item.id}">
                       <div class="carousel-artwork-wrapper square">
-                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
                         ${thumb}
                       </div>
                       <div class="carousel-item-info">
                         <span class="carousel-item-title">${escapeHTML(item.name)}</span>
                         <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
-                        <span class="carousel-item-plays">${item.count}</span>
+                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
                       </div>
                     </div>
                   `;
@@ -699,25 +744,46 @@
               <div class="carousel-scroll">
                 ${topAlbums
                   .map((item, idx) => {
-                    const img =
-                      artworkCache[`${item.name}|${item.artistName}`] ||
-                      artworkCache[item.artistName];
+                    const img = getArtworkUrl(
+                      "album",
+                      item.name,
+                      item.artistName,
+                      item.name,
+                      artworkCache,
+                    );
                     const highResImg = img
                       ? img.replace("/300x300/", "/500x500/")
                       : null;
                     const thumb = highResImg
                       ? `<img src="${highResImg}" alt="">`
                       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+                    const colorObj = getColorForUrl(img);
+                    let playsStyle = "";
+                    if (colorObj)
+                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
+
+                    let rankStyle = "";
+                    if (idx === 0)
+                      rankStyle =
+                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                    else if (idx === 1)
+                      rankStyle =
+                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                    else if (idx === 2)
+                      rankStyle =
+                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+
                     return `
                     <div class="carousel-item clickable-entity" data-type="album" data-id="${item.id}">
                       <div class="carousel-artwork-wrapper square">
-                        <div class="carousel-rank-badge">${idx + 1}</div>
+                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
                         ${thumb}
                       </div>
                       <div class="carousel-item-info">
                         <span class="carousel-item-title">${escapeHTML(item.name)}</span>
                         <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
-                        <span class="carousel-item-plays">${item.count}</span>
+                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
                       </div>
                     </div>
                   `;

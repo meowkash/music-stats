@@ -186,8 +186,11 @@ import DetailOverlay from "../components/DetailOverlay.astro";
 </style>
 
 <script>
+  import { loadColorsCache } from '../utils/ui';
+
   // Tab change handler — switches panel visibility
   document.addEventListener("DOMContentLoaded", () => {
+    loadColorsCache();
     window.addEventListener("tab-change", (e: any) => {
       const targetTab = e.detail.tab;
 

@@ -177,11 +177,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 24px 24px 0 0;
-    background: rgba(14, 10, 26, 0.75);
+    border-radius: 24px;
+    background: rgba(10, 10, 10, 0.75);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-bottom: none;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    margin-bottom: 16px;
     padding: 8px; /* Safe padding for absolute highlight */
     pointer-events: auto; /* Enable interaction */
     position: relative;
@@ -224,13 +224,43 @@
 
   /* Active states */
   .tab-btn.active {
+    color: #fff;
+  }
+
+  .tab-btn[data-tab="dashboard"].active {
     color: var(--accent-pink);
     text-shadow: 0 0 10px var(--accent-pink-glow);
   }
-
-  .tab-btn.active .tab-icon {
+  .tab-btn[data-tab="dashboard"].active .tab-icon {
     stroke: var(--accent-pink);
     filter: drop-shadow(0 0 4px var(--accent-pink-glow));
+  }
+
+  .tab-btn[data-tab="leaderboards"].active {
+    color: var(--accent-cyan);
+    text-shadow: 0 0 10px var(--accent-cyan-glow);
+  }
+  .tab-btn[data-tab="leaderboards"].active .tab-icon {
+    stroke: var(--accent-cyan);
+    filter: drop-shadow(0 0 4px var(--accent-cyan-glow));
+  }
+
+  .tab-btn[data-tab="recents"].active {
+    color: var(--accent-violet);
+    text-shadow: 0 0 10px var(--accent-violet-glow);
+  }
+  .tab-btn[data-tab="recents"].active .tab-icon {
+    stroke: var(--accent-violet);
+    filter: drop-shadow(0 0 4px var(--accent-violet-glow));
+  }
+
+  .tab-btn[data-tab="statistics"].active {
+    color: #eab308;
+    text-shadow: 0 0 10px rgba(234, 179, 8, 0.4);
+  }
+  .tab-btn[data-tab="statistics"].active .tab-icon {
+    stroke: #eab308;
+    filter: drop-shadow(0 0 4px rgba(234, 179, 8, 0.4));
   }
 
   /* Apple Music Style sliding tab bar highlight pill */
@@ -265,7 +295,7 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 16px;
-      background: rgba(14, 10, 26, 0.85);
+      background: rgba(10, 10, 10, 0.85);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 24px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);

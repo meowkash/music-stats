@@ -238,11 +238,21 @@ function main() {
     const uts = parseInt(parts[0], 10);
     if (isNaN(uts)) continue;
 
+    const artistName = parts[1];
+    const albumName = parts[2];
+    const trackName = parts[3];
+
+    let artistId = artistMap.get(artistName);
+    let albumId = albumMap.get(albumName);
+    let trackId = trackMap.get(`${trackName}|${artistId}|${albumId}`);
+    if (trackId === undefined) trackId = 0;
+
     recentScrobbles.push({
       uts,
-      artist: parts[1],
-      album: parts[2],
-      track: parts[3]
+      artist: artistName,
+      album: albumName,
+      track: trackName,
+      trackId: trackId
     });
 
     if (recentScrobbles.length >= 20) break;
@@ -286,7 +296,8 @@ function main() {
   console.log("Generating pre-aggregated catalog database...");
   const catalog = {
     artists: {},
-    albums: {}
+    albums: {},
+    tracks: {} // trackId -> scrobbles
   };
 
   const albumTrackCounts = {}; // albumId -> array of { name, count }
@@ -366,6 +377,14 @@ function main() {
         scrobbles: albumScrobbles[albId] || 0
       }))
     };
+  }
+
+  // Populate tracks dictionary in catalog
+  for (let tId = 0; tId < tracks.length; tId++) {
+    const count = trackCounts[tId] || 0;
+    if (count > 0) {
+      catalog.tracks[tId] = count;
+    }
   }
 
   const catalogPath = path.join(PUBLIC_DATA_DIR, 'catalog.json');

@@ -7,13 +7,20 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/process-data.js && astro build",
+    "build": "node scripts/process-data.js && node scripts/extract-colors.js && astro build",
     "deploy": "npm run build && npx wrangler pages deploy dist/ --project-name music-stats",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
+    "@material/material-color-utilities": "^0.4.0",
     "astro": "^7.0.6",
-    "chart.js": "^4.5.1"
+    "chart.js": "^4.5.1",
+    "fast-average-color-node": "^3.2.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1",
+    "tsx": "^4.23.1"
   }
 }

@@ -123,13 +123,14 @@
 </style>
 
 <script>
-  import { generateScrobbleRowHTML, applyCountGlows } from '../utils/ui';
+  import { generateScrobbleRowHTML, applyCountGlows, getArtworkUrl } from '../utils/ui';
 
   interface RecentScrobble {
     uts: number;
     artist: string;
     album: string;
     track: string;
+    trackId: number;
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -168,15 +169,13 @@
 
         container.innerHTML = list
           .map((item) => {
-            const imgUrl =
-              artworkCache[`${item.album}|${item.artist}`] ||
-              artworkCache[item.artist];
+            const imgUrl = getArtworkUrl('track', item.track, item.artist, item.album, artworkCache);
             
             return generateScrobbleRowHTML({
-              type: 'artist',
-              id: 0,
+              type: 'track',
+              id: item.trackId,
               name: item.track,
-              subtitle: `${item.artist} • ${item.album}`,
+              subtitle: `${item.album} • ${item.artist}`,
               imgUrl: imgUrl || null,
               count: formatRelativeTime(item.uts)
             }, false);
@@ -189,7 +188,7 @@
           row.addEventListener("click", () => {
             const type = row.getAttribute("data-type");
             const idStr = row.getAttribute("data-id");
-            if (type && idStr && idStr !== "0") {
+            if (type && idStr) {
               window.dispatchEvent(
                 new CustomEvent("open-entity-details", {
                   detail: { type, id: parseInt(idStr, 10) },

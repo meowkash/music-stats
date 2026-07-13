@@ -640,7 +640,7 @@
 </style>
 
 <script>
-  import { generateScrobbleRowHTML, applyCountGlows } from '../utils/ui';
+  import { generateScrobbleRowHTML, applyCountGlows, getArtworkUrl } from '../utils/ui';
 
   interface LeaderboardEntry {
     artists: string[];
@@ -903,22 +903,19 @@
         let rowId = 0;
 
         if (activeTab === 'songs') {
-          const parts = (item.subtitle || '').split(' • ');
-          if (parts.length === 2) {
-            imgUrl = artworkCache[`${parts[1]}|${parts[0]}`] || artworkCache[`${item.name}|${parts[0]}`] || artworkCache[parts[0]];
-          }
-          rowType = 'album';
-          rowId = item.albumId || 0;
+          imgUrl = getArtworkUrl('track', item.name, item.artistName || '', item.albumName || '', artworkCache);
+          rowType = 'track';
+          rowId = item.id;
           infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
             <span class="scrobble-row-subtitle">
-              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.artistName || '')}</span>
-              • 
               <span class="clickable-entity" data-type="album" data-id="${item.albumId}">${escapeHTML(item.albumName || '')}</span>
+              • 
+              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.artistName || '')}</span>
             </span>
           `;
         } else if (activeTab === 'albums') {
-          imgUrl = artworkCache[`${item.name}|${item.subtitle}`] || artworkCache[item.subtitle || ''];
+          imgUrl = getArtworkUrl('album', item.name, item.subtitle || '', item.name, artworkCache);
           rowType = 'album';
           rowId = item.id;
           infoHtml = `
@@ -926,12 +923,12 @@
             <span class="scrobble-row-subtitle clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.subtitle || '')}</span>
           `;
         } else {
-          imgUrl = artworkCache[item.name];
+          imgUrl = getArtworkUrl('artist', item.name, item.name, '', artworkCache);
           rowType = 'artist';
           rowId = item.id;
           infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
-            <span class="scrobble-row-subtitle">Artist</span>
+            <span class="scrobble-row-subtitle"></span>
           `;
         }
 
