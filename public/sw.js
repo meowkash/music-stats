@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aakashmusic-cache-v1';
+const CACHE_NAME = 'aakashmusic-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -56,7 +56,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 2. Main static assets & Google Fonts -> Cache First, fallback to Network
+  // 2. HTML / Navigation -> Network First, fallback to Cache
+  // This ensures your UI changes show up immediately when you reload the PWA!
+  if (event.request.mode === 'navigate' || requestUrl.pathname === '/') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // 3. Main static assets & Google Fonts -> Cache First, fallback to Network
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
       if (cachedResponse) {
