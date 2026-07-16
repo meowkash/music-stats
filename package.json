@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/process-data.js && node scripts/extract-colors.js && astro build",
+    "build": "node scripts/process-data.js && npx tsx scripts/extract-colors.js && astro build",
     "deploy": "npm run build && npx wrangler pages deploy dist/ --project-name music-stats",
     "preview": "astro preview",
     "astro": "astro"

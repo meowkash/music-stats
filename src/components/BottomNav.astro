@@ -7,7 +7,15 @@
   <div class="main-tab-bar glass-card">
     <div class="nav-slider-highlight" id="navSliderHighlight"></div>
     <button class="tab-btn active" data-tab="dashboard" aria-label="Dashboard">
-      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        class="tab-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <rect x="3" y="3" width="7" height="9"></rect>
         <rect x="14" y="3" width="7" height="5"></rect>
         <rect x="14" y="12" width="7" height="9"></rect>
@@ -15,26 +23,50 @@
       </svg>
       <span class="tab-label">Dashboard</span>
     </button>
-    
-    <button class="tab-btn" data-tab="leaderboards" aria-label="Leaderboards">
-      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+    <button class="tab-btn" data-tab="rankings" aria-label="Rankings">
+      <svg
+        class="tab-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="18" y1="20" x2="18" y2="10"></line>
         <line x1="12" y1="20" x2="12" y2="4"></line>
         <line x1="6" y1="20" x2="6" y2="14"></line>
       </svg>
-      <span class="tab-label">Leaderboards</span>
+      <span class="tab-label">Rankings</span>
     </button>
-    
+
     <button class="tab-btn" data-tab="recents" aria-label="Recent Plays">
-      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        class="tab-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
       <span class="tab-label">Recents</span>
     </button>
-    
+
     <button class="tab-btn" data-tab="statistics" aria-label="Statistics">
-      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        class="tab-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
       </svg>
       <span class="tab-label">Statistics</span>
@@ -90,8 +122,12 @@
   }
 
   @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Swiper middle element */
@@ -236,11 +272,11 @@
     filter: drop-shadow(0 0 4px var(--accent-pink-glow));
   }
 
-  .tab-btn[data-tab="leaderboards"].active {
+  .tab-btn[data-tab="rankings"].active {
     color: var(--accent-cyan);
     text-shadow: 0 0 10px var(--accent-cyan-glow);
   }
-  .tab-btn[data-tab="leaderboards"].active .tab-icon {
+  .tab-btn[data-tab="rankings"].active .tab-icon {
     stroke: var(--accent-cyan);
     filter: drop-shadow(0 0 4px var(--accent-cyan-glow));
   }
@@ -270,7 +306,9 @@
     background: rgba(255, 255, 255, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 16px;
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.4);
     transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
     pointer-events: none;
     mix-blend-mode: overlay; /* Liquid glass adaptive color */
@@ -346,21 +384,28 @@
 <script>
   // Setup Client-side Navigation Router
   function initNav() {
-    const tabs = document.querySelectorAll('.tab-btn');
-    const highlight = document.getElementById('navSliderHighlight');
-    const activeTab = document.querySelector('.tab-btn.active') as HTMLElement;
-    console.log('initNav elements:', { tabsCount: tabs.length, highlight, activeTab });
+    const tabs = document.querySelectorAll(".tab-btn");
+    const highlight = document.getElementById("navSliderHighlight");
+    const activeTab = document.querySelector(".tab-btn.active") as HTMLElement;
+    console.log("initNav elements:", {
+      tabsCount: tabs.length,
+      highlight,
+      activeTab,
+    });
 
     function syncHighlight(activeBtn: HTMLElement) {
       if (!highlight || !activeBtn) {
-        console.warn('syncHighlight skipped - missing elements:', { highlight, activeBtn });
+        console.warn("syncHighlight skipped - missing elements:", {
+          highlight,
+          activeBtn,
+        });
         return;
       }
-      console.log('syncHighlight coordinates:', {
+      console.log("syncHighlight coordinates:", {
         offsetLeft: activeBtn.offsetLeft,
         offsetTop: activeBtn.offsetTop,
         offsetWidth: activeBtn.offsetWidth,
-        offsetHeight: activeBtn.offsetHeight
+        offsetHeight: activeBtn.offsetHeight,
       });
       highlight.style.left = `${activeBtn.offsetLeft}px`;
       highlight.style.width = `${activeBtn.offsetWidth}px`;
@@ -368,19 +413,21 @@
       highlight.style.height = `${activeBtn.offsetHeight}px`;
     }
 
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const targetTab = tab.getAttribute('data-tab');
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const targetTab = tab.getAttribute("data-tab");
         if (!targetTab) return;
 
         // Update active class on buttons
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
+        tabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
 
         syncHighlight(tab as HTMLElement);
 
         // Fire custom event to notify parent layout to switch views
-        const event = new CustomEvent('tab-change', { detail: { tab: targetTab } });
+        const event = new CustomEvent("tab-change", {
+          detail: { tab: targetTab },
+        });
         window.dispatchEvent(event);
       });
     });
@@ -395,14 +442,14 @@
     }
 
     // Resize sync
-    window.addEventListener('resize', () => {
-      const active = document.querySelector('.tab-btn.active') as HTMLElement;
+    window.addEventListener("resize", () => {
+      const active = document.querySelector(".tab-btn.active") as HTMLElement;
       if (active) syncHighlight(active);
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initNav);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initNav);
   } else {
     initNav();
   }

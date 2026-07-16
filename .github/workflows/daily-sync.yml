@@ -40,6 +40,7 @@ jobs:
         run: |
           aws s3 cp s3://music-stats/scrobbles.csv src/data/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No scrobbles.csv found in R2"
           aws s3 cp s3://music-stats/artwork.json src/data/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No artwork.json found in R2"
+          aws s3 cp s3://music-stats/colors.json public/data/colors.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No colors.json found in R2"
 
       - name: Fetch Latest Scrobbles
         env:
@@ -67,6 +68,7 @@ jobs:
         run: |
           aws s3 cp src/data/scrobbles.csv s3://music-stats/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 cp src/data/artwork.json s3://music-stats/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          aws s3 cp public/data/colors.json s3://music-stats/colors.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
