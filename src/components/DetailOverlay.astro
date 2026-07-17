@@ -103,6 +103,7 @@
     will-change: transform;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior-y: none;
   }
 
   /* Mobile style: Bottom Sheet */
@@ -111,7 +112,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      top: 8dvh;
+      top: max(8lvh, env(safe-area-inset-top) + 24px);
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -159,7 +160,7 @@
   }
 
   .details-overlay-panel.visible {
-    transform: none !important;
+    transform: none;
   }
 
   /* Ambient Blurred Artwork Color Backdrop */
@@ -640,17 +641,18 @@
     let startY = 0;
     let currentY = 0;
     let isDragging = false;
-
-    // We allow swiping down starting from either the drag handle or the top header area
-    const touchTarget = document.getElementById(
-      "overlayHeader",
-    ) as HTMLDivElement;
+    let isDismissing = false;
 
     function handleTouchStart(e: TouchEvent) {
       if (window.innerWidth >= 768) return; // side drawer does not support swipe close
+      
+      // Only initiate swipe-to-dismiss if we are at the top of the scroll container
+      if (panel.scrollTop > 5) return; 
+
       startY = e.touches[0].clientY;
-      currentY = startY; // Reset currentY to prevent stale values from immediately closing the sheet
+      currentY = startY; 
       isDragging = true;
+      isDismissing = false;
       panel.style.transition = "none"; // disable transitions while dragging
     }
 
@@ -659,9 +661,14 @@
       currentY = e.touches[0].clientY;
       const diffY = currentY - startY;
 
-      // Only allow drag downwards and add a threshold to prevent cancelling clicks
-      if (diffY > 10) {
+      // Only allow pull-down if dragging downwards
+      if (diffY > 0) {
+        isDismissing = true;
+        // Prevent native scrolling if possible to stop rubber banding
+        if (e.cancelable) e.preventDefault();
         panel.style.transform = `translate3d(0, ${diffY}px, 0)`;
+      } else {
+        isDismissing = false;
       }
     }
 
@@ -671,24 +678,19 @@
       panel.style.transition = ""; // restore smooth transition
 
       const diffY = currentY - startY;
-      // Close sheet if dragged down past threshold (130px)
-      if (diffY > 130) {
+      // Close sheet if dragged down past threshold (100px)
+      if (isDismissing && diffY > 100) {
         closeDetails();
       } else {
         panel.style.transform = ""; // snap back
       }
+      isDismissing = false;
     }
 
-    if (dragHandle) {
-      dragHandle.addEventListener("touchstart", handleTouchStart);
-      dragHandle.addEventListener("touchmove", handleTouchMove);
-      dragHandle.addEventListener("touchend", handleTouchEnd);
-    }
-    if (touchTarget) {
-      touchTarget.addEventListener("touchstart", handleTouchStart);
-      touchTarget.addEventListener("touchmove", handleTouchMove);
-      touchTarget.addEventListener("touchend", handleTouchEnd);
-    }
+    // Attach to the entire panel to allow dismissing by dragging down anywhere when at the top
+    panel.addEventListener("touchstart", handleTouchStart, { passive: true });
+    panel.addEventListener("touchmove", handleTouchMove, { passive: false });
+    panel.addEventListener("touchend", handleTouchEnd);
 
     // Dynamic Render Engine
     const overlayHeader = document.getElementById(
