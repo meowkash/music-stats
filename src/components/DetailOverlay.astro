@@ -83,7 +83,7 @@
     -webkit-backdrop-filter: blur(4px);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .overlay-backdrop.visible {
@@ -99,7 +99,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    transition: transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
     overflow-y: auto;
     overflow-x: hidden;
@@ -938,8 +938,14 @@
 
       panel.style.background = `linear-gradient(to bottom, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25) 0%, #0a0a0f 450px)`;
 
-      panel.classList.add("visible");
-      backdrop.classList.add("visible");
+      // Yield to the browser to ensure the DOM is painted with the heavy track/album list 
+      // before starting the CSS transition animation. This prevents first-frame jank.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          panel.classList.add("visible");
+          backdrop.classList.add("visible");
+        });
+      });
     }
 
     // Listen to global open event

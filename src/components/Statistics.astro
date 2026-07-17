@@ -718,16 +718,29 @@
     }
 
     function updateChart() {
-      datasetMap.clear();
-      chart!.data.datasets = [];
-      for (const year of selectedYears) {
-        const ds = buildDataset(year, rawTotals!);
-        if (ds) {
-          datasetMap.set(year, ds);
-          chart!.data.datasets.push(ds);
+      if (!chart) return;
+
+      // Remove unselected datasets
+      for (let i = chart.data.datasets.length - 1; i >= 0; i--) {
+        if (!selectedYears.has(chart.data.datasets[i].label as string)) {
+          chart.data.datasets.splice(i, 1);
         }
       }
-      chart!.update();
+
+      // Add newly selected datasets
+      const currentLabels = new Set(chart.data.datasets.map((d: any) => d.label));
+      const sortedYears = Array.from(selectedYears).sort().reverse();
+
+      for (const year of sortedYears) {
+        if (!currentLabels.has(year)) {
+          const ds = buildDataset(year, rawTotals!);
+          if (ds) {
+            chart.data.datasets.push(ds);
+          }
+        }
+      }
+
+      chart.update();
     }
 
     function initializeCheckboxes(totals: YearlyTotals) {
@@ -859,26 +872,30 @@
           const diffX = touchStartX - touchEndX;
           const diffY = touchStartY - touchEndY;
 
-          if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+          // 50px threshold to minimize accidental swipes
+          if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
             const sortedSelectedYears = Array.from(selectedYears)
               .sort()
               .reverse();
             const target = e.target as HTMLElement;
 
-            if (target.closest("#yearDropdownContainer") && activeYear) {
-              let idx = sortedSelectedYears.indexOf(activeYear);
-              if (diffX > 0)
-                idx = Math.min(idx + 1, sortedSelectedYears.length - 1); // Swipe left = next
-              else idx = Math.max(idx - 1, 0); // Swipe right = prev
-              activeYear = sortedSelectedYears[idx];
-              renderYearlyStats();
-            } else if (target.closest("#categoryDropdownContainer")) {
+            if (target.closest("#categoryDropdownContainer")) {
               const cats = ["tracks", "albums", "artists"];
               let idx = cats.indexOf(activeCategory);
               if (diffX > 0) idx = Math.min(idx + 1, 2);
               else idx = Math.max(idx - 1, 0);
               activeCategory = cats[idx] as any;
               renderYearlyStats();
+            } else if (activeYear) {
+              let idx = sortedSelectedYears.indexOf(activeYear);
+              if (diffX > 0)
+                idx = Math.min(idx + 1, sortedSelectedYears.length - 1); // Swipe left = older year
+              else idx = Math.max(idx - 1, 0); // Swipe right = newer year
+              
+              if (activeYear !== sortedSelectedYears[idx]) {
+                activeYear = sortedSelectedYears[idx];
+                renderYearlyStats();
+              }
             }
           }
         },
