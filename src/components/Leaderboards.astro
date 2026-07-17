@@ -130,11 +130,14 @@
   .range-highlight {
     position: absolute;
     left: 0;
+    top: 0;
     width: 60px;
+    height: 100%;
     border-radius: 20px;
     background: linear-gradient(135deg, var(--accent-pink), #e01e43);
     box-shadow: 0 4px 12px var(--accent-pink-glow);
-    transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), width 0.35s cubic-bezier(0.25, 1, 0.5, 1), height 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform, width, height;
     pointer-events: none;
     z-index: 1;
   }
@@ -217,8 +220,10 @@
 
   .sub-tab-highlight {
     position: absolute;
-    left: 4px;
+    left: 0;
+    top: 0;
     width: 33.333%;
+    height: 100%;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.3);
@@ -226,7 +231,8 @@
       inset 0 1px 1px rgba(255, 255, 255, 0.4),
       0 2px 8px rgba(0, 0, 0, 0.4);
     mix-blend-mode: overlay;
-    transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), width 0.35s cubic-bezier(0.25, 1, 0.5, 1), height 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform, width, height;
     pointer-events: none;
     z-index: 1;
   }
@@ -1014,9 +1020,8 @@
     ) as HTMLDivElement;
     function syncRangeHighlight(btn: HTMLElement) {
       if (!rangeHighlight || !btn) return;
-      rangeHighlight.style.left = `${btn.offsetLeft}px`;
+      rangeHighlight.style.transform = `translate3d(${btn.offsetLeft}px, ${btn.offsetTop}px, 0)`;
       rangeHighlight.style.width = `${btn.offsetWidth}px`;
-      rangeHighlight.style.top = `${btn.offsetTop}px`;
       rangeHighlight.style.height = `${btn.offsetHeight}px`;
     }
 
@@ -1025,9 +1030,8 @@
     ) as HTMLDivElement;
     function syncSubTabHighlight(btn: HTMLElement) {
       if (!subTabHighlight || !btn) return;
-      subTabHighlight.style.left = `${btn.offsetLeft}px`;
+      subTabHighlight.style.transform = `translate3d(${btn.offsetLeft}px, ${btn.offsetTop}px, 0)`;
       subTabHighlight.style.width = `${btn.offsetWidth}px`;
-      subTabHighlight.style.top = `${btn.offsetTop}px`;
       subTabHighlight.style.height = `${btn.offsetHeight}px`;
     }
 
