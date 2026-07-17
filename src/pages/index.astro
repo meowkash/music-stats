@@ -41,8 +41,8 @@ import DetailOverlay from "../components/DetailOverlay.astro";
         <Recents />
       </section>
 
-      <!-- Tab 2: Leaderboards -->
-      <section class="panel-section" id="view-leaderboards">
+      <!-- Tab 2: Rankings -->
+      <section class="panel-section" id="view-rankings">
         <Leaderboards />
       </section>
 
@@ -158,6 +158,7 @@ import DetailOverlay from "../components/DetailOverlay.astro";
       padding 0.3s ease,
       opacity 0.35s ease,
       transform 0.35s ease;
+    will-change: opacity, transform;
   }
 
   /* Responsive padding for panel sections */

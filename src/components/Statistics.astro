@@ -437,6 +437,7 @@
         tension: 0.35,
         pointRadius: 0,
         pointHoverRadius: 4,
+        pointHitRadius: 15,
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: color,
         pointHoverBorderWidth: 2,
@@ -458,8 +459,8 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-              mode: 'index',
-              intersect: false,
+              mode: 'nearest',
+              intersect: true,
               backgroundColor: 'rgba(10, 10, 15, 0.9)',
               titleColor: '#fff',
               bodyColor: 'rgba(255,255,255,0.8)',
@@ -485,7 +486,7 @@
               }
             }
           },
-          interaction: { mode: 'index', intersect: false },
+          interaction: { mode: 'nearest', intersect: true },
           scales: {
             x: {
               grid: { display: false },
