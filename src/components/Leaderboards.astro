@@ -3,9 +3,9 @@
 ---
 
 <div class="leaderboard-container glass-card">
-  <div class="leaderboard-header">
-    <h2>Leaderboards</h2>
-    <p class="subtitle">Rankings based on your listening history</p>
+  <div class="view-header">
+    <h2>Rankings</h2>
+    <p class="subtitle">The songs that make my world go round...</p>
   </div>
 
   <!-- Date Selector Section -->
@@ -19,7 +19,7 @@
       <button class="range-btn" data-range="all">All Time</button>
       <button class="range-btn" data-range="custom">Custom</button>
     </div>
-    
+
     <div class="custom-date-inputs hidden" id="customDateInputs">
       <div class="date-input-group">
         <label for="startDate">From</label>
@@ -42,11 +42,24 @@
 
   <!-- Search / Filter bar inside leaderboard -->
   <div class="search-bar-wrapper">
-    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class="search-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <circle cx="11" cy="11" r="8"></circle>
       <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
     </svg>
-    <input type="text" id="leaderboardSearch" class="glass-input search-input" placeholder="Search entries..." />
+    <input
+      type="text"
+      id="leaderboardSearch"
+      class="glass-input search-input"
+      placeholder="Search entries..."
+    />
   </div>
 
   <!-- Loading State -->
@@ -71,21 +84,6 @@
     margin-bottom: 24px;
   }
 
-  .leaderboard-header h2 {
-    font-family: var(--font-header);
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #fff 30%, var(--text-secondary) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .leaderboard-header .subtitle {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-  }
 
   /* Quick date ranges */
   .date-selector-section {
@@ -128,7 +126,7 @@
     border-color: transparent;
     background: transparent;
   }
-  
+
   .range-highlight {
     position: absolute;
     left: 0;
@@ -157,8 +155,14 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .date-input-group {
@@ -210,7 +214,7 @@
   .sub-tab-btn.active {
     color: #fff;
   }
-  
+
   .sub-tab-highlight {
     position: absolute;
     left: 4px;
@@ -218,7 +222,9 @@
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.4);
     mix-blend-mode: overlay;
     transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
     pointer-events: none;
@@ -274,17 +280,11 @@
   }
 
   @keyframes loadingSpin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
-
-
-  .no-data {
-    padding: 30px 0;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 13px;
-  }
 
   /* Clickable entity links inside leaderboards */
   .leaderboard-container :global(.clickable-entity) {
@@ -518,8 +518,6 @@
     padding: 0 16px;
   }
 
-
-
   /* Horizontal scrolling albums section */
   .overlay-albums-section {
     margin-top: 32px;
@@ -616,19 +614,19 @@
       flex-direction: column;
       gap: 10px;
     }
-    
+
     .date-input-group {
       flex-direction: row;
       align-items: center;
       gap: 12px;
     }
-    
+
     .date-input-group label {
       width: 44px;
       text-align: left;
       margin-bottom: 0;
     }
-    
+
     .date-input-group input[type="date"] {
       flex: 1;
     }
@@ -640,7 +638,11 @@
 </style>
 
 <script>
-  import { generateScrobbleRowHTML, applyCountGlows, getArtworkUrl } from '../utils/ui';
+  import {
+    generateScrobbleRowHTML,
+    applyCountGlows,
+    getArtworkUrl,
+  } from "../utils/ui";
 
   interface LeaderboardEntry {
     artists: string[];
@@ -659,56 +661,68 @@
     [dateStr: string]: DayRecord;
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener("DOMContentLoaded", () => {
     // State Variables
     let meta: MetaData | null = null;
     let availableYears: number[] = [];
     let artworkCache: Record<string, string> = {};
     const yearCache: { [year: string]: YearData } = {};
-    
-    let activeTab = 'artists'; // artists, albums, songs
-    let activeRange = '7d';     // 7d, 30d, 90d, year, all, custom
-    let searchQuery = '';
+
+    let activeTab = "artists"; // artists, albums, songs
+    let activeRange = "7d"; // 7d, 30d, 90d, year, all, custom
+    let searchQuery = "";
 
     // Cache elements
-    const loader = document.getElementById('leaderboardLoader') as HTMLDivElement;
-    const listContainer = document.getElementById('leaderboardList') as HTMLDivElement;
-    const customDateContainer = document.getElementById('customDateInputs') as HTMLDivElement;
-    const startDateInput = document.getElementById('startDate') as HTMLInputElement;
-    const endDateInput = document.getElementById('endDate') as HTMLInputElement;
-    const searchInput = document.getElementById('leaderboardSearch') as HTMLInputElement;
+    const loader = document.getElementById(
+      "leaderboardLoader",
+    ) as HTMLDivElement;
+    const listContainer = document.getElementById(
+      "leaderboardList",
+    ) as HTMLDivElement;
+    const customDateContainer = document.getElementById(
+      "customDateInputs",
+    ) as HTMLDivElement;
+    const startDateInput = document.getElementById(
+      "startDate",
+    ) as HTMLInputElement;
+    const endDateInput = document.getElementById("endDate") as HTMLInputElement;
+    const searchInput = document.getElementById(
+      "leaderboardSearch",
+    ) as HTMLInputElement;
 
     // Initialize Default Dates
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split("T")[0];
     endDateInput.value = todayStr;
-    
+
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    startDateInput.value = sevenDaysAgo.toISOString().split('T')[0];
+    startDateInput.value = sevenDaysAgo.toISOString().split("T")[0];
 
     // Load dictionary meta on start
     async function loadMeta() {
       if (meta) return meta;
       try {
         const [metaRes, artworkRes, totalsRes] = await Promise.all([
-          fetch('/data/meta.json'),
-          fetch('/data/artwork.json').catch(() => null),
-          fetch('/data/yearly-totals.json').catch(() => null)
+          fetch("/data/meta.json"),
+          fetch("/data/artwork.json").catch(() => null),
+          fetch("/data/yearly-totals.json").catch(() => null),
         ]);
         meta = await metaRes.json();
-        
+
         if (artworkRes && artworkRes.ok) {
           artworkCache = await artworkRes.json();
         }
-        
+
         if (totalsRes && totalsRes.ok) {
           const totals = await totalsRes.json();
-          availableYears = Object.keys(totals).map(y => parseInt(y, 10)).filter(y => !isNaN(y));
+          availableYears = Object.keys(totals)
+            .map((y) => parseInt(y, 10))
+            .filter((y) => !isNaN(y));
         }
 
         return meta;
       } catch (err) {
-        console.error('Failed to load dictionary metadata:', err);
+        console.error("Failed to load dictionary metadata:", err);
         return null;
       }
     }
@@ -730,13 +744,14 @@
 
     // Triggered on UI changes
     async function updateLeaderboard() {
-      loader.classList.remove('hidden');
-      listContainer.innerHTML = '';
+      loader.classList.remove("hidden");
+      listContainer.innerHTML = "";
 
       const dictionary = await loadMeta();
       if (!dictionary) {
-        loader.classList.add('hidden');
-        listContainer.innerHTML = '<div class="no-data">Failed to load metadata</div>';
+        loader.classList.add("hidden");
+        listContainer.innerHTML =
+          '<div class="no-data-message">Failed to load metadata</div>';
         return;
       }
 
@@ -744,56 +759,57 @@
       let startStr = startDateInput.value;
       let endStr = endDateInput.value;
 
-      if (activeRange !== 'custom') {
+      if (activeRange !== "custom") {
         const end = new Date();
         const start = new Date();
-        
-        if (activeRange === '7d') {
+
+        if (activeRange === "7d") {
           start.setDate(end.getDate() - 7);
-        } else if (activeRange === '30d') {
+        } else if (activeRange === "30d") {
           start.setDate(end.getDate() - 30);
-        } else if (activeRange === '90d') {
+        } else if (activeRange === "90d") {
           start.setDate(end.getDate() - 90);
-        } else if (activeRange === 'year') {
+        } else if (activeRange === "year") {
           start.setMonth(0, 1); // Jan 1st
-        } else if (activeRange === 'all') {
+        } else if (activeRange === "all") {
           // Set to actual beginning of history dynamically
-          const minYear = availableYears.length > 0 ? Math.min(...availableYears) : 2000;
+          const minYear =
+            availableYears.length > 0 ? Math.min(...availableYears) : 2000;
           start.setFullYear(minYear, 0, 1);
         }
-        
-        startStr = start.toISOString().split('T')[0];
-        endStr = end.toISOString().split('T')[0];
-        
+
+        startStr = start.toISOString().split("T")[0];
+        endStr = end.toISOString().split("T")[0];
+
         // Sync values to inputs silently
         startDateInput.value = startStr;
         endDateInput.value = endStr;
       }
 
       // 2. Identify required years
-      const startYear = parseInt(startStr.split('-')[0], 10);
-      const endYear = parseInt(endStr.split('-')[0], 10);
+      const startYear = parseInt(startStr.split("-")[0], 10);
+      const endYear = parseInt(endStr.split("-")[0], 10);
       const yearsToLoad: string[] = [];
       for (let y = startYear; y <= endYear; y++) {
         yearsToLoad.push(String(y));
       }
 
       // 3. Load all needed years in parallel
-      await Promise.all(yearsToLoad.map(y => loadYearData(y)));
+      await Promise.all(yearsToLoad.map((y) => loadYearData(y)));
 
       // 4. Filter and aggregate scrobbles
       const scrobbleCounts: { [trackId: number]: number } = {};
       let totalTimeframeScrobbles = 0;
 
-      const startDate = new Date(startStr + 'T00:00:00Z');
-      const endDate = new Date(endStr + 'T23:59:59Z');
+      const startDate = new Date(startStr + "T00:00:00Z");
+      const endDate = new Date(endStr + "T23:59:59Z");
 
       for (const year of yearsToLoad) {
         const yearData = yearCache[year];
         if (!yearData) continue;
 
         for (const [dateStr, dayTracks] of Object.entries(yearData)) {
-          const currentDate = new Date(dateStr + 'T12:00:00Z'); // mid-day to avoid TZ issues
+          const currentDate = new Date(dateStr + "T12:00:00Z"); // mid-day to avoid TZ issues
           if (currentDate >= startDate && currentDate <= endDate) {
             for (const [trackId, count] of dayTracks) {
               scrobbleCounts[trackId] = (scrobbleCounts[trackId] || 0) + count;
@@ -804,9 +820,14 @@
       }
 
       // 5. Aggregate by active sub-tab category
-      let itemsList: { id: number; name: string; subtitle?: string; count: number }[] = [];
+      let itemsList: {
+        id: number;
+        name: string;
+        subtitle?: string;
+        count: number;
+      }[] = [];
 
-      if (activeTab === 'songs') {
+      if (activeTab === "songs") {
         itemsList = Object.entries(scrobbleCounts).map(([tIdStr, count]) => {
           const tId = parseInt(tIdStr, 10);
           const trackInfo = dictionary.tracks[tId];
@@ -823,10 +844,10 @@
             albumId,
             artistName,
             albumName,
-            count
+            count,
           };
         });
-      } else if (activeTab === 'artists') {
+      } else if (activeTab === "artists") {
         const artistCounts: { [artistId: number]: number } = {};
         for (const [tIdStr, count] of Object.entries(scrobbleCounts)) {
           const tId = parseInt(tIdStr, 10);
@@ -838,16 +859,18 @@
           return {
             id: artId,
             name: dictionary.artists[artId],
-            count
+            count,
           };
         });
-      } else if (activeTab === 'albums') {
-        const albumCounts: { [albumId: number]: { count: number; artistId: number } } = {};
+      } else if (activeTab === "albums") {
+        const albumCounts: {
+          [albumId: number]: { count: number; artistId: number };
+        } = {};
         for (const [tIdStr, count] of Object.entries(scrobbleCounts)) {
           const tId = parseInt(tIdStr, 10);
           const albumId = dictionary.tracks[tId][2];
           const artistId = dictionary.tracks[tId][1];
-          
+
           if (!albumCounts[albumId]) {
             albumCounts[albumId] = { count: 0, artistId };
           }
@@ -860,7 +883,7 @@
             name: dictionary.albums[albId],
             subtitle: dictionary.artists[data.artistId],
             artistId: data.artistId,
-            count: data.count
+            count: data.count,
           };
         });
       }
@@ -868,9 +891,10 @@
       // 6. Filter by Search Query
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        itemsList = itemsList.filter(item => 
-          item.name.toLowerCase().includes(query) || 
-          (item.subtitle && item.subtitle.toLowerCase().includes(query))
+        itemsList = itemsList.filter(
+          (item) =>
+            item.name.toLowerCase().includes(query) ||
+            (item.subtitle && item.subtitle.toLowerCase().includes(query)),
         );
       }
 
@@ -881,93 +905,113 @@
       const maxCount = itemsList[0]?.count || 1;
 
       // 8. Render rows
-      loader.classList.add('hidden');
-      
+      loader.classList.add("hidden");
+
       if (itemsList.length === 0) {
-        listContainer.innerHTML = '<div class="no-data">No scrobbles found in this timeframe</div>';
-        
-        // Notify dashboard with total scrobbles for the mini player
-        if (activeRange === 'all') {
-          updateMiniPlayerStats(0, '-', '-');
-        }
+        listContainer.innerHTML =
+          '<div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>';
+
         return;
       }
 
       // Limit leaderboard items in viewport to 50 for performance
       const topItems = itemsList.slice(0, 50);
 
-      listContainer.innerHTML = topItems.map((item, index) => {
-        let imgUrl = null;
-        let infoHtml = '';
-        let rowType = '';
-        let rowId = 0;
+      listContainer.innerHTML = topItems
+        .map((item, index) => {
+          let imgUrl = null;
+          let infoHtml = "";
+          let rowType = "";
+          let rowId = 0;
 
-        if (activeTab === 'songs') {
-          imgUrl = getArtworkUrl('track', item.name, item.artistName || '', item.albumName || '', artworkCache);
-          rowType = 'track';
-          rowId = item.id;
-          infoHtml = `
+          if (activeTab === "songs") {
+            imgUrl = getArtworkUrl(
+              "track",
+              item.name,
+              item.artistName || "",
+              item.albumName || "",
+              artworkCache,
+            );
+            rowType = "track";
+            rowId = item.id;
+            infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
             <span class="scrobble-row-subtitle">
-              <span class="clickable-entity" data-type="album" data-id="${item.albumId}">${escapeHTML(item.albumName || '')}</span>
+              <span class="clickable-entity" data-type="album" data-id="${item.albumId}">${escapeHTML(item.albumName || "")}</span>
               • 
-              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.artistName || '')}</span>
+              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.artistName || "")}</span>
             </span>
           `;
-        } else if (activeTab === 'albums') {
-          imgUrl = getArtworkUrl('album', item.name, item.subtitle || '', item.name, artworkCache);
-          rowType = 'album';
-          rowId = item.id;
-          infoHtml = `
+          } else if (activeTab === "albums") {
+            imgUrl = getArtworkUrl(
+              "album",
+              item.name,
+              item.subtitle || "",
+              item.name,
+              artworkCache,
+            );
+            rowType = "album";
+            rowId = item.id;
+            infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
-            <span class="scrobble-row-subtitle clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.subtitle || '')}</span>
+            <span class="scrobble-row-subtitle clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.subtitle || "")}</span>
           `;
-        } else {
-          imgUrl = getArtworkUrl('artist', item.name, item.name, '', artworkCache);
-          rowType = 'artist';
-          rowId = item.id;
-          infoHtml = `
+          } else {
+            imgUrl = getArtworkUrl(
+              "artist",
+              item.name,
+              item.name,
+              "",
+              artworkCache,
+            );
+            rowType = "artist";
+            rowId = item.id;
+            infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
             <span class="scrobble-row-subtitle"></span>
           `;
-        }
+          }
 
-        // We temporarily create an object to reuse generateScrobbleRowHTML
-        // but we override the infoHtml part since Leaderboards has special click targets for subtitles
-        const baseHtml = generateScrobbleRowHTML({
-          type: rowType,
-          id: rowId,
-          rank: index + 1,
-          name: '',
-          subtitle: '',
-          imgUrl: imgUrl || null,
-          count: item.count
-        }, true);
-        
-        // Inject our custom infoHtml
-        return baseHtml.replace(
-          /<div class="scrobble-row-info">.*?<\/div>/s,
-          `<div class="scrobble-row-info">${infoHtml}</div>`
-        );
-      }).join('');
+          // We temporarily create an object to reuse generateScrobbleRowHTML
+          // but we override the infoHtml part since Leaderboards has special click targets for subtitles
+          const baseHtml = generateScrobbleRowHTML(
+            {
+              type: rowType,
+              id: rowId,
+              rank: index + 1,
+              name: "",
+              subtitle: "",
+              imgUrl: imgUrl || null,
+              count: item.count,
+            },
+            true,
+          );
+
+          // Inject our custom infoHtml
+          return baseHtml.replace(
+            /<div class="scrobble-row-info">.*?<\/div>/s,
+            `<div class="scrobble-row-info">${infoHtml}</div>`,
+          );
+        })
+        .join("");
 
       // Color play count values dynamically based on cover art dominant colors
       applyCountGlows(listContainer);
     }
 
-
-
     function escapeHTML(str: string) {
       return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     // Liquid glass highlight logic
-    const rangeHighlight = document.getElementById('rangeHighlight') as HTMLDivElement;
+    const rangeHighlight = document.getElementById(
+      "rangeHighlight",
+    ) as HTMLDivElement;
     function syncRangeHighlight(btn: HTMLElement) {
       if (!rangeHighlight || !btn) return;
       rangeHighlight.style.left = `${btn.offsetLeft}px`;
@@ -976,7 +1020,9 @@
       rangeHighlight.style.height = `${btn.offsetHeight}px`;
     }
 
-    const subTabHighlight = document.getElementById('subTabHighlight') as HTMLDivElement;
+    const subTabHighlight = document.getElementById(
+      "subTabHighlight",
+    ) as HTMLDivElement;
     function syncSubTabHighlight(btn: HTMLElement) {
       if (!subTabHighlight || !btn) return;
       subTabHighlight.style.left = `${btn.offsetLeft}px`;
@@ -986,44 +1032,44 @@
     }
 
     // Set up range buttons events
-    const rangeBtns = document.querySelectorAll('.range-btn');
-    rangeBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const range = btn.getAttribute('data-range');
+    const rangeBtns = document.querySelectorAll(".range-btn");
+    rangeBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const range = btn.getAttribute("data-range");
         if (!range) return;
 
-        rangeBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        rangeBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
         syncRangeHighlight(btn as HTMLElement);
 
         activeRange = range;
 
-        if (range === 'custom') {
-          customDateContainer.classList.remove('hidden');
+        if (range === "custom") {
+          customDateContainer.classList.remove("hidden");
         } else {
-          customDateContainer.classList.add('hidden');
+          customDateContainer.classList.add("hidden");
           updateLeaderboard();
         }
       });
     });
 
     // Custom date pickers change events
-    startDateInput.addEventListener('change', () => {
-      if (activeRange === 'custom') updateLeaderboard();
+    startDateInput.addEventListener("change", () => {
+      if (activeRange === "custom") updateLeaderboard();
     });
-    endDateInput.addEventListener('change', () => {
-      if (activeRange === 'custom') updateLeaderboard();
+    endDateInput.addEventListener("change", () => {
+      if (activeRange === "custom") updateLeaderboard();
     });
 
     // Sub-Tab switcher events
-    const tabBtns = document.querySelectorAll('.sub-tab-btn');
-    tabBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-tab');
+    const tabBtns = document.querySelectorAll(".sub-tab-btn");
+    tabBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.getAttribute("data-tab");
         if (!tab) return;
 
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        tabBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
         syncSubTabHighlight(btn as HTMLElement);
 
         activeTab = tab;
@@ -1032,7 +1078,7 @@
     });
 
     let searchDebounce: NodeJS.Timeout;
-    searchInput.addEventListener('input', (e) => {
+    searchInput.addEventListener("input", (e) => {
       const val = (e.target as HTMLInputElement).value;
       searchQuery = val;
       clearTimeout(searchDebounce);
@@ -1042,45 +1088,53 @@
     });
 
     // Click handler with event delegation for entity popups
-    listContainer.addEventListener('click', (e) => {
+    listContainer.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
-      
+
       // Check if clicked directly on subtitle clickable entities first
-      const entityEl = target.closest('.clickable-entity');
+      const entityEl = target.closest(".clickable-entity");
       if (entityEl) {
-        const type = entityEl.getAttribute('data-type');
-        const idStr = entityEl.getAttribute('data-id');
-        if (type && idStr && idStr !== '0') {
-          window.dispatchEvent(new CustomEvent('open-entity-details', {
-            detail: { type, id: parseInt(idStr, 10) }
-          }));
+        const type = entityEl.getAttribute("data-type");
+        const idStr = entityEl.getAttribute("data-id");
+        if (type && idStr && idStr !== "0") {
+          window.dispatchEvent(
+            new CustomEvent("open-entity-details", {
+              detail: { type, id: parseInt(idStr, 10) },
+            }),
+          );
         }
         return;
       }
 
       // Fall back to entire row clicks
-      const row = target.closest('.scrobble-row');
+      const row = target.closest(".scrobble-row");
       if (!row) return;
 
-      const type = row.getAttribute('data-type');
-      const idStr = row.getAttribute('data-id');
-      if (type && idStr && idStr !== '0') {
-        window.dispatchEvent(new CustomEvent('open-entity-details', {
-          detail: { type, id: parseInt(idStr, 10) }
-        }));
+      const type = row.getAttribute("data-type");
+      const idStr = row.getAttribute("data-id");
+      if (type && idStr && idStr !== "0") {
+        window.dispatchEvent(
+          new CustomEvent("open-entity-details", {
+            detail: { type, id: parseInt(idStr, 10) },
+          }),
+        );
       }
     });
 
     // Perform initial load on start
     updateLeaderboard();
-    
-    const activeRangeBtn = document.querySelector('.range-btn.active') as HTMLElement;
+
+    const activeRangeBtn = document.querySelector(
+      ".range-btn.active",
+    ) as HTMLElement;
     if (activeRangeBtn) {
       setTimeout(() => syncRangeHighlight(activeRangeBtn), 50);
       setTimeout(() => syncRangeHighlight(activeRangeBtn), 200);
     }
-    
-    const activeTabBtn = document.querySelector('.sub-tab-btn.active') as HTMLElement;
+
+    const activeTabBtn = document.querySelector(
+      ".sub-tab-btn.active",
+    ) as HTMLElement;
     if (activeTabBtn) {
       setTimeout(() => syncSubTabHighlight(activeTabBtn), 50);
       setTimeout(() => syncSubTabHighlight(activeTabBtn), 200);

@@ -13,7 +13,14 @@
     <!-- Close header bar -->
     <div class="overlay-nav-bar" id="overlayNavBar">
       <button class="nav-circle-btn" id="overlayCloseBtn" aria-label="Go Back">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
@@ -23,8 +30,16 @@
     <div class="overlay-header" id="overlayHeader">
       <div class="overlay-artwork-wrapper">
         <img id="overlayArtwork" src="" alt="Artwork" />
-        <div class="overlay-artwork-fallback hidden" id="overlayArtworkFallback">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <div
+          class="overlay-artwork-fallback hidden"
+          id="overlayArtworkFallback"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <path d="M9 18V5l12-2v13"></path>
             <circle cx="6" cy="18" r="3"></circle>
             <circle cx="18" cy="16" r="3"></circle>
@@ -35,7 +50,7 @@
         <h3 class="overlay-title" id="overlayTitle">-</h3>
         <p class="overlay-subtitle" id="overlaySubtitle">-</p>
         <p class="overlay-metadata" id="overlayMetadata">-</p>
-        
+
         <!-- Action buttons removed for non-player app view -->
       </div>
     </div>
@@ -101,8 +116,9 @@
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       transform: translateY(100%);
     }
-    
-    .overlay-header, .overlay-artwork-wrapper {
+
+    .overlay-header,
+    .overlay-artwork-wrapper {
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
       overflow: hidden;
@@ -261,7 +277,12 @@
     left: 0;
     right: 0;
     padding: 40px 20px 24px 20px;
-    background: linear-gradient(to top, rgba(10, 10, 15, 0.95) 0%, rgba(10, 10, 15, 0.6) 60%, rgba(10, 10, 15, 0) 100%);
+    background: linear-gradient(
+      to top,
+      rgba(10, 10, 15, 0.95) 0%,
+      rgba(10, 10, 15, 0.6) 60%,
+      rgba(10, 10, 15, 0) 100%
+    );
     z-index: 2;
     text-align: center;
     width: 100%;
@@ -270,8 +291,12 @@
   .overlay-artwork-fallback {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-    color: rgba(255, 255, 255, 0.15);
+    background: linear-gradient(
+      135deg,
+      rgba(30, 26, 40, 0.8) 0%,
+      rgba(15, 12, 20, 0.95) 100%
+    );
+    color: var(--accent-pink);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -279,9 +304,10 @@
   }
 
   .overlay-artwork-fallback svg {
-    width: 80px;
-    height: 80px;
-    filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.4));
+    width: 64px;
+    height: 64px;
+    opacity: 0.5;
+    filter: drop-shadow(0 0 12px var(--accent-pink-glow));
   }
 
   .overlay-title {
@@ -319,7 +345,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 800;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   }
 
   /* Play Buttons */
@@ -490,7 +516,7 @@
 </style>
 
 <script>
-  import { getArtworkUrl, getColorForUrl } from '../utils/ui';
+  import { getArtworkUrl, getColorForUrl } from "../utils/ui";
 
   interface MetaData {
     artists: string[];
@@ -500,21 +526,49 @@
 
   function init() {
     // Elements Cache
-    const backdrop = document.getElementById('detailsOverlayBackdrop') as HTMLDivElement;
-    const panel = document.getElementById('detailsOverlayPanel') as HTMLDivElement;
-    const dragHandle = document.getElementById('sheetDragHandle') as HTMLDivElement;
-    const overlayArtwork = document.getElementById('overlayArtwork') as HTMLImageElement;
-    const overlayArtworkFallback = document.getElementById('overlayArtworkFallback') as HTMLDivElement;
-    const overlayTitle = document.getElementById('overlayTitle') as HTMLHeadingElement;
-    const overlaySubtitle = document.getElementById('overlaySubtitle') as HTMLParagraphElement;
-    const overlayMetadata = document.getElementById('overlayMetadata') as HTMLParagraphElement;
-    const overlaySongsList = document.getElementById('overlaySongsList') as HTMLDivElement;
-    const overlayBgBlur = document.getElementById('overlayBgBlur') as HTMLDivElement;
-    
-    const overlayAlbumsSection = document.getElementById('overlayAlbumsSection') as HTMLDivElement;
-    const overlayAlbumsHeader = document.getElementById('overlayAlbumsHeader') as HTMLHeadingElement;
-    const overlayAlbumsList = document.getElementById('overlayAlbumsList') as HTMLDivElement;
-    const overlayCloseBtn = document.getElementById('overlayCloseBtn') as HTMLButtonElement;
+    const backdrop = document.getElementById(
+      "detailsOverlayBackdrop",
+    ) as HTMLDivElement;
+    const panel = document.getElementById(
+      "detailsOverlayPanel",
+    ) as HTMLDivElement;
+    const dragHandle = document.getElementById(
+      "sheetDragHandle",
+    ) as HTMLDivElement;
+    const overlayArtwork = document.getElementById(
+      "overlayArtwork",
+    ) as HTMLImageElement;
+    const overlayArtworkFallback = document.getElementById(
+      "overlayArtworkFallback",
+    ) as HTMLDivElement;
+    const overlayTitle = document.getElementById(
+      "overlayTitle",
+    ) as HTMLHeadingElement;
+    const overlaySubtitle = document.getElementById(
+      "overlaySubtitle",
+    ) as HTMLParagraphElement;
+    const overlayMetadata = document.getElementById(
+      "overlayMetadata",
+    ) as HTMLParagraphElement;
+    const overlaySongsList = document.getElementById(
+      "overlaySongsList",
+    ) as HTMLDivElement;
+    const overlayBgBlur = document.getElementById(
+      "overlayBgBlur",
+    ) as HTMLDivElement;
+
+    const overlayAlbumsSection = document.getElementById(
+      "overlayAlbumsSection",
+    ) as HTMLDivElement;
+    const overlayAlbumsHeader = document.getElementById(
+      "overlayAlbumsHeader",
+    ) as HTMLHeadingElement;
+    const overlayAlbumsList = document.getElementById(
+      "overlayAlbumsList",
+    ) as HTMLDivElement;
+    const overlayCloseBtn = document.getElementById(
+      "overlayCloseBtn",
+    ) as HTMLButtonElement;
 
     // Cache variables
     let meta: MetaData | null = null;
@@ -529,8 +583,8 @@
       if (meta) return meta;
       try {
         const [metaRes, artworkRes] = await Promise.all([
-          fetch('/data/meta.json'),
-          fetch('/data/artwork.json').catch(() => null)
+          fetch("/data/meta.json"),
+          fetch("/data/artwork.json").catch(() => null),
         ]);
         meta = await metaRes.json();
         if (artworkRes && artworkRes.ok) {
@@ -538,7 +592,7 @@
         }
         return meta;
       } catch (err) {
-        console.error('Failed to load metadata in overlay:', err);
+        console.error("Failed to load metadata in overlay:", err);
         return null;
       }
     }
@@ -546,25 +600,25 @@
     async function loadCatalog() {
       if (catalog) return catalog;
       try {
-        const res = await fetch('/data/catalog.json');
+        const res = await fetch("/data/catalog.json");
         catalog = await res.json();
         return catalog;
       } catch (err) {
-        console.error('Failed to load catalog in overlay:', err);
+        console.error("Failed to load catalog in overlay:", err);
         return null;
       }
     }
 
     function closeDetails() {
-      panel.classList.remove('visible');
-      backdrop.classList.remove('visible');
+      panel.classList.remove("visible");
+      backdrop.classList.remove("visible");
       currentEntity = null;
       navHistory.length = 0;
-      panel.style.transform = ''; // reset drag transforms
+      panel.style.transform = ""; // reset drag transforms
     }
 
     // Dismiss listeners
-    overlayCloseBtn.addEventListener('click', () => {
+    overlayCloseBtn.addEventListener("click", () => {
       if (navHistory.length > 0) {
         const prev = navHistory.pop()!;
         openDetails(prev.type, prev.id, true);
@@ -573,10 +627,10 @@
       }
     });
 
-    backdrop.addEventListener('click', closeDetails);
+    backdrop.addEventListener("click", closeDetails);
 
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && panel.classList.contains('visible')) {
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && panel.classList.contains("visible")) {
         closeDetails();
       }
     });
@@ -587,14 +641,16 @@
     let isDragging = false;
 
     // We allow swiping down starting from either the drag handle or the top header area
-    const touchTarget = document.getElementById('overlayHeader') as HTMLDivElement;
+    const touchTarget = document.getElementById(
+      "overlayHeader",
+    ) as HTMLDivElement;
 
     function handleTouchStart(e: TouchEvent) {
       if (window.innerWidth >= 768) return; // side drawer does not support swipe close
       startY = e.touches[0].clientY;
       currentY = startY; // Reset currentY to prevent stale values from immediately closing the sheet
       isDragging = true;
-      panel.style.transition = 'none'; // disable transitions while dragging
+      panel.style.transition = "none"; // disable transitions while dragging
     }
 
     function handleTouchMove(e: TouchEvent) {
@@ -611,31 +667,32 @@
     function handleTouchEnd() {
       if (!isDragging) return;
       isDragging = false;
-      panel.style.transition = ''; // restore smooth transition
+      panel.style.transition = ""; // restore smooth transition
 
       const diffY = currentY - startY;
       // Close sheet if dragged down past threshold (130px)
       if (diffY > 130) {
         closeDetails();
       } else {
-        panel.style.transform = ''; // snap back
+        panel.style.transform = ""; // snap back
       }
     }
 
     if (dragHandle) {
-      dragHandle.addEventListener('touchstart', handleTouchStart);
-      dragHandle.addEventListener('touchmove', handleTouchMove);
-      dragHandle.addEventListener('touchend', handleTouchEnd);
+      dragHandle.addEventListener("touchstart", handleTouchStart);
+      dragHandle.addEventListener("touchmove", handleTouchMove);
+      dragHandle.addEventListener("touchend", handleTouchEnd);
     }
     if (touchTarget) {
-      touchTarget.addEventListener('touchstart', handleTouchStart);
-      touchTarget.addEventListener('touchmove', handleTouchMove);
-      touchTarget.addEventListener('touchend', handleTouchEnd);
+      touchTarget.addEventListener("touchstart", handleTouchStart);
+      touchTarget.addEventListener("touchmove", handleTouchMove);
+      touchTarget.addEventListener("touchend", handleTouchEnd);
     }
 
-
     // Dynamic Render Engine
-    const overlayHeader = document.getElementById('overlayHeader') as HTMLDivElement;
+    const overlayHeader = document.getElementById(
+      "overlayHeader",
+    ) as HTMLDivElement;
 
     async function openDetails(type: string, id: number, isBack = false) {
       if (!isBack && currentEntity) {
@@ -645,71 +702,88 @@
 
       const [dictionary, catalogData] = await Promise.all([
         loadMeta(),
-        loadCatalog()
+        loadCatalog(),
       ]);
 
       if (!dictionary || !catalogData) return;
 
-      let name = '';
-      let subtitle = '';
+      let name = "";
+      let subtitle = "";
       let imgUrl: string | null = null;
-      let metadataStr = '';
+      let metadataStr = "";
       let sortedTracks: { name: string; count: number }[] | null = [];
-      let albumsToRender: { id: number; name: string; scrobbles: number }[] = [];
-      let artistNameForArtworkLookup = '';
+      let albumsToRender: { id: number; name: string; scrobbles: number }[] =
+        [];
+      let artistNameForArtworkLookup = "";
 
-      if (type === 'artist') {
+      if (type === "artist") {
         const artistInfo = catalogData.artists[id];
-        name = artistInfo ? artistInfo.name : (dictionary.artists[id] || 'Unknown Artist');
-        subtitle = '';
-        imgUrl = getArtworkUrl('artist', name, name, '', artworkCache);
-        
+        name = artistInfo
+          ? artistInfo.name
+          : dictionary.artists[id] || "Unknown Artist";
+        subtitle = "";
+        imgUrl = getArtworkUrl("artist", name, name, "", artworkCache);
+
         const scrobblesCount = artistInfo ? artistInfo.scrobbles : 0;
         sortedTracks = artistInfo ? artistInfo.tracks : [];
         albumsToRender = artistInfo ? artistInfo.albums : [];
         artistNameForArtworkLookup = name;
 
-        metadataStr = `${sortedTracks.length} Songs • ${scrobblesCount.toLocaleString()} Scrobbles`;
-      } else if (type === 'album') {
+        metadataStr = `${sortedTracks.length} Songs • ${scrobblesCount.toLocaleString()} Plays`;
+      } else if (type === "album") {
         const albumInfo = catalogData.albums[id];
-        name = albumInfo ? albumInfo.name : (dictionary.albums[id] || 'Unknown Album');
-        
+        name = albumInfo
+          ? albumInfo.name
+          : dictionary.albums[id] || "Unknown Album";
+
         const artistId = albumInfo ? albumInfo.artistId : 0;
-        const artistName = albumInfo ? albumInfo.artistName : (dictionary.artists[artistId] || 'Unknown Artist');
+        const artistName = albumInfo
+          ? albumInfo.artistName
+          : dictionary.artists[artistId] || "Unknown Artist";
         subtitle = artistName;
-        imgUrl = getArtworkUrl('album', name, artistName, name, artworkCache);
-        
+        imgUrl = getArtworkUrl("album", name, artistName, name, artworkCache);
+
         const scrobblesCount = albumInfo ? albumInfo.scrobbles : 0;
         if (albumInfo && albumInfo.tracks) {
-          sortedTracks = Object.values(albumInfo.tracks).sort((a: any, b: any) => b.count - a.count);
+          sortedTracks = Object.values(albumInfo.tracks).sort(
+            (a: any, b: any) => b.count - a.count,
+          );
         }
         artistNameForArtworkLookup = artistName;
 
-        metadataStr = `Album • ${scrobblesCount.toLocaleString()} Scrobbles`;
+        metadataStr = `Album • ${scrobblesCount.toLocaleString()} Plays`;
 
         if (artistId) {
           const artistInfo = catalogData.artists[artistId];
           if (artistInfo && artistInfo.albums) {
-            albumsToRender = artistInfo.albums.filter((alb: any) => alb.id !== id);
+            albumsToRender = artistInfo.albums.filter(
+              (alb: any) => alb.id !== id,
+            );
           }
         }
-      } else if (type === 'track') {
+      } else if (type === "track") {
         const trackInfo = dictionary.tracks[id];
-        name = trackInfo ? trackInfo[0] : 'Unknown Track';
-        
+        name = trackInfo ? trackInfo[0] : "Unknown Track";
+
         const artistId = trackInfo ? trackInfo[1] : 0;
         const albumId = trackInfo ? trackInfo[2] : 0;
-        const artistName = dictionary.artists[artistId] || 'Unknown Artist';
-        const albumName = dictionary.albums[albumId] || 'Unknown Album';
-        
+        const artistName = dictionary.artists[artistId] || "Unknown Artist";
+        const albumName = dictionary.albums[albumId] || "Unknown Album";
+
         subtitle = `${albumName} • ${artistName}`;
-        imgUrl = getArtworkUrl('track', name, artistName, albumName, artworkCache);
-        
+        imgUrl = getArtworkUrl(
+          "track",
+          name,
+          artistName,
+          albumName,
+          artworkCache,
+        );
+
         const scrobblesCount = catalogData.tracks[id] || 0;
-        
+
         sortedTracks = null; // Hide songs list
         artistNameForArtworkLookup = artistName;
-        metadataStr = `Song • ${scrobblesCount.toLocaleString()} Scrobbles`;
+        metadataStr = `Song • ${scrobblesCount.toLocaleString()} Plays`;
 
         if (artistId) {
           const artistInfo = catalogData.artists[artistId];
@@ -721,36 +795,36 @@
 
       // Populate elements
       overlayTitle.textContent = name;
-      
+
       const colorObj = getColorForUrl(imgUrl);
-      let linkStyle = '';
+      let linkStyle = "";
       if (colorObj) {
         linkStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); border-bottom-color: rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.5);`;
       }
-      
-      if (type === 'album') {
+
+      if (type === "album") {
         const albumInfo = catalogData.albums[id];
         const artistId = albumInfo ? albumInfo.artistId : 0;
         overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(subtitle)}</span>`;
-      } else if (type === 'track') {
+      } else if (type === "track") {
         const trackInfo = dictionary.tracks[id];
         const artistId = trackInfo ? trackInfo[1] : 0;
         const albumId = trackInfo ? trackInfo[2] : 0;
-        const artistName = dictionary.artists[artistId] || 'Unknown Artist';
-        const albumName = dictionary.albums[albumId] || 'Unknown Album';
-        
+        const artistName = dictionary.artists[artistId] || "Unknown Artist";
+        const albumName = dictionary.albums[albumId] || "Unknown Album";
+
         overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="album" data-id="${albumId}" style="${linkStyle}">${escapeHTML(albumName)}</span> <span style="color: #fff; opacity: 0.4; margin: 0 4px;">•</span> <span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(artistName)}</span>`;
       } else {
         overlaySubtitle.textContent = subtitle;
       }
 
       // Add event listeners to the generated links
-      const links = overlaySubtitle.querySelectorAll('.clickable-entity-link');
-      links.forEach(link => {
-        link.addEventListener('click', (e) => {
+      const links = overlaySubtitle.querySelectorAll(".clickable-entity-link");
+      links.forEach((link) => {
+        link.addEventListener("click", (e) => {
           e.stopPropagation();
-          const targetType = link.getAttribute('data-type');
-          const targetId = parseInt(link.getAttribute('data-id') || '0', 10);
+          const targetType = link.getAttribute("data-type");
+          const targetId = parseInt(link.getAttribute("data-id") || "0", 10);
           if (targetType && targetId) {
             openDetails(targetType, targetId);
           }
@@ -760,30 +834,32 @@
       overlayMetadata.textContent = metadataStr;
 
       if (imgUrl) {
-        const highResImg = imgUrl.replace('/300x300/', '/500x500/');
+        const highResImg = imgUrl.replace("/300x300/", "/500x500/");
         overlayArtwork.src = highResImg;
-        overlayArtwork.style.display = 'block';
-        overlayArtworkFallback.classList.add('hidden');
+        overlayArtwork.style.display = "block";
+        overlayArtworkFallback.classList.add("hidden");
         overlayBgBlur.style.backgroundImage = `url('${highResImg}')`;
       } else {
-        overlayArtwork.style.display = 'none';
-        overlayArtworkFallback.classList.remove('hidden');
-        overlayBgBlur.style.backgroundImage = 'none';
-        overlayBgBlur.style.backgroundColor = 'transparent';
+        overlayArtwork.style.display = "none";
+        overlayArtworkFallback.classList.remove("hidden");
+        overlayBgBlur.style.backgroundImage = "none";
+        overlayBgBlur.style.backgroundColor = "transparent";
       }
 
       // Populate Track List
       const overlaySongsSection = overlaySongsList.parentElement;
       if (sortedTracks === null) {
-        if (overlaySongsSection) overlaySongsSection.classList.add('hidden');
-        overlaySongsList.innerHTML = '';
+        if (overlaySongsSection) overlaySongsSection.classList.add("hidden");
+        overlaySongsList.innerHTML = "";
       } else {
-        if (overlaySongsSection) overlaySongsSection.classList.remove('hidden');
+        if (overlaySongsSection) overlaySongsSection.classList.remove("hidden");
         if (sortedTracks.length === 0) {
-          overlaySongsList.innerHTML = '<div class="no-data" style="text-align:center; padding: 20px 0;">No tracks found</div>';
+          overlaySongsList.innerHTML =
+            '<div class="no-data-message">No tracks found</div>';
         } else {
-          overlaySongsList.innerHTML = sortedTracks.map((track, idx) => {
-            return `
+          overlaySongsList.innerHTML = sortedTracks
+            .map((track, idx) => {
+              return `
               <div class="scrobble-row">
                 <span class="scrobble-row-rank">${idx + 1}</span>
                 <div class="scrobble-row-info">
@@ -794,26 +870,37 @@
                 </div>
               </div>
             `;
-          }).join('');
+            })
+            .join("");
         }
       }
 
       // Populate Horizontal Scrolling related albums section
       if (albumsToRender.length === 0) {
-        overlayAlbumsSection.classList.add('hidden');
-        overlayAlbumsList.innerHTML = '';
+        overlayAlbumsSection.classList.add("hidden");
+        overlayAlbumsList.innerHTML = "";
       } else {
-        overlayAlbumsSection.classList.remove('hidden');
-        overlayAlbumsHeader.textContent = type === 'artist' ? 'Albums' : 'Other Albums by this Artist';
-        
-        overlayAlbumsList.innerHTML = albumsToRender.map(alb => {
-          const albImg = getArtworkUrl('album', alb.name, artistNameForArtworkLookup, alb.name, artworkCache);
-          const highResAlbImg = albImg ? albImg.replace('/300x300/', '/500x500/') : null;
-          const thumbHtml = highResAlbImg 
-            ? `<img src="${highResAlbImg}" alt="" />`
-            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+        overlayAlbumsSection.classList.remove("hidden");
+        overlayAlbumsHeader.textContent =
+          type === "artist" ? "Albums" : "Other Albums by this Artist";
 
-          return `
+        overlayAlbumsList.innerHTML = albumsToRender
+          .map((alb) => {
+            const albImg = getArtworkUrl(
+              "album",
+              alb.name,
+              artistNameForArtworkLookup,
+              alb.name,
+              artworkCache,
+            );
+            const highResAlbImg = albImg
+              ? albImg.replace("/300x300/", "/500x500/")
+              : null;
+            const thumbHtml = highResAlbImg
+              ? `<img src="${highResAlbImg}" alt="" />`
+              : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+            return `
             <div class="overlay-album-card" data-album-id="${alb.id}">
               <div class="overlay-album-card-artwork">
                 ${thumbHtml}
@@ -822,14 +909,15 @@
               <span class="overlay-album-card-subtitle">${alb.scrobbles.toLocaleString()} scrobbles</span>
             </div>
           `;
-        }).join('');
+          })
+          .join("");
 
-        const cards = overlayAlbumsList.querySelectorAll('.overlay-album-card');
-        cards.forEach(card => {
-          card.addEventListener('click', () => {
-            const albIdStr = card.getAttribute('data-album-id');
+        const cards = overlayAlbumsList.querySelectorAll(".overlay-album-card");
+        cards.forEach((card) => {
+          card.addEventListener("click", () => {
+            const albIdStr = card.getAttribute("data-album-id");
             if (albIdStr) {
-              openDetails('album', parseInt(albIdStr, 10));
+              openDetails("album", parseInt(albIdStr, 10));
             }
           });
         });
@@ -838,35 +926,37 @@
       // Apply dynamic colors glow
       const rgb = getColorForUrl(imgUrl) || { r: 255, g: 107, b: 138 };
       const glowStyle = `color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b}); text-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.7); font-weight: 700;`;
-      const countSpanEls = overlaySongsList.querySelectorAll('.scrobble-count-val');
-      countSpanEls.forEach(el => {
-        el.setAttribute('style', glowStyle);
+      const countSpanEls = overlaySongsList.querySelectorAll(
+        ".scrobble-count-val",
+      );
+      countSpanEls.forEach((el) => {
+        el.setAttribute("style", glowStyle);
       });
-      
+
       panel.style.background = `linear-gradient(to bottom, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25) 0%, #0a0a0f 450px)`;
 
-      panel.classList.add('visible');
-      backdrop.classList.add('visible');
+      panel.classList.add("visible");
+      backdrop.classList.add("visible");
     }
 
     // Listen to global open event
-    window.addEventListener('open-entity-details', (e: any) => {
+    window.addEventListener("open-entity-details", (e: any) => {
       const { type, id } = e.detail;
       openDetails(type, id);
     });
 
     function escapeHTML(str: string) {
       return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
   } else {
     init();
   }

@@ -21,7 +21,7 @@
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">TOTAL SCROBBLES</span>
+        <span class="stat-label">TOTAL PLAYS</span>
         <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
       </div>
     </div>
@@ -43,7 +43,7 @@
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">SCROBBLES THIS YEAR</span>
+        <span class="stat-label">PLAYS THIS YEAR</span>
         <h3 class="stat-value text-cyan" id="stat-year-scrobbles">-</h3>
       </div>
     </div>
@@ -93,14 +93,10 @@
     <!-- stats.fm Style Top Hits Carousels -->
     <div class="glass-card highlights-section">
       <div class="section-header">
-        <h4 style="font-size: 14px">Over the last month...</h4>
+        <h4>Over the last month...</h4>
       </div>
       <div class="carousel-section" id="topHitsCarousels">
-        <div
-          style="text-align: center; color: var(--text-muted); padding: 40px 0;"
-        >
-          Loading...
-        </div>
+        <div class="no-data-message">Loading...</div>
       </div>
     </div>
 
@@ -161,8 +157,8 @@
     box-shadow: 0 4px 12px var(--accent-violet-glow);
   }
   .stat-icon-wrapper.green {
-    background: linear-gradient(135deg, #10b981, #047857);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    background: linear-gradient(135deg, var(--accent-green), #16a34a);
+    box-shadow: 0 4px 12px var(--accent-green-glow);
   }
 
   .stat-content {
@@ -187,28 +183,28 @@
   }
 
   .text-pink {
-    color: #ff6b8a;
+    color: var(--accent-pink);
     text-shadow:
       0 0 20px var(--accent-pink-glow),
-      0 0 40px rgba(255, 45, 85, 0.15);
+      0 0 40px var(--accent-pink-glow);
   }
   .text-cyan {
-    color: #66f5ff;
+    color: var(--accent-cyan);
     text-shadow:
       0 0 20px var(--accent-cyan-glow),
-      0 0 40px rgba(0, 240, 255, 0.15);
+      0 0 40px var(--accent-cyan-glow);
   }
   .text-violet {
-    color: #b794f6;
+    color: var(--accent-violet);
     text-shadow:
       0 0 20px var(--accent-violet-glow),
-      0 0 40px rgba(139, 92, 246, 0.15);
+      0 0 40px var(--accent-violet-glow);
   }
   .text-green {
-    color: #6ee7b7;
+    color: var(--accent-green);
     text-shadow:
-      0 0 20px rgba(16, 185, 129, 0.4),
-      0 0 40px rgba(16, 185, 129, 0.15);
+      0 0 20px var(--accent-green-glow),
+      0 0 40px var(--accent-green-glow);
   }
 
   /* Stacked Full-Width Layout */
@@ -308,6 +304,23 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
     overflow: visible;
+  }
+
+  .carousel-item:nth-child(1) .carousel-artwork-wrapper {
+    box-shadow: 0 0 15px var(--accent-pink-glow);
+    border-color: var(--accent-pink);
+  }
+  .carousel-item:nth-child(2) .carousel-artwork-wrapper {
+    box-shadow: 0 0 15px var(--accent-cyan-glow);
+    border-color: var(--accent-cyan);
+  }
+  .carousel-item:nth-child(3) .carousel-artwork-wrapper {
+    box-shadow: 0 0 15px var(--accent-violet-glow);
+    border-color: var(--accent-violet);
+  }
+  .carousel-item:nth-child(4) .carousel-artwork-wrapper {
+    box-shadow: 0 0 15px var(--accent-green-glow);
+    border-color: var(--accent-green);
   }
 
   .highlights-section :global(.carousel-artwork-wrapper.circle) {
@@ -651,13 +664,13 @@
                     let rankStyle = "";
                     if (idx === 0)
                       rankStyle =
-                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
                     else if (idx === 1)
                       rankStyle =
-                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
                     else if (idx === 2)
                       rankStyle =
-                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
 
                     return `
                     <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.id}">
@@ -708,13 +721,13 @@
                     let rankStyle = "";
                     if (idx === 0)
                       rankStyle =
-                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
                     else if (idx === 1)
                       rankStyle =
-                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
                     else if (idx === 2)
                       rankStyle =
-                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
 
                     return `
                     <div class="carousel-item clickable-entity" data-type="track" data-id="${item.id}">
@@ -766,13 +779,13 @@
                     let rankStyle = "";
                     if (idx === 0)
                       rankStyle =
-                        "background: #000; color: #22c55e; text-shadow: 0 0 10px rgba(34, 197, 94, 0.8); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); border: 1px solid rgba(34, 197, 94, 0.4);";
+                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
                     else if (idx === 1)
                       rankStyle =
-                        "background: #000; color: #eab308; text-shadow: 0 0 10px rgba(234, 179, 8, 0.8); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); border: 1px solid rgba(234, 179, 8, 0.4);";
+                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
                     else if (idx === 2)
                       rankStyle =
-                        "background: #000; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); border: 1px solid rgba(239, 68, 68, 0.4);";
+                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
 
                     return `
                     <div class="carousel-item clickable-entity" data-type="album" data-id="${item.id}">
@@ -795,11 +808,12 @@
         }
 
         container.innerHTML =
-          html || '<div class="no-data">No data found for last 4 weeks</div>';
+          html ||
+          '<div class="no-data-message">No data found for last 4 weeks</div>';
       } catch (err) {
         console.error("Failed to load top hits carousels:", err);
         container.innerHTML =
-          '<div class="no-data">Failed to load carousels</div>';
+          '<div class="no-data-message">Failed to load carousels</div>';
       }
     }
 
