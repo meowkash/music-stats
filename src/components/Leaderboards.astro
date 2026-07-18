@@ -32,12 +32,12 @@
     </div>
   </div>
 
-  <!-- Sub-Tabs (Artists, Albums, Songs) -->
+  <!-- Sub-Tabs (Songs, Albums, Artists) -->
   <div class="leaderboard-tabs" style="position: relative;">
     <div id="subTabHighlight" class="sub-tab-highlight"></div>
-    <button class="sub-tab-btn active" data-tab="artists">Artists</button>
+    <button class="sub-tab-btn active" data-tab="songs">Songs</button>
     <button class="sub-tab-btn" data-tab="albums">Albums</button>
-    <button class="sub-tab-btn" data-tab="songs">Songs</button>
+    <button class="sub-tab-btn" data-tab="artists">Artists</button>
   </div>
 
   <!-- Search / Filter bar inside leaderboard -->
@@ -134,10 +134,10 @@
     width: 60px;
     height: 100%;
     border-radius: 20px;
-    background: linear-gradient(135deg, var(--accent-pink), #e01e43);
-    box-shadow: 0 4px 12px var(--accent-pink-glow);
-    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring);
-    will-change: transform, width, height;
+    background: var(--range-color, var(--accent-pink));
+    box-shadow: 0 4px 12px var(--range-glow, var(--accent-pink-glow));
+    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring), background-color 0.5s ease, box-shadow 0.5s ease;
+    will-change: transform, width, height, background-color, box-shadow;
     pointer-events: none;
     z-index: 1;
   }
@@ -218,6 +218,19 @@
     color: #fff;
   }
 
+  .sub-tab-btn[data-tab="artists"].active {
+    color: var(--accent-cat-artists);
+    text-shadow: 0 0 12px var(--accent-cat-artists-glow);
+  }
+  .sub-tab-btn[data-tab="albums"].active {
+    color: var(--accent-cat-albums);
+    text-shadow: 0 0 12px var(--accent-cat-albums-glow);
+  }
+  .sub-tab-btn[data-tab="songs"].active {
+    color: var(--accent-cat-songs);
+    text-shadow: 0 0 12px var(--accent-cat-songs-glow);
+  }
+
   .sub-tab-highlight {
     position: absolute;
     left: 0;
@@ -225,14 +238,11 @@
     width: 33.333%;
     height: 100%;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.4),
-      0 2px 8px rgba(0, 0, 0, 0.4);
-    mix-blend-mode: overlay;
-    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring);
-    will-change: transform, width, height;
+    background: color-mix(in srgb, var(--hl-color, rgba(255, 255, 255, 0.25)) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--hl-color, rgba(255, 255, 255, 0.4)) 40%, transparent);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
+    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring), background-color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+    will-change: transform, width, height, background-color, border-color, box-shadow;
     pointer-events: none;
     z-index: 1;
   }
@@ -674,7 +684,7 @@
     let artworkCache: Record<string, string> = {};
     const yearCache: { [year: string]: YearData } = {};
 
-    let activeTab = "artists"; // artists, albums, songs
+    let activeTab = "songs"; // songs, albums, artists
     let activeRange = "7d"; // 7d, 30d, 90d, year, all, custom
     let searchQuery = "";
 
@@ -1033,6 +1043,30 @@
       subTabHighlight.style.transform = `translate3d(${btn.offsetLeft}px, ${btn.offsetTop}px, 0)`;
       subTabHighlight.style.width = `${btn.offsetWidth}px`;
       subTabHighlight.style.height = `${btn.offsetHeight}px`;
+
+      const tabName = btn.getAttribute("data-tab");
+      let color = "rgba(255,255,255,0.25)";
+      let glow = "rgba(0,0,0,0.4)";
+      
+      if (tabName === "artists") {
+        color = "var(--accent-cat-artists)";
+        glow = "var(--accent-cat-artists-glow)";
+      } else if (tabName === "albums") {
+        color = "var(--accent-cat-albums)";
+        glow = "var(--accent-cat-albums-glow)";
+      } else if (tabName === "songs") {
+        color = "var(--accent-cat-songs)";
+        glow = "var(--accent-cat-songs-glow)";
+      }
+
+      subTabHighlight.style.setProperty("--hl-color", color);
+      subTabHighlight.style.setProperty("--hl-glow", glow);
+
+      const rangeHighlight = document.getElementById("rangeHighlight");
+      if (rangeHighlight) {
+          rangeHighlight.style.setProperty("--range-color", color);
+          rangeHighlight.style.setProperty("--range-glow", glow);
+      }
     }
 
     // Set up range buttons events

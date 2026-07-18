@@ -348,6 +348,11 @@
     background: var(--active-color, rgba(255, 255, 255, 0.1));
     color: #fff;
   }
+  
+  #categoryDropdownPopover :global(.dropdown-item.active) {
+    background: var(--cat-active-color, rgba(255, 255, 255, 0.1));
+    color: #fff;
+  }
 
   @keyframes pulse {
     0% {
@@ -594,6 +599,27 @@
             item.getAttribute("data-val") === activeCategory,
           );
         });
+
+      let catColor = "#ffffff";
+      if (activeCategory === "tracks") {
+        catColor = "var(--accent-cat-songs)";
+      } else if (activeCategory === "albums") {
+        catColor = "var(--accent-cat-albums)";
+      } else if (activeCategory === "artists") {
+        catColor = "var(--accent-cat-artists)";
+      }
+
+      const catBtn = document.getElementById("categoryDropdownBtn");
+      if (catBtn) {
+        catBtn.style.color = catColor;
+        catBtn.style.borderColor = `color-mix(in srgb, ${catColor} 40%, transparent)`;
+        catBtn.style.background = `color-mix(in srgb, ${catColor} 10%, transparent)`;
+      }
+
+      document.documentElement.style.setProperty(
+        "--cat-active-color",
+        `color-mix(in srgb, ${catColor} 20%, transparent)`,
+      );
 
       const color = activeYear ? yearColorMap[activeYear] : "#ffffff";
       document.documentElement.style.setProperty(
