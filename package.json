@@ -1,7 +1,7 @@
 {
   "name": "music-stats",
   "type": "module",
-  "version": "0.9",
+  "version": "1.0",
   "engines": {
     "node": ">=22.12.0"
   },
