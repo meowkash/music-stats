@@ -74,7 +74,7 @@ import DetailOverlay from "../components/DetailOverlay.astro";
 
   @media (min-width: 768px) {
     #app-shell {
-      padding-left: 220px;
+      padding-left: calc(220px + env(safe-area-inset-left));
     }
   }
 
@@ -85,11 +85,17 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: env(safe-area-inset-top) 20px 0 20px;
+    padding: env(safe-area-inset-top) calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
     background: rgba(10, 10, 15, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     z-index: 90;
+  }
+
+  @media (min-width: 768px) {
+    .app-header {
+      padding-left: 20px;
+    }
   }
 
   .header-logo {
@@ -164,17 +170,17 @@ import DetailOverlay from "../components/DetailOverlay.astro";
   /* Responsive padding for panel sections */
   @media (max-width: 767px) {
     .panel-section {
-      padding: 10px 10px calc(env(safe-area-inset-bottom) + 80px) 10px;
+      padding: 10px calc(10px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 80px) calc(10px + env(safe-area-inset-left));
     }
   }
   @media (min-width: 768px) and (max-width: 1023px) {
     .panel-section {
-      padding: 20px 20px calc(env(safe-area-inset-bottom) + 100px) 20px;
+      padding: 20px calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 100px) 20px;
     }
   }
   @media (min-width: 1024px) {
     .panel-section {
-      padding: 32px 20px calc(env(safe-area-inset-bottom) + 110px) 20px;
+      padding: 32px calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 110px) 20px;
     }
   }
 

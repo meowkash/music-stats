@@ -1128,20 +1128,21 @@
     // Perform initial load on start
     updateLeaderboard();
 
-    const activeRangeBtn = document.querySelector(
-      ".range-btn.active",
-    ) as HTMLElement;
-    if (activeRangeBtn) {
-      setTimeout(() => syncRangeHighlight(activeRangeBtn), 50);
-      setTimeout(() => syncRangeHighlight(activeRangeBtn), 200);
-    }
+    const ro = new ResizeObserver(() => {
+      const activeRangeBtn = document.querySelector(".range-btn.active") as HTMLElement;
+      if (activeRangeBtn) syncRangeHighlight(activeRangeBtn);
 
-    const activeTabBtn = document.querySelector(
-      ".sub-tab-btn.active",
-    ) as HTMLElement;
-    if (activeTabBtn) {
-      setTimeout(() => syncSubTabHighlight(activeTabBtn), 50);
-      setTimeout(() => syncSubTabHighlight(activeTabBtn), 200);
-    }
+      const activeTabBtn = document.querySelector(".sub-tab-btn.active") as HTMLElement;
+      if (activeTabBtn) syncSubTabHighlight(activeTabBtn);
+    });
+
+    document.querySelectorAll(".range-btn").forEach((btn) => ro.observe(btn));
+    document.querySelectorAll(".sub-tab-btn").forEach((btn) => ro.observe(btn));
+
+    const initialRange = document.querySelector(".range-btn.active") as HTMLElement;
+    if (initialRange) syncRangeHighlight(initialRange);
+
+    const initialTab = document.querySelector(".sub-tab-btn.active") as HTMLElement;
+    if (initialTab) syncSubTabHighlight(initialTab);
   });
 </script>
