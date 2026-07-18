@@ -136,7 +136,7 @@
     border-radius: 20px;
     background: linear-gradient(135deg, var(--accent-pink), #e01e43);
     box-shadow: 0 4px 12px var(--accent-pink-glow);
-    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), width 0.35s cubic-bezier(0.25, 1, 0.5, 1), height 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring);
     will-change: transform, width, height;
     pointer-events: none;
     z-index: 1;
@@ -231,7 +231,7 @@
       inset 0 1px 1px rgba(255, 255, 255, 0.4),
       0 2px 8px rgba(0, 0, 0, 0.4);
     mix-blend-mode: overlay;
-    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), width 0.35s cubic-bezier(0.25, 1, 0.5, 1), height 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 0.5s var(--ios-spring), width 0.5s var(--ios-spring), height 0.5s var(--ios-spring);
     will-change: transform, width, height;
     pointer-events: none;
     z-index: 1;
@@ -312,7 +312,7 @@
     flex-direction: column;
     background: #0a0a0f;
     transform: translateY(100%);
-    transition: transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.5s var(--ios-spring);
   }
 
   .details-overlay-panel.visible {

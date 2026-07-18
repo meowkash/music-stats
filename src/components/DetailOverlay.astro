@@ -83,7 +83,7 @@
     -webkit-backdrop-filter: blur(4px);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.5s var(--ios-spring);
   }
 
   .overlay-backdrop.visible {
@@ -99,7 +99,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 0.5s var(--ios-spring);
     will-change: transform;
     overflow-y: auto;
     overflow-x: hidden;
@@ -176,7 +176,7 @@
     opacity: 0.45;
     z-index: 0;
     pointer-events: none;
-    transition: background-image 0.3s ease;
+    transition: background-image 0.5s var(--ios-spring);
   }
 
   .overlay-background-blur::after {
@@ -224,7 +224,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: var(--transition-smooth);
   }
 
   .nav-circle-btn:hover {
@@ -252,7 +252,7 @@
     justify-content: flex-end;
     display: flex;
     flex-shrink: 0;
-    transition: all 0.3s ease;
+    transition: var(--transition-smooth);
   }
 
   .overlay-header .overlay-artwork-wrapper {

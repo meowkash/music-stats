@@ -36,18 +36,18 @@ import DetailOverlay from "../components/DetailOverlay.astro";
         <Dashboard />
       </section>
 
-      <!-- Tab 1.5: Recents -->
-      <section class="panel-section" id="view-recents">
-        <Recents />
-      </section>
-
       <!-- Tab 2: Rankings -->
-      <section class="panel-section" id="view-rankings">
+      <section class="panel-section inactive-right" id="view-rankings">
         <Leaderboards />
       </section>
 
-      <!-- Tab 3: Statistics -->
-      <section class="panel-section" id="view-statistics">
+      <!-- Tab 3: Recents -->
+      <section class="panel-section inactive-right" id="view-recents">
+        <Recents />
+      </section>
+
+      <!-- Tab 4: Statistics -->
+      <section class="panel-section inactive-right" id="view-statistics">
         <Statistics />
       </section>
     </main>
@@ -55,6 +55,39 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     <!-- Apple Music Style Floating Bottom Navigation Bar -->
     <BottomNav />
   </div>
+
+  <script is:inline>
+    // Synchronously restore last active tab instantly before first paint
+    try {
+      const lastTab = localStorage.getItem('last-music-stats-tab');
+      if (lastTab && lastTab !== 'dashboard') {
+        const tabOrder = ['dashboard', 'rankings', 'recents', 'statistics'];
+        const targetIndex = tabOrder.indexOf(lastTab);
+        if (targetIndex !== -1) {
+          // Update panels
+          document.querySelectorAll('.panel-section').forEach(sec => {
+            const secId = sec.getAttribute('id').replace('view-', '');
+            const secIndex = tabOrder.indexOf(secId);
+            sec.classList.remove('active', 'inactive-left', 'inactive-right');
+            if (secIndex < targetIndex) {
+              sec.classList.add('inactive-left');
+            } else if (secIndex > targetIndex) {
+              sec.classList.add('inactive-right');
+            } else {
+              sec.classList.add('active');
+            }
+          });
+          // Update nav buttons
+          document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.getAttribute('data-tab') === lastTab) {
+              btn.classList.add('active');
+            }
+          });
+        }
+      }
+    } catch (e) {}
+  </script>
 
   <!-- Reusable Details Overlay Sheet Drawer -->
   <DetailOverlay />
@@ -69,7 +102,7 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     flex-direction: column;
     overflow: hidden;
     position: absolute;
-    transition: padding 0.3s ease;
+    transition: padding 0.5s var(--ios-spring);
   }
 
   @media (min-width: 768px) {
@@ -153,18 +186,22 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     -webkit-overflow-scrolling: touch;
     opacity: 0;
     visibility: hidden;
-    transform: translateY(8px);
-    transition:
-      opacity 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-      transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
-      visibility 0.35s;
     pointer-events: none;
     width: 100%;
     transition:
-      padding 0.3s ease,
-      opacity 0.35s ease,
-      transform 0.35s ease;
+      padding 0.5s var(--ios-spring),
+      opacity 0.5s var(--ios-spring),
+      transform 0.5s var(--ios-spring),
+      visibility 0.5s;
     will-change: opacity, transform;
+  }
+
+  .panel-section.inactive-left {
+    transform: translateX(-30px);
+  }
+
+  .panel-section.inactive-right {
+    transform: translateX(30px);
   }
 
   /* Responsive padding for panel sections */
@@ -198,18 +235,30 @@ import DetailOverlay from "../components/DetailOverlay.astro";
   // Tab change handler — switches panel visibility
   document.addEventListener("DOMContentLoaded", () => {
     loadColorsCache();
-    window.addEventListener("tab-change", (e: any) => {
-      const targetTab = e.detail.tab;
+    const tabOrder = ['dashboard', 'rankings', 'recents', 'statistics'];
 
+    function updateTabStates(targetTab: string) {
+      const targetIndex = tabOrder.indexOf(targetTab);
       const sections = document.querySelectorAll(".panel-section");
+      
       sections.forEach((sec: any) => {
-        const secId = sec.getAttribute("id");
-        if (secId === `view-${targetTab}`) {
-          sec.classList.add("active");
+        const secId = sec.getAttribute("id")?.replace('view-', '');
+        const secIndex = tabOrder.indexOf(secId);
+        
+        sec.classList.remove("active", "inactive-left", "inactive-right");
+        
+        if (secIndex < targetIndex) {
+          sec.classList.add("inactive-left");
+        } else if (secIndex > targetIndex) {
+          sec.classList.add("inactive-right");
         } else {
-          sec.classList.remove("active");
+          sec.classList.add("active");
         }
       });
+    }
+
+    window.addEventListener("tab-change", (e: any) => {
+      updateTabStates(e.detail.tab);
     });
   });
 </script>
