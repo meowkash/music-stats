@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { isStaticArtworkUrl, normalizeStaticArtworkUrl } from './artwork-utils.js';
+import { artworkCacheKey, storeArtworkInCache } from './artwork-keys.js';
 
 // Load environment variables from .env if present
 const envPath = path.resolve('.env');
@@ -187,16 +189,16 @@ async function main() {
         // Harvest artwork
         if (track.image && Array.isArray(track.image)) {
           const img = track.image.find(i => i.size === 'extralarge') || track.image.find(i => i.size === 'large');
-          if (img && img['#text']) {
+          if (img && img['#text'] && isStaticArtworkUrl(img['#text'])) {
             const artistName = track.artist['#text'] || '';
             const albumName = track.album['#text'] || '';
-            if (albumName) {
-              artworkCache[`${albumName}|${artistName}`] = img['#text'];
+            const normalized = normalizeStaticArtworkUrl(img['#text']);
+            if (normalized) {
+              if (albumName) {
+                storeArtworkInCache(artworkCache, 'album', albumName, artistName, normalized);
+              }
+              storeArtworkInCache(artworkCache, 'track', track.name, artistName, normalized);
             }
-            if (artistName && !artworkCache[artistName]) {
-              artworkCache[artistName] = img['#text'];
-            }
-            artworkCache[`${track.name}|${artistName}`] = img['#text'];
           }
         }
       }
@@ -257,15 +259,17 @@ async function main() {
 
   // Find missing albums
   const missingAlbums = Object.keys(albumCounts)
-    .filter(k => !artworkCache[k])
+    .filter(k => {
+      const [album, artist] = k.split('|');
+      return !artworkCache[artworkCacheKey('album', album, artist)] && !artworkCache[k];
+    })
     .sort((a, b) => albumCounts[b] - albumCounts[a])
-    .slice(0, 50); // fetch top 50 missing albums per run
+    .slice(0, 50);
 
-  // Find missing artists
   const missingArtists = Object.keys(artistCounts)
-    .filter(k => !artworkCache[k])
+    .filter(k => !artworkCache[artworkCacheKey('artist', k)] && !artworkCache[k])
     .sort((a, b) => artistCounts[b] - artistCounts[a])
-    .slice(0, 30); // fetch top 30 missing artists per run
+    .slice(0, 30);
 
   let newArtworkCount = 0;
 
@@ -284,9 +288,12 @@ async function main() {
         const data = await res.json();
         if (data.album && data.album.image) {
           const img = getImage(data.album.image);
-          if (img) {
-            artworkCache[albumKey] = img;
-            newArtworkCount++;
+          if (img && isStaticArtworkUrl(img)) {
+            const normalized = normalizeStaticArtworkUrl(img);
+            if (normalized) {
+              storeArtworkInCache(artworkCache, 'album', album, artist, normalized);
+              newArtworkCount++;
+            }
           }
         }
       }
@@ -306,9 +313,12 @@ async function main() {
         const data = await res.json();
         if (data.artist && data.artist.image) {
           const img = getImage(data.artist.image);
-          if (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) { // Ignore default star image
-            artworkCache[artist] = img;
-            newArtworkCount++;
+          if (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f') && isStaticArtworkUrl(img)) {
+            const normalized = normalizeStaticArtworkUrl(img);
+            if (normalized) {
+              storeArtworkInCache(artworkCache, 'artist', artist, '', normalized);
+              newArtworkCount++;
+            }
           }
         }
       }

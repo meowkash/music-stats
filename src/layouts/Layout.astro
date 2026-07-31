@@ -6,8 +6,11 @@ interface Props {
 
 const {
 	title,
-	description = "Interactive Last.FM scrobble analytics and charts.",
+	description = "One person's questionable music taste, meticulously tracked, charted, and ranked so you don't have to ask.",
 } = Astro.props;
+
+const ogImageUrl = new URL("/og-image.png", Astro.url).href;
+const pageUrl = Astro.url.href;
 ---
 
 <!doctype html>
@@ -19,6 +22,7 @@ const {
 			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
 		/>
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="apple-touch-icon" href="/favicon.svg" />
 		<link rel="manifest" href="/manifest.json" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta
@@ -30,6 +34,22 @@ const {
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
 		<title>{title}</title>
+
+		<!-- Open Graph / Facebook, iMessage, Slack, Discord, etc. -->
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={pageUrl} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content={ogImageUrl} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="My Music Stats app icon" />
+
+		<!-- Twitter / X Card -->
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImageUrl} />
 
 		<!-- Google Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -67,25 +87,39 @@ const {
 				from { opacity: 0; transform: scale(0.9) translateY(15px); }
 				to { opacity: 1; transform: scale(1) translateY(0); }
 			}
-			.logo-icon-large {
-				width: 84px;
-				height: 84px;
-				border-radius: 20px;
-				background: linear-gradient(135deg, #ff2d55, #8b5cf6);
+			.splash-icon-shell {
+				position: relative;
+				width: 108px;
+				height: 108px;
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				color: #fff;
-				box-shadow: 0 4px 24px rgba(255, 45, 85, 0.4);
-				animation: pulse-glow 2s infinite ease-in-out;
 			}
-			.logo-icon-large svg {
-				width: 44px;
-				height: 44px;
+			.splash-icon-bg {
+				position: absolute;
+				inset: 0;
+				border-radius: 27px;
+				background: radial-gradient(circle at 50% 36%, #241c3a 0%, #110e18 50%, #07050d 100%);
+				box-shadow:
+					inset 0 1px 0 rgba(255, 255, 255, 0.06),
+					0 0 48px rgba(168, 85, 247, 0.12);
 			}
-			@keyframes pulse-glow {
-				0%, 100% { box-shadow: 0 4px 24px rgba(255, 45, 85, 0.4); transform: scale(1); }
-				50% { box-shadow: 0 8px 40px rgba(139, 92, 246, 0.4); transform: scale(1.05); }
+			.splash-glyph {
+				position: relative;
+				width: 62px;
+				height: 62px;
+				display: block;
+				animation: glyph-glow 2s infinite ease-in-out;
+			}
+			@keyframes glyph-glow {
+				0%, 100% {
+					filter: drop-shadow(0 0 10px rgba(255, 45, 85, 0.55)) drop-shadow(0 0 22px rgba(168, 85, 247, 0.35));
+					transform: scale(1);
+				}
+				50% {
+					filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.65)) drop-shadow(0 0 32px rgba(0, 240, 255, 0.28));
+					transform: scale(1.06);
+				}
 			}
 		</style>
 	</head>
@@ -93,17 +127,15 @@ const {
 		<!-- PWA Loading Splash Screen Overlay -->
 		<div id="pwa-splash-screen">
 			<div class="splash-logo">
-				<div class="logo-icon-large">
-					<svg
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-					</svg>
+				<div class="splash-icon-shell">
+					<div class="splash-icon-bg" aria-hidden="true"></div>
+					<img
+						class="splash-glyph"
+						src="/logo-mark.svg"
+						width="62"
+						height="62"
+						alt=""
+					/>
 				</div>
 			</div>
 		</div>
@@ -111,7 +143,6 @@ const {
 		<slot />
 
 		<script>
-			// Dismiss Splash Screen smoothly after a short delay
 			window.addEventListener("load", () => {
 				setTimeout(() => {
 					const splash = document.getElementById("pwa-splash-screen");
@@ -119,7 +150,6 @@ const {
 				}, 400);
 			});
 
-			// Register Service Worker for PWA
 			if ("serviceWorker" in navigator) {
 				window.addEventListener("load", () => {
 					navigator.serviceWorker
@@ -179,6 +209,30 @@ const {
 
 		--ios-spring: cubic-bezier(0.16, 1, 0.3, 1);
 		--transition-smooth: all 0.5s var(--ios-spring);
+
+		--surface-elevated: #0a0a0f;
+		--radius-sm: 6px;
+		--radius-md: 12px;
+		--radius-lg: 16px;
+		--z-nav: 100;
+		--z-dropdown: 150;
+		--z-overlay-backdrop: 199;
+		--z-overlay-panel: 200;
+		--spacing-section: 16px;
+		--spacing-section-lg: 24px;
+		--duration-fast: 0.16s;
+		--duration-normal: 0.28s;
+		--duration-slow: 0.55s;
+		--duration-overlay: 0.28s;
+	}
+
+	.panel-container {
+		width: 100%;
+		padding: var(--spacing-section);
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		margin-bottom: var(--spacing-section-lg);
 	}
 
 	* {
@@ -257,18 +311,28 @@ const {
 		transform: translateY(-2px) scale(1.02);
 	}
 
-	/* Instant tactile feedback for all clickable elements */
+	/* Instant tactile feedback for clickable elements (except rows that open the overlay) */
 	.hover-scale:active,
-	.scrobble-row:active,
 	button:active,
 	.tab-btn:active,
 	.range-btn:active,
 	.sub-tab-btn:active,
 	.nav-circle-btn:active,
-	.overlay-action-btn:active,
 	.album-card-thumb:active {
 		transform: scale(0.96) !important;
 		transition-duration: 0.05s !important;
+	}
+
+	.scrobble-row.clickable-entity:active,
+	.carousel-item.clickable-entity:active {
+		transform: none !important;
+		opacity: 0.72;
+		transition: opacity 0.15s var(--ios-spring) !important;
+	}
+
+	body.overlay-open .scrobble-row.clickable-entity:active,
+	body.overlay-open .carousel-item.clickable-entity:active {
+		opacity: 1 !important;
 	}
 
 	/* Unified View Headers */
@@ -311,29 +375,30 @@ const {
 		font-style: italic;
 	}
 
-	/* Reusable Apple Music style list items (global component) */
+	/* Shared scrobble row — used site-wide */
 	.scrobble-row {
 		display: flex;
 		align-items: center;
-		padding: 10px 16px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-		gap: 14px;
-		background: transparent;
+		padding: 12px 16px;
+		gap: 16px;
+		background: rgba(255, 255, 255, 0.02);
+		border: 1px solid rgba(255, 255, 255, 0.04);
+		border-radius: 12px;
+		margin-bottom: 8px;
 		transition: var(--transition-smooth);
 		cursor: pointer;
-		border-radius: 8px;
 		width: 100%;
 		user-select: none;
 	}
 
 	.scrobble-row:last-child {
-		border-bottom: none;
+		margin-bottom: 0;
 	}
 
 	.scrobble-row:hover {
 		background: rgba(255, 255, 255, 0.05);
-		transform: translateY(-1.5px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		border-color: rgba(255, 255, 255, 0.08);
+		transform: translateY(-2px);
 	}
 
 	.scrobble-row a,
@@ -344,12 +409,32 @@ const {
 	}
 
 	.scrobble-row-rank {
-		width: 24px;
-		text-align: right;
+		width: 28px;
+		text-align: center;
 		color: var(--text-muted);
-		font-size: 14px;
-		font-weight: 500;
+		font-family: var(--font-header);
+		font-size: 16px;
+		font-weight: 700;
 		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.scrobble-row-rank.rank-1 {
+		color: #ffd700;
+		text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+		font-size: 18px;
+	}
+
+	.scrobble-row-rank.rank-2 {
+		color: #c0c0c0;
+		text-shadow: 0 0 10px rgba(192, 192, 192, 0.4);
+		font-size: 17px;
+	}
+
+	.scrobble-row-rank.rank-3 {
+		color: #cd7f32;
+		text-shadow: 0 0 10px rgba(205, 127, 50, 0.4);
+		font-size: 17px;
 	}
 
 	.scrobble-row-thumb {
@@ -364,6 +449,84 @@ const {
 		justify-content: center;
 		color: var(--text-muted);
 		border: 1px solid rgba(255, 255, 255, 0.05);
+		position: relative;
+	}
+
+	.scrobble-row-thumb .artwork-shimmer,
+	.overlay-artwork-wrapper .artwork-shimmer,
+	.overlay-album-card-artwork .artwork-shimmer,
+	.carousel-artwork-wrapper .artwork-shimmer {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background: linear-gradient(
+			100deg,
+			rgba(255, 255, 255, 0.02) 0%,
+			rgba(255, 255, 255, 0.1) 50%,
+			rgba(255, 255, 255, 0.02) 100%
+		);
+		background-size: 200% 200%;
+		animation: artwork-shimmer 1.4s ease-in-out infinite;
+		z-index: 1;
+		pointer-events: none;
+		opacity: 1;
+		transition: opacity 0.28s ease;
+	}
+
+	/* Cross-fades out as the loaded image fades in above it, instead of
+	   disappearing in a single frame. */
+	.scrobble-row-thumb .artwork-shimmer.artwork-shimmer-hide,
+	.overlay-artwork-wrapper .artwork-shimmer.artwork-shimmer-hide,
+	.overlay-album-card-artwork .artwork-shimmer.artwork-shimmer-hide,
+	.carousel-artwork-wrapper .artwork-shimmer.artwork-shimmer-hide {
+		opacity: 0;
+	}
+
+	@keyframes artwork-shimmer {
+		0%, 100% {
+			background-position: 0% 50%;
+		}
+		50% {
+			background-position: 100% 50%;
+		}
+	}
+
+	.scrobble-row-thumb .artwork-fallback,
+	.overlay-album-card-artwork .artwork-fallback,
+	.carousel-artwork-wrapper .artwork-fallback,
+	.overlay-artwork-fallback.artwork-fallback {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(160deg, rgba(18, 18, 22, 0.95) 0%, rgba(10, 10, 14, 1) 100%);
+	}
+
+	.scrobble-row-thumb .artwork-fallback svg,
+	.overlay-album-card-artwork .artwork-fallback svg,
+	.carousel-artwork-wrapper .artwork-fallback svg {
+		width: 20px;
+		height: 20px;
+		color: rgba(255, 255, 255, 0.28);
+	}
+
+	.scrobble-row-thumb .artwork-img,
+	.overlay-album-card-artwork .artwork-img,
+	.carousel-artwork-wrapper .artwork-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+		position: relative;
+		z-index: 2;
+		transition: opacity 0.3s var(--ios-spring);
+	}
+
+	.scrobble-row-thumb.artwork-loaded .artwork-img,
+	.overlay-album-card-artwork.artwork-loaded .artwork-img,
+	.carousel-artwork-wrapper.artwork-loaded .artwork-img {
+		opacity: 1;
 	}
 
 	.scrobble-row-thumb img {
@@ -416,9 +579,41 @@ const {
 		gap: 12px;
 	}
 
+	.scrobble-row-compact .scrobble-row-title {
+		font-size: 14px;
+	}
+
+	.scrobble-row-compact .scrobble-row-subtitle {
+		font-size: 12px;
+	}
+
+	.scrobble-row-compact .scrobble-row-right {
+		font-size: 11px;
+	}
+
+	.scrobble-row-compact .scrobble-row-thumb {
+		border-radius: var(--radius-sm);
+	}
+
+	.sliding-highlight {
+		position: absolute;
+		left: 0;
+		top: 0;
+		pointer-events: none;
+		z-index: 1;
+		transition:
+			transform 0.5s var(--ios-spring),
+			width 0.5s var(--ios-spring),
+			height 0.5s var(--ios-spring),
+			background-color 0.5s var(--ios-spring),
+			border-color 0.5s var(--ios-spring),
+			box-shadow 0.5s var(--ios-spring);
+		will-change: transform, width, height, background-color, border-color, box-shadow;
+	}
+
 	@media (max-width: 600px) {
 		.scrobble-row {
-			padding: 8px 10px;
+			padding: 8px 8px 8px 4px;
 			gap: 10px;
 		}
 		.scrobble-row-thumb {

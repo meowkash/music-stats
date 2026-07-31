@@ -1,5 +1,4 @@
 ---
-// Dashboard component
 ---
 
 <div class="dashboard-container">
@@ -366,7 +365,10 @@
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-    z-index: 2;
+    /* Must sit above the artwork img, which is itself positioned with
+       z-index: 2 (see .carousel-artwork-wrapper .artwork-img in ui.ts'
+       shared thumb styles), otherwise the badge renders underneath it. */
+    z-index: 3;
   }
 
   .highlights-section :global(.carousel-item-info) {
@@ -397,6 +399,14 @@
     font-size: 14px;
     color: var(--accent-pink);
     font-weight: 700;
+  }
+
+  /* Invisible trigger element used for horizontal infinite-scroll loading,
+     appended at the end of each carousel's item list. */
+  .highlights-section :global(.carousel-scroll-sentinel) {
+    flex: 0 0 1px;
+    width: 1px;
+    height: 1px;
   }
 
   /* Responsive card padding overrides */
@@ -454,17 +464,26 @@
 </style>
 
 <script>
-  import { getArtworkUrl, getColorForUrl } from "../utils/ui";
-
-  interface YearlyTotals {
-    [year: string]: number[];
-  }
+  import {
+    getArtworkUrl,
+    getColorForUrl,
+    loadArtworkCache,
+    loadMetaCache,
+    getArtworkThumbHTML,
+    initArtworkImages,
+    escapeHTML,
+    dataUrl,
+  } from "../utils/ui";
+  import type { YearlyTotals } from "../types/music";
+  import { loadYearsData, aggregateTrackCounts, rollupDashboardCounts } from "../utils/scrobbles";
+  import { createInfiniteScroll } from "../utils/infiniteScroll";
+  import { getGlowStyle } from "../utils/theme";
+  import { bindEntityClicks } from "../utils/events";
 
   document.addEventListener("DOMContentLoaded", () => {
-    // 1. Fetch yearly-totals.json and calculate high-level stats
     async function loadDashboardStats() {
       try {
-        const res = await fetch("/data/yearly-totals.json");
+        const res = await fetch(dataUrl("/data/yearly-totals.json"));
         const totals: YearlyTotals = await res.json();
 
         let totalScrobbles = 0;
@@ -474,15 +493,11 @@
 
         const currentYearStr = new Date().toISOString().split("-")[0];
 
-        // Loop years
         for (const [yearStr, dayCounts] of Object.entries(totals)) {
           const sum = dayCounts.reduce((acc, c) => acc + c, 0);
           totalScrobbles += sum;
 
-          // Count days with scrobbles
           activeDays += dayCounts.filter((count) => count > 0).length;
-
-          // Count historical days
           totalPossibleDays += dayCounts.length;
 
           if (yearStr === currentYearStr) {
@@ -490,13 +505,11 @@
           }
         }
 
-        // Calculate daily average
         const dailyAverage =
           totalPossibleDays > 0
             ? Math.round((totalScrobbles / totalPossibleDays) * 10) / 10
             : 0;
 
-        // Inject UI values
         const totalEl = document.getElementById("stat-total-scrobbles");
         const yearEl = document.getElementById("stat-year-scrobbles");
         const activeEl = document.getElementById("stat-active-days");
@@ -511,28 +524,21 @@
       }
     }
 
-    // 3. Fetch year data JSONs and build stats.fm-style carousels
     async function loadTopHitsCarousels() {
       const container = document.getElementById("topHitsCarousels");
       if (!container) return;
 
       try {
-        const [recentRes, metaRes, artworkRes] = await Promise.all([
-          fetch("/data/recent.json"),
-          fetch("/data/meta.json"),
-          fetch("/data/artwork.json").catch(() => null),
+        const [recentRes, meta] = await Promise.all([
+          fetch(dataUrl("/data/recent.json")),
+          loadMetaCache(),
         ]);
 
-        const recentList: RecentScrobble[] = await recentRes.json();
-        const meta = await metaRes.json();
-        let artworkCache: Record<string, string> = {};
-        if (artworkRes && artworkRes.ok) {
-          artworkCache = await artworkRes.json();
-        }
+        const recentList: { uts: number }[] = await recentRes.json();
+        const artworkCache = await loadArtworkCache();
 
         const latestTimestamp =
           recentList[0]?.uts || Math.floor(Date.now() / 1000);
-        // last 4 weeks = 28 days
         const startTime = latestTimestamp - 28 * 24 * 60 * 60;
 
         const startYear = new Date(startTime * 1000).getUTCFullYear();
@@ -541,275 +547,131 @@
           new Set([String(startYear), String(endYear)]),
         );
 
-        const yearCache: Record<string, any> = {};
-        await Promise.all(
-          yearsToLoad.map(async (y) => {
-            try {
-              const res = await fetch(`/data/year-${y}.json`);
-              if (res.ok) {
-                yearCache[y] = await res.json();
-              }
-            } catch (e) {}
-          }),
-        );
+        await loadYearsData(yearsToLoad);
 
-        const trackCounts: Record<number, number> = {};
-        const startDate = new Date(startTime * 1000);
-        const endDate = new Date(latestTimestamp * 1000);
+        const startDateStr = new Date(startTime * 1000).toISOString().split("T")[0];
+        const endDateStr = new Date(latestTimestamp * 1000).toISOString().split("T")[0];
 
-        for (const year of yearsToLoad) {
-          const yearData = yearCache[year];
-          if (!yearData) continue;
+        const trackCounts = aggregateTrackCounts(yearsToLoad, startDateStr, endDateStr);
+        const { artists: topArtists, tracks: topSongs, albums: topAlbums } =
+          rollupDashboardCounts(trackCounts, meta);
 
-          for (const [dateStr, dayTracks] of Object.entries(yearData)) {
-            const currentDate = new Date(dateStr + "T12:00:00Z");
-            if (currentDate >= startDate && currentDate <= endDate) {
-              for (const [trackId, count] of dayTracks as any) {
-                trackCounts[trackId] = (trackCounts[trackId] || 0) + count;
-              }
-            }
-          }
+        function rankStyleFor(idx: number): string {
+          if (idx === 0)
+            return "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
+          if (idx === 1)
+            return "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
+          if (idx === 2)
+            return "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
+          return "";
         }
 
-        const artistCounts: Record<number, number> = {};
-        const albumCounts: Record<number, { count: number; artistId: number }> =
-          {};
-        const songCounts: Record<number, number> = {};
+        function renderCarouselItem(
+          type: "artist" | "track" | "album",
+          item: { id: number; name: string; count: number; artistName?: string; albumName?: string },
+          idx: number,
+        ): string {
+          const img =
+            type === "artist"
+              ? getArtworkUrl("artist", item.name, item.name, "", artworkCache)
+              : type === "track"
+                ? getArtworkUrl("track", item.name, item.artistName!, item.albumName!, artworkCache)
+                : getArtworkUrl("album", item.name, item.artistName!, item.name, artworkCache);
 
-        for (const [trackIdStr, count] of Object.entries(trackCounts)) {
-          const trackId = parseInt(trackIdStr, 10);
-          const trackInfo = meta.tracks[trackId];
-          if (!trackInfo) continue;
-          const [trackName, artistId, albumId] = trackInfo;
+          const thumb = getArtworkThumbHTML(img);
+          const colorObj = getColorForUrl(img);
+          const playsStyle = colorObj ? getGlowStyle(colorObj, { blur: 8, alpha: 0.4, weight: 800 }) : "";
+          const shape = type === "artist" ? "circle" : "square";
+          const entityType = type === "track" ? "track" : type;
+          const subtitle =
+            type === "artist"
+              ? ""
+              : `<span class="carousel-item-subtitle">${escapeHTML(item.artistName || "")}</span>`;
 
-          songCounts[trackId] = (songCounts[trackId] || 0) + count;
-          artistCounts[artistId] = (artistCounts[artistId] || 0) + count;
-          if (albumId) {
-            if (!albumCounts[albumId]) {
-              albumCounts[albumId] = { count: 0, artistId };
-            }
-            albumCounts[albumId].count += count;
-          }
-        }
-
-        // Slice Top 10 Artists
-        const topArtists = Object.entries(artistCounts)
-          .map(([id, count]) => ({
-            id: parseInt(id, 10),
-            name: meta.artists[id],
-            count,
-          }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-
-        // Slice Top 10 Songs
-        const topSongs = Object.entries(songCounts)
-          .map(([id, count]) => {
-            const [trackName, artistId, albumId] = meta.tracks[id];
-            return {
-              id: parseInt(id, 10),
-              name: trackName,
-              artistName: meta.artists[artistId],
-              albumName: meta.albums[albumId],
-              artistId,
-              albumId,
-              count,
-            };
-          })
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-
-        // Slice Top 10 Albums
-        const topAlbums = Object.entries(albumCounts)
-          .map(([id, data]) => ({
-            id: parseInt(id, 10),
-            name: meta.albums[id],
-            artistName: meta.artists[data.artistId],
-            artistId: data.artistId,
-            count: data.count,
-          }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-
-        // Generate HTML
-        let html = "";
-
-        // Category 1: Top Artists
-        if (topArtists.length > 0) {
-          html += `
-            <div class="carousel-wrapper">
-              <span class="carousel-title">Top Artists</span>
-              <div class="carousel-scroll">
-                ${topArtists
-                  .map((item, idx) => {
-                    const img = getArtworkUrl(
-                      "artist",
-                      item.name,
-                      item.name,
-                      "",
-                      artworkCache,
-                    );
-                    const highResImg = img
-                      ? img.replace("/300x300/", "/500x500/")
-                      : null;
-                    const thumb = highResImg
-                      ? `<img src="${highResImg}" alt="">`
-                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>`;
-
-                    const colorObj = getColorForUrl(img);
-                    let playsStyle = "";
-                    if (colorObj)
-                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
-
-                    let rankStyle = "";
-                    if (idx === 0)
-                      rankStyle =
-                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
-                    else if (idx === 1)
-                      rankStyle =
-                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
-                    else if (idx === 2)
-                      rankStyle =
-                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
-
-                    return `
-                    <div class="carousel-item clickable-entity" data-type="artist" data-id="${item.id}">
-                      <div class="carousel-artwork-wrapper circle">
-                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
-                        ${thumb}
-                      </div>
-                      <div class="carousel-item-info">
-                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
-                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
-                      </div>
-                    </div>
-                  `;
-                  })
-                  .join("")}
+          return `
+            <div class="carousel-item clickable-entity" data-type="${entityType}" data-id="${item.id}">
+              <div class="carousel-artwork-wrapper ${shape}">
+                <div class="carousel-rank-badge" style="${rankStyleFor(idx)}">${idx + 1}</div>
+                ${thumb}
+              </div>
+              <div class="carousel-item-info">
+                <span class="carousel-item-title">${escapeHTML(item.name)}</span>
+                ${subtitle}
+                <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
               </div>
             </div>
           `;
         }
 
-        // Category 2: Top Tracks
+        let skeletonHtml = "";
         if (topSongs.length > 0) {
-          html += `
+          skeletonHtml += `
             <div class="carousel-wrapper">
               <span class="carousel-title">Top Tracks</span>
-              <div class="carousel-scroll">
-                ${topSongs
-                  .map((item, idx) => {
-                    const img = getArtworkUrl(
-                      "track",
-                      item.name,
-                      item.artistName,
-                      item.albumName,
-                      artworkCache,
-                    );
-                    const highResImg = img
-                      ? img.replace("/300x300/", "/500x500/")
-                      : null;
-                    const thumb = highResImg
-                      ? `<img src="${highResImg}" alt="">`
-                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
-
-                    const colorObj = getColorForUrl(img);
-                    let playsStyle = "";
-                    if (colorObj)
-                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
-
-                    let rankStyle = "";
-                    if (idx === 0)
-                      rankStyle =
-                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
-                    else if (idx === 1)
-                      rankStyle =
-                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
-                    else if (idx === 2)
-                      rankStyle =
-                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
-
-                    return `
-                    <div class="carousel-item clickable-entity" data-type="track" data-id="${item.id}">
-                      <div class="carousel-artwork-wrapper square">
-                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
-                        ${thumb}
-                      </div>
-                      <div class="carousel-item-info">
-                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
-                        <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
-                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
-                      </div>
-                    </div>
-                  `;
-                  })
-                  .join("")}
-              </div>
+              <div class="carousel-scroll" id="carousel-scroll-tracks"></div>
             </div>
           `;
         }
-
-        // Category 3: Top Albums
         if (topAlbums.length > 0) {
-          html += `
+          skeletonHtml += `
             <div class="carousel-wrapper">
               <span class="carousel-title">Top Albums</span>
-              <div class="carousel-scroll">
-                ${topAlbums
-                  .map((item, idx) => {
-                    const img = getArtworkUrl(
-                      "album",
-                      item.name,
-                      item.artistName,
-                      item.name,
-                      artworkCache,
-                    );
-                    const highResImg = img
-                      ? img.replace("/300x300/", "/500x500/")
-                      : null;
-                    const thumb = highResImg
-                      ? `<img src="${highResImg}" alt="">`
-                      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
-
-                    const colorObj = getColorForUrl(img);
-                    let playsStyle = "";
-                    if (colorObj)
-                      playsStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); text-shadow: 0 0 8px rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.4); font-weight: 800;`;
-
-                    let rankStyle = "";
-                    if (idx === 0)
-                      rankStyle =
-                        "background: #000; color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); box-shadow: 0 0 8px var(--accent-green-glow); border: 1px solid var(--accent-green-glow);";
-                    else if (idx === 1)
-                      rankStyle =
-                        "background: #000; color: var(--accent-yellow); text-shadow: 0 0 10px var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow-glow); border: 1px solid var(--accent-yellow-glow);";
-                    else if (idx === 2)
-                      rankStyle =
-                        "background: #000; color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); box-shadow: 0 0 8px var(--accent-red-glow); border: 1px solid var(--accent-red-glow);";
-
-                    return `
-                    <div class="carousel-item clickable-entity" data-type="album" data-id="${item.id}">
-                      <div class="carousel-artwork-wrapper square">
-                        <div class="carousel-rank-badge" style="${rankStyle}">${idx + 1}</div>
-                        ${thumb}
-                      </div>
-                      <div class="carousel-item-info">
-                        <span class="carousel-item-title">${escapeHTML(item.name)}</span>
-                        <span class="carousel-item-subtitle">${escapeHTML(item.artistName)}</span>
-                        <span class="carousel-item-plays" style="${playsStyle}">${item.count}</span>
-                      </div>
-                    </div>
-                  `;
-                  })
-                  .join("")}
-              </div>
+              <div class="carousel-scroll" id="carousel-scroll-albums"></div>
+            </div>
+          `;
+        }
+        if (topArtists.length > 0) {
+          skeletonHtml += `
+            <div class="carousel-wrapper">
+              <span class="carousel-title">Top Artists</span>
+              <div class="carousel-scroll" id="carousel-scroll-artists"></div>
             </div>
           `;
         }
 
         container.innerHTML =
-          html ||
+          skeletonHtml ||
           '<div class="no-data-message">No data found for last 4 weeks</div>';
+
+        const tracksScroll = document.getElementById("carousel-scroll-tracks");
+        if (tracksScroll) {
+          createInfiniteScroll({
+            container: tracksScroll,
+            items: topSongs,
+            chunkSize: 10,
+            renderItem: (item, idx) => renderCarouselItem("track", item, idx),
+            root: tracksScroll,
+            rootMargin: "0px 600px 0px 0px",
+            sentinelClass: "carousel-scroll-sentinel",
+            onChunkRendered: () => initArtworkImages(tracksScroll),
+          });
+        }
+        const albumsScroll = document.getElementById("carousel-scroll-albums");
+        if (albumsScroll) {
+          createInfiniteScroll({
+            container: albumsScroll,
+            items: topAlbums,
+            chunkSize: 10,
+            renderItem: (item, idx) => renderCarouselItem("album", item, idx),
+            root: albumsScroll,
+            rootMargin: "0px 600px 0px 0px",
+            sentinelClass: "carousel-scroll-sentinel",
+            onChunkRendered: () => initArtworkImages(albumsScroll),
+          });
+        }
+        const artistsScroll = document.getElementById("carousel-scroll-artists");
+        if (artistsScroll) {
+          createInfiniteScroll({
+            container: artistsScroll,
+            items: topArtists,
+            chunkSize: 10,
+            renderItem: (item, idx) => renderCarouselItem("artist", item, idx),
+            root: artistsScroll,
+            rootMargin: "0px 600px 0px 0px",
+            sentinelClass: "carousel-scroll-sentinel",
+            onChunkRendered: () => initArtworkImages(artistsScroll),
+          });
+        }
       } catch (err) {
         console.error("Failed to load top hits carousels:", err);
         container.innerHTML =
@@ -817,42 +679,10 @@
       }
     }
 
-    function escapeHTML(str: string) {
-      return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    // Click handler for carousel navigation delegation
     const carouselsEl = document.getElementById("topHitsCarousels");
-    if (carouselsEl) {
-      carouselsEl.addEventListener("click", (e) => {
-        const target = (e.target as HTMLElement).closest(".clickable-entity");
-        if (!target) return;
-        const type = target.getAttribute("data-type");
-        const idStr = target.getAttribute("data-id");
-        if (!type || !idStr) return;
-        window.dispatchEvent(
-          new CustomEvent("open-entity-details", {
-            detail: { type, id: parseInt(idStr, 10) },
-          }),
-        );
-      });
-    }
+    if (carouselsEl) bindEntityClicks(carouselsEl, { nested: false });
 
-    // Load elements initially
     loadDashboardStats();
     loadTopHitsCarousels();
-
-    // Redraw feed on tab focus
-    window.addEventListener("tab-change", (e: any) => {
-      if (e.detail.tab === "dashboard") {
-        loadDashboardStats();
-        loadTopHitsCarousels();
-      }
-    });
   });
 </script>

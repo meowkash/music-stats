@@ -1,5 +1,11 @@
-const CACHE_NAME = 'aakashmusic-cache-1785477910';
-const CACHE_VERSION = '1785477910';
+import fs from 'fs';
+import path from 'path';
+
+const version = process.env.CACHE_VERSION || String(Math.floor(Date.now() / 1000));
+const cacheName = `aakashmusic-cache-${version}`;
+
+const swContent = `const CACHE_NAME = '${cacheName}';
+const CACHE_VERSION = '${version}';
 
 const STATIC_ASSETS = [
   '/',
@@ -107,3 +113,12 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+`;
+
+const publicDir = path.resolve('public');
+fs.writeFileSync(path.join(publicDir, 'sw.js'), swContent);
+fs.writeFileSync(
+  path.join(publicDir, 'cache-version.json'),
+  JSON.stringify({ version })
+);
+console.log(`Generated service worker with cache version: ${version}`);

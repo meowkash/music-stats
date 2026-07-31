@@ -1,11 +1,9 @@
 ---
-// BottomNav component
 ---
 
 <nav class="bottom-nav-container">
-  <!-- Primary Navigation Buttons -->
   <div class="main-tab-bar glass-card">
-    <div class="nav-slider-highlight" id="navSliderHighlight"></div>
+    <div class="nav-slider-highlight sliding-highlight" id="navSliderHighlight"></div>
     <button class="tab-btn active" data-tab="dashboard" aria-label="Dashboard">
       <svg
         class="tab-icon"
@@ -75,14 +73,13 @@
 </nav>
 
 <style>
-  /* Base Mobile View Layout */
   .bottom-nav-container {
     position: absolute;
     bottom: calc(5vh - env(safe-area-inset-bottom));
     left: 0;
     right: 0;
     padding: 0 calc(16px + env(safe-area-inset-right)) 0 calc(16px + env(safe-area-inset-left));
-    z-index: 100;
+    z-index: var(--z-nav);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -90,7 +87,6 @@
     transition: var(--transition-smooth);
   }
 
-  /* Main Tab Bar */
   .main-tab-bar {
     width: 100%;
     max-width: 500px;
@@ -103,8 +99,8 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     margin-bottom: 8px;
-    padding: 8px; /* Safe padding for absolute highlight */
-    pointer-events: auto; /* Enable interaction */
+    padding: 8px;
+    pointer-events: auto;
     position: relative;
     backdrop-filter: blur(24px) saturate(180%);
     -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -120,13 +116,13 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    flex: 1; /* Equally divide space in 3 chunks */
+    flex: 1;
     height: 48px;
     border-radius: 16px;
     cursor: pointer;
     transition: var(--transition-smooth);
     position: relative;
-    z-index: 2; /* Sit above the sliding highlight */
+    z-index: 2;
   }
 
   .tab-icon {
@@ -143,9 +139,8 @@
     transition: var(--transition-smooth);
   }
 
-  /* Active states */
   .tab-btn.active {
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .tab-btn[data-tab="dashboard"].active {
@@ -184,12 +179,8 @@
     filter: drop-shadow(0 0 4px var(--accent-green-glow));
   }
 
-  /* Apple Music Style sliding tab bar highlight pill */
   .nav-slider-highlight {
-    position: absolute;
-    left: 0;
-    top: 0;
-    z-index: 1;
+    border-radius: 16px;
     background: color-mix(
       in srgb,
       var(--hl-color, rgba(255, 255, 255, 0.25)) 15%,
@@ -201,27 +192,15 @@
         var(--hl-color, rgba(255, 255, 255, 0.4)) 40%,
         transparent
       );
-    border-radius: 16px;
     box-shadow:
       inset 0 1px 1px rgba(255, 255, 255, 0.3),
       0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
-    transition:
-      transform 0.5s var(--ios-spring),
-      width 0.5s var(--ios-spring),
-      height 0.5s var(--ios-spring),
-      background-color 0.5s ease,
-      border-color 0.5s ease,
-      box-shadow 0.5s ease;
-    will-change:
-      transform, width, height, background-color, border-color, box-shadow;
-    pointer-events: none;
   }
 
   .tab-btn:hover {
-    color: #fff;
+    color: var(--text-primary);
   }
 
-  /* Desktop View: Left Side Bar */
   @media (min-width: 768px) {
     .bottom-nav-container {
       width: 180px;
@@ -281,56 +260,29 @@
 </style>
 
 <script>
-  // Setup Client-side Navigation Router
+  import { createSlidingHighlight } from "../utils/slidingHighlight";
+  import { onReady } from "../utils/dom";
+
   function initNav() {
     const tabs = document.querySelectorAll(".tab-btn");
-    const highlight = document.getElementById("navSliderHighlight");
+    const highlight = document.getElementById("navSliderHighlight") as HTMLDivElement;
     const activeTab = document.querySelector(".tab-btn.active") as HTMLElement;
-    console.log("initNav elements:", {
-      tabsCount: tabs.length,
-      highlight,
-      activeTab,
+
+    const navColors: Record<string, { color: string; glow: string }> = {
+      dashboard: { color: "var(--accent-pink)", glow: "var(--accent-pink-glow)" },
+      rankings: { color: "var(--accent-cyan)", glow: "var(--accent-cyan-glow)" },
+      recents: { color: "var(--accent-violet)", glow: "var(--accent-violet-glow)" },
+      statistics: { color: "var(--accent-green)", glow: "var(--accent-green-glow)" },
+    };
+
+    const { sync, observe } = createSlidingHighlight({
+      highlightEl: highlight,
+      buttons: tabs,
+      colorMap: (btn) => {
+        const tabName = btn.getAttribute("data-tab") || "";
+        return navColors[tabName] || null;
+      },
     });
-
-    function syncHighlight(activeBtn: HTMLElement) {
-      if (!highlight || !activeBtn) {
-        console.warn("syncHighlight skipped - missing elements:", {
-          highlight,
-          activeBtn,
-        });
-        return;
-      }
-      console.log("syncHighlight coordinates:", {
-        offsetLeft: activeBtn.offsetLeft,
-        offsetTop: activeBtn.offsetTop,
-        offsetWidth: activeBtn.offsetWidth,
-        offsetHeight: activeBtn.offsetHeight,
-      });
-      highlight.style.transform = `translate3d(${activeBtn.offsetLeft}px, ${activeBtn.offsetTop}px, 0)`;
-      highlight.style.width = `${activeBtn.offsetWidth}px`;
-      highlight.style.height = `${activeBtn.offsetHeight}px`;
-
-      const tabName = activeBtn.getAttribute("data-tab");
-      let color = "rgba(255,255,255,0.25)";
-      let glow = "rgba(0,0,0,0.4)";
-
-      if (tabName === "dashboard") {
-        color = "var(--accent-pink)";
-        glow = "var(--accent-pink-glow)";
-      } else if (tabName === "rankings") {
-        color = "var(--accent-cyan)";
-        glow = "var(--accent-cyan-glow)";
-      } else if (tabName === "recents") {
-        color = "var(--accent-violet)";
-        glow = "var(--accent-violet-glow)";
-      } else if (tabName === "statistics") {
-        color = "var(--accent-green)";
-        glow = "var(--accent-green-glow)";
-      }
-
-      highlight.style.setProperty("--hl-color", color);
-      highlight.style.setProperty("--hl-glow", glow);
-    }
 
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
@@ -339,41 +291,27 @@
 
         try {
           localStorage.setItem("last-music-stats-tab", targetTab);
-        } catch(e) {}
+        } catch {}
 
-        // Update active class on buttons
         tabs.forEach((t) => t.classList.remove("active"));
         tab.classList.add("active");
+        sync(tab as HTMLElement);
 
-        syncHighlight(tab as HTMLElement);
-
-        // Fire custom event to notify parent layout to switch views
-        const event = new CustomEvent("tab-change", {
-          detail: { tab: targetTab },
-        });
-        window.dispatchEvent(event);
+        window.dispatchEvent(
+          new CustomEvent("tab-change", { detail: { tab: targetTab } }),
+        );
       });
     });
 
-    // Sync using ResizeObserver for robust layout tracking
-    const ro = new ResizeObserver(() => {
-      const active = document.querySelector(".tab-btn.active") as HTMLElement;
-      if (active) syncHighlight(active);
-    });
-    tabs.forEach((tab) => ro.observe(tab));
+    observe();
 
-    // Initial sync
-    if (activeTab) {
+    if (activeTab && highlight) {
       highlight.style.transition = "none";
-      syncHighlight(activeTab);
-      highlight.offsetHeight; // force reflow
+      sync(activeTab);
+      highlight.offsetHeight;
       highlight.style.transition = "";
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initNav);
-  } else {
-    initNav();
-  }
+  onReady(initNav);
 </script>

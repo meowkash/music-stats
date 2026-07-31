@@ -1,38 +1,28 @@
 ---
-// DetailOverlay component for immersive artist/album detail views
 ---
 
 <div class="overlay-backdrop" id="detailsOverlayBackdrop"></div>
 
 <div class="details-overlay-panel" id="detailsOverlayPanel">
-  <!-- Mobile top drag handle -->
-  <div class="sheet-drag-handle" id="sheetDragHandle"></div>
+  <!-- Scroll on inner wrapper; panel stays transform-only for compositor animation -->
+  <div class="overlay-scroll-container" id="overlayScrollContainer">
+    <div class="sheet-drag-handle" id="sheetDragHandle"></div>
 
-  <div class="overlay-background-blur" id="overlayBgBlur"></div>
-  <div class="overlay-content-wrapper">
-    <!-- Close header bar -->
-    <div class="overlay-nav-bar" id="overlayNavBar">
-      <button class="nav-circle-btn" id="overlayCloseBtn" aria-label="Go Back">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
-    </div>
+    <!-- Color wash on separate compositor layer (dual layers for crossfade) -->
+    <div class="overlay-color-wash" id="overlayColorWash"></div>
+    <div class="overlay-color-wash overlay-color-wash-back" id="overlayColorWashBack"></div>
 
-    <!-- Main Header Details -->
+    <div class="overlay-background-blur" id="overlayBgBlur"></div>
+
+    <!-- Header artwork crossfades via dual layers -->
     <div class="overlay-header" id="overlayHeader">
       <div class="overlay-artwork-wrapper">
-        <img id="overlayArtwork" src="" alt="Artwork" />
+        <img class="overlay-artwork-layer" id="overlayArtworkFront" src="" alt="Artwork" />
+        <img class="overlay-artwork-layer" id="overlayArtworkBack" src="" alt="" aria-hidden="true" />
         <div
-          class="overlay-artwork-fallback hidden"
+          class="overlay-artwork-fallback hidden artwork-fallback artwork-fallback--track"
           id="overlayArtworkFallback"
+          data-type="track"
         >
           <svg
             viewBox="0 0 24 24"
@@ -46,38 +36,47 @@
           </svg>
         </div>
       </div>
-      <div class="overlay-header-content">
+
+      <div class="overlay-nav-bar" id="overlayNavBar">
+        <button class="nav-circle-btn" id="overlayCloseBtn" aria-label="Go Back">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <div class="overlay-header-content overlay-slide-region" id="overlayHeaderContent">
         <h3 class="overlay-title" id="overlayTitle">-</h3>
         <p class="overlay-subtitle" id="overlaySubtitle">-</p>
         <p class="overlay-metadata" id="overlayMetadata">-</p>
-
-        <!-- Action buttons removed for non-player app view -->
       </div>
     </div>
 
-    <!-- Track List Section -->
-    <div class="overlay-songs-section">
-      <div class="overlay-songs-list" id="overlaySongsList">
-        <!-- Dynamically populated -->
+    <div class="overlay-content-wrapper overlay-slide-region" id="overlayContentWrapper">
+      <div class="overlay-songs-section">
+        <div class="overlay-songs-list" id="overlaySongsList"></div>
       </div>
-    </div>
 
-    <!-- Albums Section -->
-    <div class="overlay-albums-section hidden" id="overlayAlbumsSection">
-      <h4 id="overlayAlbumsHeader">Albums</h4>
-      <div class="overlay-albums-list" id="overlayAlbumsList">
-        <!-- Dynamically populated -->
+      <div class="overlay-albums-section hidden" id="overlayAlbumsSection">
+        <h4 id="overlayAlbumsHeader">Albums</h4>
+        <div class="overlay-albums-list" id="overlayAlbumsList"></div>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-  /* Backdrop overlay (dimmed background) */
   .overlay-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 199;
+    z-index: var(--z-overlay-backdrop);
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -91,22 +90,47 @@
     pointer-events: auto;
   }
 
-  /* Responsive Detail Panel Sheet */
+  /* No overflow here — scroll lives in .overlay-scroll-container */
   .details-overlay-panel {
     position: fixed;
-    z-index: 200;
-    background: #0a0a0f;
-    display: flex;
-    flex-direction: column;
+    z-index: var(--z-overlay-panel);
+    background: var(--overlay-bg-bottom, var(--surface-elevated));
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     transition: transform 0.5s var(--ios-spring);
     will-change: transform;
+    overflow: hidden;
+    contain: layout style;
+  }
+
+  .overlay-scroll-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+    background: var(--overlay-bg-bottom, var(--surface-elevated));
   }
 
-  /* Mobile style: Bottom Sheet */
+  /* Isolated layer for color-wash crossfade */
+  .overlay-color-wash {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-overlay) var(--ios-spring);
+    transform: translateZ(0);
+    contain: paint;
+    will-change: opacity;
+  }
+
+  .overlay-color-wash-back {
+    opacity: 0;
+  }
+
   @media (max-width: 767px) {
     .details-overlay-panel {
       left: 0;
@@ -143,7 +167,6 @@
     }
   }
 
-  /* Desktop style: Side pullover drawer */
   @media (min-width: 768px) {
     .details-overlay-panel {
       right: 0;
@@ -163,7 +186,6 @@
     transform: none;
   }
 
-  /* Ambient Blurred Artwork Color Backdrop */
   .overlay-background-blur {
     position: absolute;
     top: 0;
@@ -172,29 +194,38 @@
     height: 380px;
     background-size: cover;
     background-position: center;
-    filter: blur(40px) saturate(1.4);
-    opacity: 0.45;
+    filter: blur(32px) saturate(1.4);
+    opacity: 0;
     z-index: 0;
     pointer-events: none;
-    transition: background-image 0.5s var(--ios-spring);
+    transition: opacity var(--duration-overlay) var(--ios-spring);
+    transform: translateZ(0);
+    contain: paint;
+    will-change: opacity;
   }
 
   .overlay-background-blur::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, transparent 15%, #0a0a0f 85%);
+    background: linear-gradient(to bottom, transparent 15%, var(--overlay-bg-bottom, var(--surface-elevated)) 85%);
   }
 
-  /* Layout wrappers */
   .overlay-content-wrapper {
     position: relative;
     z-index: 1;
     display: flex;
     flex-direction: column;
-    padding: 16px 20px calc(env(safe-area-inset-bottom) + 40px) 20px;
+    flex: 1 0 auto;
+    padding: 0 20px calc(env(safe-area-inset-bottom) + 40px) 20px;
     width: 100%;
-    min-height: 100%;
+  }
+
+  /* Header text + body slide together during in-sheet navigation */
+  .overlay-slide-region {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    will-change: transform, opacity;
   }
 
   .overlay-nav-bar {
@@ -219,7 +250,7 @@
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    color: #fff;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -239,10 +270,8 @@
 
   .overlay-header {
     position: relative;
-    width: calc(100% + 40px); /* negate wrapper padding */
-    margin-left: -20px;
-    margin-right: -20px;
-    margin-top: -16px;
+    z-index: 1;
+    width: 100%;
     height: 50vh;
     min-height: 320px;
     max-height: 480px;
@@ -265,12 +294,46 @@
     border: none;
     margin: 0;
     z-index: 1;
+    overflow: hidden;
+    background: rgb(10, 10, 15);
   }
 
-  .overlay-header .overlay-artwork-wrapper img {
+  .overlay-header .overlay-artwork-wrapper.artwork-loading {
+    background: rgb(10, 10, 15);
+  }
+
+  .overlay-header .overlay-artwork-wrapper .artwork-shimmer {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+    z-index: 3;
+    opacity: 1;
+    transition: opacity 120ms ease;
+    background: linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.01) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.01) 100%
+    );
+  }
+
+  .overlay-header .overlay-artwork-wrapper .artwork-shimmer.artwork-shimmer-hide {
+    opacity: 0;
+  }
+
+  .overlay-header .overlay-artwork-layer {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    opacity: 0;
+    z-index: 1;
+    will-change: transform, opacity;
+  }
+
+  .overlay-header .overlay-artwork-layer.is-visible {
+    z-index: 2;
   }
 
   .overlay-header .overlay-header-content {
@@ -294,29 +357,27 @@
     width: 100%;
     height: 100%;
     background: linear-gradient(
-      135deg,
-      rgba(30, 26, 40, 0.8) 0%,
-      rgba(15, 12, 20, 0.95) 100%
+      160deg,
+      rgba(14, 14, 18, 0.98) 0%,
+      rgba(10, 10, 15, 1) 100%
     );
-    color: var(--accent-pink);
+    color: rgba(255, 255, 255, 0.22);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.5);
   }
 
   .overlay-artwork-fallback svg {
     width: 64px;
     height: 64px;
-    opacity: 0.5;
-    filter: drop-shadow(0 0 12px var(--accent-pink-glow));
+    opacity: 0.35;
   }
 
   .overlay-title {
     font-family: var(--font-header);
     font-size: 22px;
     font-weight: 800;
-    color: #fff;
+    color: var(--text-primary);
     margin-bottom: 4px;
     letter-spacing: -0.01em;
     padding: 0 10px;
@@ -329,83 +390,30 @@
     margin-bottom: 6px;
   }
 
-  .clickable-entity-link {
+  .overlay-subtitle :global(.overlay-link) {
     cursor: pointer;
-    transition: var(--transition-smooth);
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
-    display: inline-block;
+    transition:
+      color var(--duration-overlay) var(--ios-spring),
+      text-decoration-color var(--duration-overlay) var(--ios-spring);
+    text-decoration: underline dashed;
+    text-decoration-color: var(--link-decoration-color, rgba(255, 255, 255, 0.4));
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-skip-ink: none;
   }
 
-  .clickable-entity-link:hover {
-    color: #fff !important;
-    border-bottom-color: #fff !important;
+  .overlay-subtitle :global(.overlay-link:hover) {
+    color: var(--text-primary) !important;
+    text-decoration-color: var(--text-primary) !important;
   }
 
   .overlay-metadata {
     font-size: 13px;
-    color: #fff;
+    color: var(--text-primary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 800;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  }
-
-  /* Play Buttons */
-  .overlay-action-buttons {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    margin-top: 14px;
-    width: 100%;
-  }
-
-  .action-circle-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-  }
-
-  .action-circle-btn:hover {
-    background: rgba(255, 255, 255, 0.18);
-    transform: scale(1.05);
-  }
-
-  .action-circle-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .action-play-btn {
-    flex: 1;
-    max-width: 140px;
-    height: 40px;
-    border-radius: 20px;
-    background: #fff;
-    border: none;
-    color: #000;
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-  }
-
-  .action-play-btn:hover {
-    background: rgba(255, 255, 255, 0.9);
-    transform: scale(1.03);
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
   }
 
   .overlay-songs-section {
@@ -418,14 +426,12 @@
     flex-direction: column;
   }
 
-  /* Scrobble row overrides specifically for detail sheets (less padding on mobile) */
   .details-overlay-panel :global(.scrobble-row) {
     padding: 8px 10px;
     gap: 10px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
   }
 
-  /* Horizontal Scrolling albums section (Pic 3 Style) */
   .overlay-albums-section {
     margin-top: 24px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -438,7 +444,7 @@
     font-family: var(--font-header);
     font-size: 16px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-primary);
     margin-bottom: 12px;
   }
 
@@ -448,7 +454,7 @@
     gap: 16px;
     padding: 8px 0 16px 0;
     scroll-behavior: smooth;
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;
     width: 100%;
   }
 
@@ -474,7 +480,7 @@
     height: 130px;
     border-radius: 10px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgb(12, 12, 16);
     border: 1px solid rgba(255, 255, 255, 0.08);
     margin-bottom: 8px;
     box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
@@ -498,7 +504,7 @@
   .overlay-albums-list :global(.overlay-album-card-title) {
     font-size: 13px;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -518,455 +524,5 @@
 </style>
 
 <script>
-  import { getArtworkUrl, getColorForUrl } from "../utils/ui";
-
-  interface MetaData {
-    artists: string[];
-    albums: string[];
-    tracks: [string, number, number][];
-  }
-
-  function init() {
-    // Elements Cache
-    const backdrop = document.getElementById(
-      "detailsOverlayBackdrop",
-    ) as HTMLDivElement;
-    const panel = document.getElementById(
-      "detailsOverlayPanel",
-    ) as HTMLDivElement;
-    const dragHandle = document.getElementById(
-      "sheetDragHandle",
-    ) as HTMLDivElement;
-    const overlayArtwork = document.getElementById(
-      "overlayArtwork",
-    ) as HTMLImageElement;
-    const overlayArtworkFallback = document.getElementById(
-      "overlayArtworkFallback",
-    ) as HTMLDivElement;
-    const overlayTitle = document.getElementById(
-      "overlayTitle",
-    ) as HTMLHeadingElement;
-    const overlaySubtitle = document.getElementById(
-      "overlaySubtitle",
-    ) as HTMLParagraphElement;
-    const overlayMetadata = document.getElementById(
-      "overlayMetadata",
-    ) as HTMLParagraphElement;
-    const overlaySongsList = document.getElementById(
-      "overlaySongsList",
-    ) as HTMLDivElement;
-    const overlayBgBlur = document.getElementById(
-      "overlayBgBlur",
-    ) as HTMLDivElement;
-
-    const overlayAlbumsSection = document.getElementById(
-      "overlayAlbumsSection",
-    ) as HTMLDivElement;
-    const overlayAlbumsHeader = document.getElementById(
-      "overlayAlbumsHeader",
-    ) as HTMLHeadingElement;
-    const overlayAlbumsList = document.getElementById(
-      "overlayAlbumsList",
-    ) as HTMLDivElement;
-    const overlayCloseBtn = document.getElementById(
-      "overlayCloseBtn",
-    ) as HTMLButtonElement;
-
-    // Cache variables
-    let meta: MetaData | null = null;
-    let artworkCache: Record<string, string> = {};
-    let catalog: any = null;
-
-    let currentEntity: { type: string; id: number } | null = null;
-    const navHistory: { type: string; id: number }[] = [];
-
-    // Preloaders
-    async function loadMeta() {
-      if (meta) return meta;
-      try {
-        const [metaRes, artworkRes] = await Promise.all([
-          fetch("/data/meta.json"),
-          fetch("/data/artwork.json").catch(() => null),
-        ]);
-        meta = await metaRes.json();
-        if (artworkRes && artworkRes.ok) {
-          artworkCache = await artworkRes.json();
-        }
-        return meta;
-      } catch (err) {
-        console.error("Failed to load metadata in overlay:", err);
-        return null;
-      }
-    }
-
-    async function loadCatalog() {
-      if (catalog) return catalog;
-      try {
-        const res = await fetch("/data/catalog.json");
-        catalog = await res.json();
-        return catalog;
-      } catch (err) {
-        console.error("Failed to load catalog in overlay:", err);
-        return null;
-      }
-    }
-
-    function closeDetails() {
-      panel.classList.remove("visible");
-      backdrop.classList.remove("visible");
-      currentEntity = null;
-      navHistory.length = 0;
-      panel.style.transform = ""; // reset drag transforms
-    }
-
-    // Dismiss listeners
-    overlayCloseBtn.addEventListener("click", () => {
-      if (navHistory.length > 0) {
-        const prev = navHistory.pop()!;
-        openDetails(prev.type, prev.id, true);
-      } else {
-        closeDetails();
-      }
-    });
-
-    backdrop.addEventListener("click", closeDetails);
-
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && panel.classList.contains("visible")) {
-        closeDetails();
-      }
-    });
-
-    // Touch Swipe Controller (Mobile bottom sheet close gesture)
-    let startY = 0;
-    let currentY = 0;
-    let isDragging = false;
-    let isDismissing = false;
-
-    function handleTouchStart(e: TouchEvent) {
-      if (window.innerWidth >= 768) return; // side drawer does not support swipe close
-      
-      // Only initiate swipe-to-dismiss if we are at the top of the scroll container
-      if (panel.scrollTop > 5) return; 
-
-      startY = e.touches[0].clientY;
-      currentY = startY; 
-      isDragging = true;
-      isDismissing = false;
-      panel.style.transition = "none"; // disable transitions while dragging
-    }
-
-    function handleTouchMove(e: TouchEvent) {
-      if (!isDragging) return;
-      currentY = e.touches[0].clientY;
-      const diffY = currentY - startY;
-
-      // Only allow pull-down if dragging downwards
-      if (diffY > 0) {
-        isDismissing = true;
-        // Prevent native scrolling if possible to stop rubber banding
-        if (e.cancelable) e.preventDefault();
-        panel.style.transform = `translate3d(0, ${diffY}px, 0)`;
-      } else {
-        isDismissing = false;
-      }
-    }
-
-    function handleTouchEnd() {
-      if (!isDragging) return;
-      isDragging = false;
-      panel.style.transition = ""; // restore smooth transition
-
-      const diffY = currentY - startY;
-      // Close sheet if dragged down past threshold (100px)
-      if (isDismissing && diffY > 100) {
-        closeDetails();
-      } else {
-        panel.style.transform = ""; // snap back
-      }
-      isDismissing = false;
-    }
-
-    // Attach to the entire panel to allow dismissing by dragging down anywhere when at the top
-    panel.addEventListener("touchstart", handleTouchStart, { passive: true });
-    panel.addEventListener("touchmove", handleTouchMove, { passive: false });
-    panel.addEventListener("touchend", handleTouchEnd);
-
-    // Dynamic Render Engine
-    const overlayHeader = document.getElementById(
-      "overlayHeader",
-    ) as HTMLDivElement;
-
-    async function openDetails(type: string, id: number, isBack = false) {
-      if (!isBack && currentEntity) {
-        navHistory.push(currentEntity);
-      }
-      currentEntity = { type, id };
-
-      const [dictionary, catalogData] = await Promise.all([
-        loadMeta(),
-        loadCatalog(),
-      ]);
-
-      if (!dictionary || !catalogData) return;
-
-      let name = "";
-      let subtitle = "";
-      let imgUrl: string | null = null;
-      let metadataStr = "";
-      let sortedTracks: { name: string; count: number }[] | null = [];
-      let albumsToRender: { id: number; name: string; scrobbles: number }[] =
-        [];
-      let artistNameForArtworkLookup = "";
-
-      if (type === "artist") {
-        const artistInfo = catalogData.artists[id];
-        name = artistInfo
-          ? artistInfo.name
-          : dictionary.artists[id] || "Unknown Artist";
-        subtitle = "";
-        imgUrl = getArtworkUrl("artist", name, name, "", artworkCache);
-
-        const scrobblesCount = artistInfo ? artistInfo.scrobbles : 0;
-        sortedTracks = artistInfo ? artistInfo.tracks : [];
-        albumsToRender = artistInfo ? artistInfo.albums : [];
-        artistNameForArtworkLookup = name;
-
-        metadataStr = `${sortedTracks.length} Songs • ${scrobblesCount.toLocaleString()} Plays`;
-      } else if (type === "album") {
-        const albumInfo = catalogData.albums[id];
-        name = albumInfo
-          ? albumInfo.name
-          : dictionary.albums[id] || "Unknown Album";
-
-        const artistId = albumInfo ? albumInfo.artistId : 0;
-        const artistName = albumInfo
-          ? albumInfo.artistName
-          : dictionary.artists[artistId] || "Unknown Artist";
-        subtitle = artistName;
-        imgUrl = getArtworkUrl("album", name, artistName, name, artworkCache);
-
-        const scrobblesCount = albumInfo ? albumInfo.scrobbles : 0;
-        if (albumInfo && albumInfo.tracks) {
-          sortedTracks = Object.values(albumInfo.tracks).sort(
-            (a: any, b: any) => b.count - a.count,
-          );
-        }
-        artistNameForArtworkLookup = artistName;
-
-        metadataStr = `Album • ${scrobblesCount.toLocaleString()} Plays`;
-
-        if (artistId) {
-          const artistInfo = catalogData.artists[artistId];
-          if (artistInfo && artistInfo.albums) {
-            albumsToRender = artistInfo.albums.filter(
-              (alb: any) => alb.id !== id,
-            );
-          }
-        }
-      } else if (type === "track") {
-        const trackInfo = dictionary.tracks[id];
-        name = trackInfo ? trackInfo[0] : "Unknown Track";
-
-        const artistId = trackInfo ? trackInfo[1] : 0;
-        const albumId = trackInfo ? trackInfo[2] : 0;
-        const artistName = dictionary.artists[artistId] || "Unknown Artist";
-        const albumName = dictionary.albums[albumId] || "Unknown Album";
-
-        subtitle = `${albumName} • ${artistName}`;
-        imgUrl = getArtworkUrl(
-          "track",
-          name,
-          artistName,
-          albumName,
-          artworkCache,
-        );
-
-        const scrobblesCount = catalogData.tracks[id] || 0;
-
-        sortedTracks = null; // Hide songs list
-        artistNameForArtworkLookup = artistName;
-        metadataStr = `Song • ${scrobblesCount.toLocaleString()} Plays`;
-
-        if (artistId) {
-          const artistInfo = catalogData.artists[artistId];
-          if (artistInfo && artistInfo.albums) {
-            albumsToRender = artistInfo.albums;
-          }
-        }
-      }
-
-      // Populate elements
-      overlayTitle.textContent = name;
-
-      const colorObj = getColorForUrl(imgUrl);
-      let linkStyle = "";
-      if (colorObj) {
-        linkStyle = `color: rgb(${colorObj.r}, ${colorObj.g}, ${colorObj.b}); border-bottom-color: rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, 0.5);`;
-      }
-
-      if (type === "album") {
-        const albumInfo = catalogData.albums[id];
-        const artistId = albumInfo ? albumInfo.artistId : 0;
-        overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(subtitle)}</span>`;
-      } else if (type === "track") {
-        const trackInfo = dictionary.tracks[id];
-        const artistId = trackInfo ? trackInfo[1] : 0;
-        const albumId = trackInfo ? trackInfo[2] : 0;
-        const artistName = dictionary.artists[artistId] || "Unknown Artist";
-        const albumName = dictionary.albums[albumId] || "Unknown Album";
-
-        overlaySubtitle.innerHTML = `<span class="clickable-entity-link" data-type="album" data-id="${albumId}" style="${linkStyle}">${escapeHTML(albumName)}</span> <span style="color: #fff; opacity: 0.4; margin: 0 4px;">•</span> <span class="clickable-entity-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(artistName)}</span>`;
-      } else {
-        overlaySubtitle.textContent = subtitle;
-      }
-
-      // Add event listeners to the generated links
-      const links = overlaySubtitle.querySelectorAll(".clickable-entity-link");
-      links.forEach((link) => {
-        link.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const targetType = link.getAttribute("data-type");
-          const targetId = parseInt(link.getAttribute("data-id") || "0", 10);
-          if (targetType && targetId) {
-            openDetails(targetType, targetId);
-          }
-        });
-      });
-
-      overlayMetadata.textContent = metadataStr;
-
-      if (imgUrl) {
-        const highResImg = imgUrl.replace("/300x300/", "/500x500/");
-        overlayArtwork.src = highResImg;
-        overlayArtwork.style.display = "block";
-        overlayArtworkFallback.classList.add("hidden");
-        overlayBgBlur.style.backgroundImage = `url('${highResImg}')`;
-      } else {
-        overlayArtwork.style.display = "none";
-        overlayArtworkFallback.classList.remove("hidden");
-        overlayBgBlur.style.backgroundImage = "none";
-        overlayBgBlur.style.backgroundColor = "transparent";
-      }
-
-      // Populate Track List
-      const overlaySongsSection = overlaySongsList.parentElement;
-      if (sortedTracks === null) {
-        if (overlaySongsSection) overlaySongsSection.classList.add("hidden");
-        overlaySongsList.innerHTML = "";
-      } else {
-        if (overlaySongsSection) overlaySongsSection.classList.remove("hidden");
-        if (sortedTracks.length === 0) {
-          overlaySongsList.innerHTML =
-            '<div class="no-data-message">No tracks found</div>';
-        } else {
-          overlaySongsList.innerHTML = sortedTracks
-            .map((track, idx) => {
-              return `
-              <div class="scrobble-row">
-                <span class="scrobble-row-rank">${idx + 1}</span>
-                <div class="scrobble-row-info">
-                  <span class="scrobble-row-title">${escapeHTML(track.name)}</span>
-                </div>
-                <div class="scrobble-row-right">
-                  <span class="scrobble-count-val">${track.count.toLocaleString()}</span>
-                </div>
-              </div>
-            `;
-            })
-            .join("");
-        }
-      }
-
-      // Populate Horizontal Scrolling related albums section
-      if (albumsToRender.length === 0) {
-        overlayAlbumsSection.classList.add("hidden");
-        overlayAlbumsList.innerHTML = "";
-      } else {
-        overlayAlbumsSection.classList.remove("hidden");
-        overlayAlbumsHeader.textContent =
-          type === "artist" ? "Albums" : "Other Albums by this Artist";
-
-        overlayAlbumsList.innerHTML = albumsToRender
-          .map((alb) => {
-            const albImg = getArtworkUrl(
-              "album",
-              alb.name,
-              artistNameForArtworkLookup,
-              alb.name,
-              artworkCache,
-            );
-            const highResAlbImg = albImg
-              ? albImg.replace("/300x300/", "/500x500/")
-              : null;
-            const thumbHtml = highResAlbImg
-              ? `<img src="${highResAlbImg}" alt="" />`
-              : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
-
-            return `
-            <div class="overlay-album-card" data-album-id="${alb.id}">
-              <div class="overlay-album-card-artwork">
-                ${thumbHtml}
-              </div>
-              <span class="overlay-album-card-title">${escapeHTML(alb.name)}</span>
-              <span class="overlay-album-card-subtitle">${alb.scrobbles.toLocaleString()} Plays</span>
-            </div>
-          `;
-          })
-          .join("");
-
-        const cards = overlayAlbumsList.querySelectorAll(".overlay-album-card");
-        cards.forEach((card) => {
-          card.addEventListener("click", () => {
-            const albIdStr = card.getAttribute("data-album-id");
-            if (albIdStr) {
-              openDetails("album", parseInt(albIdStr, 10));
-            }
-          });
-        });
-      }
-
-      // Apply dynamic colors glow
-      const rgb = getColorForUrl(imgUrl) || { r: 255, g: 107, b: 138 };
-      const glowStyle = `color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b}); text-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.7); font-weight: 700;`;
-      const countSpanEls = overlaySongsList.querySelectorAll(
-        ".scrobble-count-val",
-      );
-      countSpanEls.forEach((el) => {
-        el.setAttribute("style", glowStyle);
-      });
-
-      panel.style.background = `linear-gradient(to bottom, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25) 0%, #0a0a0f 450px)`;
-
-      // Yield to the browser to ensure the DOM is painted with the heavy track/album list 
-      // before starting the CSS transition animation. This prevents first-frame jank.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          panel.classList.add("visible");
-          backdrop.classList.add("visible");
-        });
-      });
-    }
-
-    // Listen to global open event
-    window.addEventListener("open-entity-details", (e: any) => {
-      const { type, id } = e.detail;
-      openDetails(type, id);
-    });
-
-    function escapeHTML(str: string) {
-      return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  import "../utils/overlayController";
 </script>

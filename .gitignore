@@ -29,3 +29,7 @@ AGENTS.md
 
 /public/data
 /src/data/
+
+# generated at build time by scripts/generate-sw.js
+/public/sw.js
+/public/cache-version.json

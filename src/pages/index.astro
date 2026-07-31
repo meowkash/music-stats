@@ -6,65 +6,38 @@ import Recents from "../components/Recents.astro";
 import Statistics from "../components/Statistics.astro";
 import BottomNav from "../components/BottomNav.astro";
 import DetailOverlay from "../components/DetailOverlay.astro";
+import { TAB_ORDER } from "../utils/tabs";
 ---
 
 <Layout title="My Music Stats">
   <div id="app-shell">
-    <!-- Compact Header -->
-    <header class="app-header">
-      <div class="header-logo">
-        <div class="logo-icon">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-          </svg>
-        </div>
-        <h1>My Music Stats</h1>
-      </div>
-    </header>
-
-    <!-- Main View Deck -->
     <main class="view-deck">
-      <!-- Tab 1: Dashboard -->
       <section class="panel-section active" id="view-dashboard">
         <Dashboard />
       </section>
 
-      <!-- Tab 2: Rankings -->
       <section class="panel-section inactive-right" id="view-rankings">
         <Leaderboards />
       </section>
 
-      <!-- Tab 3: Recents -->
       <section class="panel-section inactive-right" id="view-recents">
         <Recents />
       </section>
 
-      <!-- Tab 4: Statistics -->
       <section class="panel-section inactive-right" id="view-statistics">
         <Statistics />
       </section>
     </main>
 
-    <!-- Apple Music Style Floating Bottom Navigation Bar -->
     <BottomNav />
   </div>
 
-  <script is:inline>
-    // Synchronously restore last active tab instantly before first paint
+  <script is:inline define:vars={{ tabOrder: TAB_ORDER }}>
     try {
       const lastTab = localStorage.getItem('last-music-stats-tab');
       if (lastTab && lastTab !== 'dashboard') {
-        const tabOrder = ['dashboard', 'rankings', 'recents', 'statistics'];
         const targetIndex = tabOrder.indexOf(lastTab);
         if (targetIndex !== -1) {
-          // Update panels
           document.querySelectorAll('.panel-section').forEach(sec => {
             const secId = sec.getAttribute('id').replace('view-', '');
             const secIndex = tabOrder.indexOf(secId);
@@ -77,7 +50,6 @@ import DetailOverlay from "../components/DetailOverlay.astro";
               sec.classList.add('active');
             }
           });
-          // Update nav buttons
           document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.remove('active');
             if (btn.getAttribute('data-tab') === lastTab) {
@@ -86,15 +58,15 @@ import DetailOverlay from "../components/DetailOverlay.astro";
           });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Could not restore tab from storage', e);
+    }
   </script>
 
-  <!-- Reusable Details Overlay Sheet Drawer -->
   <DetailOverlay />
 </Layout>
 
 <style>
-  /* App Shell — locks to viewport, no document scroll */
   #app-shell {
     height: 100lvh;
     width: 100%;
@@ -111,64 +83,6 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     }
   }
 
-  /* Header Styles */
-  .app-header {
-    flex-shrink: 0;
-    height: calc(52px + env(safe-area-inset-top));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: env(safe-area-inset-top) calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
-    background: rgba(10, 10, 15, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    z-index: 90;
-  }
-
-  @media (min-width: 768px) {
-    .app-header {
-      padding-left: 20px;
-    }
-  }
-
-  .header-logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .logo-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
-    background: linear-gradient(
-      135deg,
-      var(--accent-pink),
-      var(--accent-violet)
-    );
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    box-shadow: 0 2px 8px var(--accent-pink-glow);
-  }
-
-  .logo-icon svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .header-logo h1 {
-    font-family: var(--font-header);
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    background: linear-gradient(to right, #fff 40%, var(--accent-pink) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  /* View Deck — fills remaining space, hides overflow */
   .view-deck {
     flex: 1;
     overflow: hidden;
@@ -177,88 +91,75 @@ import DetailOverlay from "../components/DetailOverlay.astro";
     width: 100%;
   }
 
-  /* Each panel fills the deck and scrolls internally */
+  /* Off-screen slide for inactive panels (native-style tab transition) */
   .panel-section {
     position: absolute;
     inset: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    opacity: 0;
     visibility: hidden;
     pointer-events: none;
     width: 100%;
     transition:
       padding 0.5s var(--ios-spring),
-      opacity 0.5s var(--ios-spring),
-      transform 0.5s var(--ios-spring),
-      visibility 0.5s;
-    will-change: opacity, transform;
+      transform var(--duration-slow) var(--ios-spring),
+      visibility 0s linear var(--duration-slow);
+    will-change: transform;
   }
 
   .panel-section.inactive-left {
-    transform: translateX(-30px);
+    transform: translate3d(-100%, 0, 0);
   }
 
   .panel-section.inactive-right {
-    transform: translateX(30px);
+    transform: translate3d(100%, 0, 0);
   }
 
-  /* Responsive padding for panel sections */
+  /* Panel padding includes safe-area (no app header) */
   @media (max-width: 767px) {
     .panel-section {
-      padding: 10px calc(10px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 80px) calc(10px + env(safe-area-inset-left));
+      padding: calc(16px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 80px) calc(10px + env(safe-area-inset-left));
     }
   }
   @media (min-width: 768px) and (max-width: 1023px) {
     .panel-section {
-      padding: 20px calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 100px) 20px;
+      padding: calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 100px) 20px;
     }
   }
   @media (min-width: 1024px) {
     .panel-section {
-      padding: 32px calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 110px) 20px;
+      padding: calc(32px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 110px) 20px;
     }
   }
 
   .panel-section.active {
-    opacity: 1;
     visibility: visible;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
     pointer-events: auto;
+    transition:
+      padding 0.5s var(--ios-spring),
+      transform var(--duration-slow) var(--ios-spring),
+      visibility 0s linear 0s;
   }
 </style>
 
 <script>
-  import { loadColorsCache } from "../utils/ui";
+  import {
+    loadColorsCache,
+    preloadAppData,
+    startBackgroundArtworkPreload,
+  } from "../utils/ui";
+  import { setActiveTab } from "../utils/tabs";
 
-  // Tab change handler — switches panel visibility
   document.addEventListener("DOMContentLoaded", () => {
     loadColorsCache();
-    const tabOrder = ['dashboard', 'rankings', 'recents', 'statistics'];
+    preloadAppData();
+    startBackgroundArtworkPreload();
 
-    function updateTabStates(targetTab: string) {
-      const targetIndex = tabOrder.indexOf(targetTab);
-      const sections = document.querySelectorAll(".panel-section");
-      
-      sections.forEach((sec: any) => {
-        const secId = sec.getAttribute("id")?.replace('view-', '');
-        const secIndex = tabOrder.indexOf(secId);
-        
-        sec.classList.remove("active", "inactive-left", "inactive-right");
-        
-        if (secIndex < targetIndex) {
-          sec.classList.add("inactive-left");
-        } else if (secIndex > targetIndex) {
-          sec.classList.add("inactive-right");
-        } else {
-          sec.classList.add("active");
-        }
-      });
-    }
-
-    window.addEventListener("tab-change", (e: any) => {
-      updateTabStates(e.detail.tab);
+    window.addEventListener("tab-change", (e: Event) => {
+      const tab = (e as CustomEvent<{ tab: string }>).detail.tab;
+      setActiveTab(tab);
     });
   });
 </script>

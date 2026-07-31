@@ -48,16 +48,11 @@ jobs:
           LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
         run: node scripts/fetch-lastfm.js
 
-      - name: Process Initial Data
-        run: node scripts/process-data.js
-
-      - name: Backfill Missing Artwork
+      - name: Build and Deploy
         env:
+          CACHE_VERSION: ${{ github.run_number }}-${{ github.sha }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
-        run: node scripts/backfill-artwork.js
-
-      - name: Final Process Data & Build
         run: npm run build
 
       - name: Upload Updated Database back to Cloudflare R2
