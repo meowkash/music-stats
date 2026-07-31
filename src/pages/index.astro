@@ -116,10 +116,12 @@ import { TAB_ORDER } from "../utils/tabs";
     transform: translate3d(100%, 0, 0);
   }
 
-  /* Panel padding includes safe-area (no app header) */
+  /* Panel padding — content scrolls into glass nav zone */
   @media (max-width: 767px) {
     .panel-section {
-      padding: calc(16px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 80px) calc(10px + env(safe-area-inset-left));
+      padding: calc(16px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
+        var(--nav-zone-height) calc(10px + env(safe-area-inset-left));
+      scroll-padding-bottom: var(--nav-zone-height);
     }
   }
   @media (min-width: 768px) and (max-width: 1023px) {
@@ -151,11 +153,31 @@ import { TAB_ORDER } from "../utils/tabs";
     startBackgroundArtworkPreload,
   } from "../utils/ui";
   import { setActiveTab } from "../utils/tabs";
+  import { warmDataCache, scheduleRevalidate } from "../utils/dataStore";
+  import { hideSplashScreen } from "../utils/dataRefresh";
+
+  const CRITICAL_DATA_PATHS = [
+    "/data/meta.json",
+    "/data/artwork.json",
+    "/data/recent.json",
+    "/data/yearly-totals.json",
+    "/data/yearly-stats.json",
+    "/data/colors.json",
+  ];
 
   document.addEventListener("DOMContentLoaded", () => {
-    loadColorsCache();
-    preloadAppData();
-    startBackgroundArtworkPreload();
+    hideSplashScreen();
+
+    void (async () => {
+      try {
+        await warmDataCache(CRITICAL_DATA_PATHS);
+        CRITICAL_DATA_PATHS.forEach(scheduleRevalidate);
+        await Promise.all([loadColorsCache(), preloadAppData()]);
+        startBackgroundArtworkPreload();
+      } catch (err) {
+        console.warn("Background data hydration failed:", err);
+      }
+    })();
 
     window.addEventListener("tab-change", (e: Event) => {
       const tab = (e as CustomEvent<{ tab: string }>).detail.tab;

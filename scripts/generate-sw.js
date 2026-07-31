@@ -2,18 +2,26 @@ import fs from 'fs';
 import path from 'path';
 
 const version = process.env.CACHE_VERSION || String(Math.floor(Date.now() / 1000));
-const cacheName = `aakashmusic-cache-${version}`;
+const shellCache = `music-stats-shell-${version}`;
+const dataCache = 'music-stats-data-v1';
 
-const swContent = `const CACHE_NAME = '${cacheName}';
+const swContent = `const SHELL_CACHE = '${shellCache}';
+const DATA_CACHE = '${dataCache}';
 const CACHE_VERSION = '${version}';
 
 const STATIC_ASSETS = [
   '/',
+  '/index.html',
   '/manifest.json',
   '/favicon.svg',
   '/logo-mark.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
+
+const SHELL_FALLBACK_URLS = ['/', '/index.html'];
 
 const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
 
@@ -21,9 +29,81 @@ function isArtworkRequest(url) {
   return ARTWORK_HOSTS.some(host => url.host.includes(host));
 }
 
+function dataPathname(url) {
+  if (url.pathname.startsWith('/data/') && url.pathname.endsWith('.json')) {
+    return url.pathname;
+  }
+  return null;
+}
+
+function cacheKeyForPath(pathname) {
+  return new Request(pathname, { mode: 'same-origin' });
+}
+
+async function matchShellCache(cache, request) {
+  const direct = await cache.match(request);
+  if (direct) return direct;
+  for (const url of SHELL_FALLBACK_URLS) {
+    const hit = await cache.match(url);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function staleWhileRevalidate(cacheName, cacheKey, networkRequest) {
+  return caches.open(cacheName).then(async (cache) => {
+    const cached = await cache.match(cacheKey);
+    const networkPromise = fetch(networkRequest)
+      .then((response) => {
+        if (response.ok) {
+          cache.put(cacheKey, response.clone());
+        }
+        return response;
+      })
+      .catch(() => null);
+
+    if (cached) {
+      return { response: cached, revalidate: networkPromise };
+    }
+
+    const network = await networkPromise;
+    return { response: network, revalidate: null };
+  });
+}
+
+async function respondWithShell(event) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await matchShellCache(cache, event.request);
+
+  const revalidate = fetch(event.request)
+    .then(async (response) => {
+      if (response.ok) {
+        await cache.put(event.request, response.clone());
+        if (event.request.url.endsWith('/')) {
+          await cache.put('/index.html', response.clone());
+        }
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    event.waitUntil(revalidate);
+    return cached;
+  }
+
+  const network = await revalidate;
+  if (network) return network;
+
+  const fallback = await matchShellCache(cache, event.request);
+  if (fallback) return fallback;
+
+  return Response.error();
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
+    caches.open(SHELL_CACHE).then(cache => {
       console.log('[SW] Pre-caching static app shell');
       return cache.addAll(STATIC_ASSETS);
     }).then(() => self.skipWaiting())
@@ -35,7 +115,8 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys => {
       return Promise.all(
         keys.map(key => {
-          if (key !== CACHE_NAME) {
+          if (key === DATA_CACHE || key === SHELL_CACHE) return;
+          if (key.startsWith('music-stats-shell-') || key.startsWith('aakashmusic-cache-')) {
             console.log('[SW] Clearing old cache:', key);
             return caches.delete(key);
           }
@@ -47,34 +128,25 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
+  const dataPath = dataPathname(requestUrl);
 
-  if (requestUrl.pathname.startsWith('/data/') && requestUrl.pathname.endsWith('.json')) {
+  if (dataPath) {
+    const cacheKey = cacheKeyForPath(dataPath);
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-          return response;
-        })
-        .catch(() => caches.match(event.request))
+      staleWhileRevalidate(DATA_CACHE, cacheKey, event.request).then(({ response, revalidate }) => {
+        if (revalidate) event.waitUntil(revalidate);
+        if (response) return response;
+        return new Response('{}', {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      })
     );
     return;
   }
 
   if (event.request.mode === 'navigate' || requestUrl.pathname === '/') {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
+    event.respondWith(respondWithShell(event));
     return;
   }
 
@@ -85,7 +157,7 @@ self.addEventListener('fetch', event => {
         return fetch(event.request).then(response => {
           if (response.status === 200 || response.status === 0) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+            caches.open(DATA_CACHE).then(cache => cache.put(event.request, clone));
           }
           return response;
         });
@@ -104,7 +176,7 @@ self.addEventListener('fetch', event => {
           (requestUrl.pathname.includes('/_astro/') || requestUrl.host.includes('fonts.gstatic.com'))
         ) {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
+          caches.open(SHELL_CACHE).then(cache => {
             cache.put(event.request, responseClone);
           });
         }

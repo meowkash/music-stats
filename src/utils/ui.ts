@@ -1,7 +1,6 @@
-declare const __CACHE_VERSION__: string | undefined;
-export const CACHE_VERSION =
-  typeof __CACHE_VERSION__ !== 'undefined' ? __CACHE_VERSION__ : 'dev';
+export { CACHE_VERSION, dataUrl, fetchAppJson } from './dataStore';
 
+import { fetchAppJson, onPathsUpdated } from './dataStore';
 import { getGlowStyle } from './theme';
 import { getStaticArtworkSources, normalizeStaticArtworkUrl, resolveArtworkFromCache, resolveArtistArtwork, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
 import { normalizeBottomColor, type Rgb } from './colorSurface';
@@ -47,30 +46,17 @@ export function escapeHTML(str: string): string {
   );
 }
 
-export function dataUrl(path: string): string {
-  const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}v=${CACHE_VERSION}`;
-}
-
 let artworkCache: Record<string, string> | null = null;
-let artworkPromise: Promise<Record<string, string>> | null = null;
 
 export async function loadArtworkCache(): Promise<Record<string, string>> {
   if (artworkCache) return artworkCache;
-  if (!artworkPromise) {
-    artworkPromise = fetch(dataUrl('/data/artwork.json'))
-      .then(res => (res.ok ? res.json() : {}))
-      .then(data => {
-        artworkCache = data;
-        return data;
-      })
-      .catch(e => {
-        console.error('Failed to load artwork.json', e);
-        artworkCache = {};
-        return {};
-      });
+  try {
+    artworkCache = await fetchAppJson<Record<string, string>>('/data/artwork.json');
+  } catch (e) {
+    console.error('Failed to load artwork.json', e);
+    artworkCache = {};
   }
-  return artworkPromise;
+  return artworkCache;
 }
 
 export function getArtworkCacheSync(): Record<string, string> | null {
@@ -80,28 +66,28 @@ export function getArtworkCacheSync(): Record<string, string> | null {
 // meta.json: eager; catalog.json (~2MB): idle preload for detail overlay
 let metaCache: { artists: string[]; albums: string[]; tracks: [string, number, number][] } | null = null;
 let catalogCache: Record<string, unknown> | null = null;
-let metaPromise: Promise<void> | null = null;
 let catalogPromise: Promise<void> | null = null;
 
 export async function loadMetaCache(): Promise<typeof metaCache> {
   if (metaCache) return metaCache;
-  if (!metaPromise) {
-    metaPromise = fetch(dataUrl('/data/meta.json'))
-      .then(r => r.json())
-      .then(meta => { metaCache = meta; })
-      .catch(e => console.error('Failed to load meta.json', e));
+  try {
+    metaCache = await fetchAppJson<{
+      artists: string[];
+      albums: string[];
+      tracks: [string, number, number][];
+    }>('/data/meta.json');
+  } catch (e) {
+    console.error('Failed to load meta.json', e);
   }
-  await metaPromise;
   return metaCache;
 }
 
 export async function loadCatalogCache(): Promise<Record<string, unknown> | null> {
   if (catalogCache) return catalogCache;
   if (!catalogPromise) {
-    catalogPromise = fetch(dataUrl('/data/catalog.json'))
-      .then(r => r.json())
-      .then(catalog => { catalogCache = catalog; })
-      .catch(e => console.error('Failed to load catalog.json', e));
+    catalogPromise = fetchAppJson<Record<string, unknown>>('/data/catalog.json')
+      .then((catalog) => { catalogCache = catalog; })
+      .catch((e) => console.error('Failed to load catalog.json', e));
   }
   await catalogPromise;
   return catalogCache;
@@ -510,13 +496,28 @@ export interface ColorEntry {
 export async function loadColorsCache() {
   if (colorsCache) return;
   if (!colorsPromise) {
-    colorsPromise = fetch(dataUrl('/data/colors.json'))
-      .then(res => res.json())
-      .then(data => { colorsCache = data; })
-      .catch(e => { console.error('Failed to load colors.json', e); colorsCache = {}; });
+    colorsPromise = fetchAppJson<Record<string, ColorEntry>>('/data/colors.json')
+      .then((data) => { colorsCache = data; })
+      .catch((e) => { console.error('Failed to load colors.json', e); colorsCache = {}; });
   }
   await colorsPromise;
 }
+
+onPathsUpdated(['/data/artwork.json'], ({ data }) => {
+  artworkCache = data as Record<string, string>;
+});
+
+onPathsUpdated(['/data/meta.json'], ({ data }) => {
+  metaCache = data as typeof metaCache;
+});
+
+onPathsUpdated(['/data/catalog.json'], ({ data }) => {
+  catalogCache = data as Record<string, unknown>;
+});
+
+onPathsUpdated(['/data/colors.json'], ({ data }) => {
+  colorsCache = data as Record<string, ColorEntry>;
+});
 
 function urlVariants(url: string): string[] {
   let cleanUrl = url;

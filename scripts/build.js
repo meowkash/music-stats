@@ -22,6 +22,7 @@ if (hasLastfm && refresh) {
   run('Backfill missing artwork', 'node', ['scripts/backfill-artwork.js']);
 }
 
+run('Generate PWA icons', 'node', ['scripts/generate-pwa-icons.js']);
 run('Generate service worker', 'node', ['scripts/generate-sw.js']);
 run(
   refresh ? 'Re-extract all colors' : 'Extract new colors',

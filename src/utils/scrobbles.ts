@@ -1,16 +1,13 @@
 import type { MetaData, YearData } from '../types/music';
-import { dataUrl } from './ui';
+import { fetchAppJson, onPathsUpdated } from './dataStore';
 
 const yearCache: Record<string, YearData> = {};
 
 export async function loadYearData(year: string): Promise<YearData | null> {
   if (yearCache[year]) return yearCache[year];
   try {
-    const res = await fetch(dataUrl(`/data/year-${year}.json`));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    yearCache[year] = data;
-    return data;
+    yearCache[year] = await fetchAppJson<YearData>(`/data/year-${year}.json`);
+    return yearCache[year];
   } catch (err) {
     console.warn(`Year data for ${year} could not be loaded:`, err);
     return null;
@@ -177,3 +174,8 @@ export function clearYearCache(): void {
     delete yearCache[key];
   }
 }
+
+onPathsUpdated([/^\/data\/year-\d+\.json$/], ({ path, data }) => {
+  const match = path.match(/^\/data\/year-(\d+)\.json$/);
+  if (match) yearCache[match[1]] = data as YearData;
+});

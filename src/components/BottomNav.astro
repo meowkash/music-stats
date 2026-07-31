@@ -2,7 +2,7 @@
 ---
 
 <nav class="bottom-nav-container">
-  <div class="main-tab-bar glass-card">
+  <div class="main-tab-bar">
     <div class="nav-slider-highlight sliding-highlight" id="navSliderHighlight"></div>
     <button class="tab-btn active" data-tab="dashboard" aria-label="Dashboard">
       <svg
@@ -74,36 +74,46 @@
 
 <style>
   .bottom-nav-container {
-    position: absolute;
-    bottom: calc(5vh - env(safe-area-inset-bottom));
+    position: fixed;
+    bottom: 0;
     left: 0;
     right: 0;
-    padding: 0 calc(16px + env(safe-area-inset-right)) 0 calc(16px + env(safe-area-inset-left));
+    padding: 0 calc(16px + env(safe-area-inset-right))
+      calc(var(--nav-bar-gap) + env(safe-area-inset-bottom))
+      calc(16px + env(safe-area-inset-left));
     z-index: var(--z-nav);
     display: flex;
     flex-direction: column;
     align-items: center;
     pointer-events: none;
-    transition: var(--transition-smooth);
   }
 
   .main-tab-bar {
     width: 100%;
     max-width: 500px;
-    height: 64px;
+    height: var(--nav-bar-height);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 24px;
-    background: rgba(10, 10, 10, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    margin-bottom: 8px;
+    border-radius: 28px;
+    /* Minimal tint — blur samples whatever is actually behind */
+    background: rgba(14, 14, 18, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
     padding: 8px;
     pointer-events: auto;
     position: relative;
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    z-index: 1;
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .main-tab-bar {
+      background: rgba(14, 14, 18, 0.92);
+    }
   }
 
   .tab-btn {
@@ -183,18 +193,18 @@
     border-radius: 16px;
     background: color-mix(
       in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 15%,
-      transparent
+      var(--hl-color, rgba(255, 255, 255, 0.25)) 12%,
+      rgba(0, 0, 0, 0.35)
     );
     border: 1px solid
       color-mix(
         in srgb,
-        var(--hl-color, rgba(255, 255, 255, 0.4)) 40%,
-        transparent
+        var(--hl-color, rgba(255, 255, 255, 0.35)) 28%,
+        rgba(255, 255, 255, 0.06)
       );
     box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.3),
-      0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 2px 10px var(--hl-glow, rgba(0, 0, 0, 0.45));
   }
 
   .tab-btn:hover {
@@ -215,12 +225,14 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 16px;
-      background: rgba(10, 10, 10, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(14, 14, 18, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.09);
       border-radius: 24px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
       pointer-events: auto;
     }
 
@@ -229,6 +241,8 @@
       background: transparent;
       border: none;
       box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
       width: 100%;
       gap: 8px;
       padding: 0;

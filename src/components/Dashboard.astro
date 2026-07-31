@@ -109,7 +109,6 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
-    margin-bottom: 24px;
   }
 
   /* Stats Grid */
@@ -472,8 +471,8 @@
     getArtworkThumbHTML,
     initArtworkImages,
     escapeHTML,
-    dataUrl,
   } from "../utils/ui";
+  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { YearlyTotals } from "../types/music";
   import { loadYearsData, aggregateTrackCounts, rollupDashboardCounts } from "../utils/scrobbles";
   import { createInfiniteScroll } from "../utils/infiniteScroll";
@@ -483,8 +482,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     async function loadDashboardStats() {
       try {
-        const res = await fetch(dataUrl("/data/yearly-totals.json"));
-        const totals: YearlyTotals = await res.json();
+        const totals = await fetchAppJson<YearlyTotals>("/data/yearly-totals.json");
 
         let totalScrobbles = 0;
         let activeDays = 0;
@@ -529,12 +527,10 @@
       if (!container) return;
 
       try {
-        const [recentRes, meta] = await Promise.all([
-          fetch(dataUrl("/data/recent.json")),
+        const [recentList, meta] = await Promise.all([
+          fetchAppJson<{ uts: number }[]>("/data/recent.json"),
           loadMetaCache(),
         ]);
-
-        const recentList: { uts: number }[] = await recentRes.json();
         const artworkCache = await loadArtworkCache();
 
         const latestTimestamp =
@@ -684,5 +680,8 @@
 
     loadDashboardStats();
     loadTopHitsCarousels();
+
+    onPathsUpdated(["/data/yearly-totals.json"], () => loadDashboardStats());
+    onPathsUpdated(["/data/recent.json", /^\/data\/year-\d+\.json$/], () => loadTopHitsCarousels());
   });
 </script>

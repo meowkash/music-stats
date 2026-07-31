@@ -351,8 +351,8 @@
     loadMetaCache,
     initArtworkImages,
     escapeHTML,
-    dataUrl,
   } from "../utils/ui";
+  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { MetaData } from "../types/music";
   import {
     loadYearsData,
@@ -393,15 +393,14 @@
     async function loadMeta() {
       if (meta) return meta;
       try {
-        const [metaResult, totalsRes] = await Promise.all([
+        const [metaResult, totals] = await Promise.all([
           loadMetaCache(),
-          fetch(dataUrl("/data/yearly-totals.json")).catch(() => null),
+          fetchAppJson<Record<string, number[]>>("/data/yearly-totals.json").catch(() => null),
         ]);
         meta = metaResult;
         artworkCache = await loadArtworkCache();
 
-        if (totalsRes && totalsRes.ok) {
-          const totals = await totalsRes.json();
+        if (totals) {
           availableYears = Object.keys(totals)
             .map((y) => parseInt(y, 10))
             .filter((y) => !isNaN(y));
@@ -620,6 +619,10 @@
 
     bindEntityClicks(listContainer);
     updateLeaderboard();
+
+    onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {
+      void loadMeta().then(() => updateLeaderboard());
+    });
 
     rangeHighlightCtrl.observe();
     subTabHighlightCtrl.observe();

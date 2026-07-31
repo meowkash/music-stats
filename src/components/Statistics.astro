@@ -375,9 +375,9 @@
     loadArtworkCache,
     loadMetaCache,
     initArtworkImages,
-    dataUrl,
     getArtworkCacheSync,
   } from "../utils/ui";
+  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
 
   import { bindEntityClicks } from "../utils/events";
   import type { YearlyTotals } from "../types/music";
@@ -422,14 +422,14 @@
 
     async function loadData() {
       try {
-        const [totalsRes, statsRes, meta] = await Promise.all([
-          fetch(dataUrl("/data/yearly-totals.json")),
-          fetch(dataUrl("/data/yearly-stats.json")),
+        const [totals, stats, meta] = await Promise.all([
+          fetchAppJson<YearlyTotals>("/data/yearly-totals.json"),
+          fetchAppJson<Record<string, unknown>>("/data/yearly-stats.json"),
           loadMetaCache(),
           loadArtworkCache(),
         ]);
-        rawTotals = await totalsRes.json();
-        rawStats = await statsRes.json();
+        rawTotals = totals;
+        rawStats = stats;
         metaDict = meta;
 
         initializeCheckboxes(rawTotals!);
@@ -924,5 +924,6 @@
 
     ensureChart();
     loadData();
+    onPathsUpdated(["/data/yearly-totals.json", "/data/yearly-stats.json"], () => loadData());
   });
 </script>
