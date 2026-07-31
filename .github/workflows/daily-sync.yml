@@ -6,7 +6,13 @@ on:
       - main
   schedule:
     - cron: '0 2 * * *' # Runs at 2:00 AM UTC every day
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      refresh_artwork_and_colors:
+        description: Force rebuild artwork and color caches
+        type: boolean
+        default: false
+        required: false
 
 jobs:
   sync_and_deploy:
@@ -53,7 +59,15 @@ jobs:
           CACHE_VERSION: ${{ github.run_number }}-${{ github.sha }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
-        run: npm run build
+          REFRESH_MEDIA: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.refresh_artwork_and_colors == 'true' }}
+        run: |
+          if [ "$REFRESH_MEDIA" = "true" ]; then
+            echo "Running full artwork + color cache refresh (build:refresh)"
+            npm run build:refresh
+          else
+            echo "Running incremental build (backfill missing artwork + new colors only)"
+            npm run build
+          fi
 
       - name: Upload Updated Database back to Cloudflare R2
         env:
