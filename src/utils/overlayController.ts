@@ -116,7 +116,7 @@ export function initDetailOverlay(): void {
 
   const contentRegions = [overlayHeaderContent, overlayContentWrapper];
   let currentEntity: { type: string; id: number; artistCatalog?: ArtistCatalogKey } | null = null;
-  const navHistory: { type: string; id: number }[] = [];
+  const navHistory: { type: string; id: number; artistCatalog?: ArtistCatalogKey }[] = [];
 
   function closeDetails() {
     panel.classList.remove('visible');
@@ -202,7 +202,7 @@ export function initDetailOverlay(): void {
     await populateOverlay(type, id, data.meta, data.catalog, {
       elements,
       artworkCache,
-      onNavigate: (t, i) => openDetails(t, i, false, artistCatalog),
+      onNavigate: (t, i, catalog) => openDetails(t, i, false, catalog),
       animate: false,
       scrollContainer: overlayScrollContainer,
       panel,
@@ -212,7 +212,7 @@ export function initDetailOverlay(): void {
   overlayCloseBtn.addEventListener('click', () => {
     if (navHistory.length > 0) {
       const prev = navHistory.pop()!;
-      openDetails(prev.type, prev.id, true);
+      openDetails(prev.type, prev.id, true, prev.artistCatalog);
     } else {
       closeDetails();
     }
@@ -232,7 +232,7 @@ export function initDetailOverlay(): void {
     onDismiss: closeDetails,
   });
 
-  bindOverlayClicks(panel, openDetails);
+  bindOverlayClicks(panel, (type, id, catalog) => openDetails(type, id, false, catalog));
   onEntityDetails(({ type, id, artistCatalog }) => openDetails(type, id, false, artistCatalog));
 
   // iOS text autosizing can cache inflated sizes across rotation when the

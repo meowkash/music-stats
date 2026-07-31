@@ -68,6 +68,22 @@ function artistDisplayName(meta: MetaData, artistId: number, mode: ArtistRollupM
   return meta.artists[artistId];
 }
 
+/** Raw scrobble artist strings that map to a canonical artist ID. */
+export function rawArtistNamesForCanonical(canonicalId: number, meta: MetaData): string[] {
+  const names: string[] = [];
+  const mapping = meta.rawToCanonical;
+  if (!mapping) return names;
+
+  for (let rawId = 0; rawId < mapping.length; rawId++) {
+    const targets = mapping[rawId];
+    if (!targets?.includes(canonicalId)) continue;
+    const name = meta.artists[rawId];
+    if (name) names.push(name);
+  }
+
+  return names;
+}
+
 export function aggregateTrackCounts(
   years: string[],
   startStr: string,
@@ -202,7 +218,7 @@ export function rollupDashboardCounts(
     albums: Object.entries(albumCounts)
       .map(([id, data]) => ({
         id: parseInt(id, 10),
-        name: meta.albums[id],
+        name: meta.albums[parseInt(id, 10)],
         artistName: meta.artists[data.artistId],
         artistId: data.artistId,
         count: data.count,

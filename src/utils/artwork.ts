@@ -126,6 +126,21 @@ export function resolveArtworkFromCache(
   return null;
 }
 
+/** Try artist artwork for each name in order (canonical display + raw spellings). */
+export function resolveArtistArtworkFromCandidates(
+  names: string[],
+  cache: Record<string, string>,
+): string | null {
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const url = resolveArtistArtwork(name, cache);
+    if (url) return url;
+  }
+  return null;
+}
+
 /** Artist artwork: direct key → any cached album for this artist. */
 export function resolveArtistArtwork(
   name: string,
@@ -151,7 +166,29 @@ export function resolveArtistArtwork(
   return null;
 }
 
-/** Track artwork: exact track → artist → album (same-type legacy keys only). */
+/** Album artwork: exact artist match, then any cached artist for this album name. */
+export function resolveAlbumArtwork(
+  albumName: string,
+  artistName: string,
+  cache: Record<string, string>,
+): string | null {
+  const direct = resolveArtworkFromCache('album', albumName, artistName, cache);
+  if (direct) return direct;
+
+  const prefix = `album:${albumName}|`;
+  for (const [key, url] of Object.entries(cache)) {
+    if (key.startsWith(prefix)) return url;
+  }
+
+  const legacyPrefix = `${albumName}|`;
+  for (const [key, url] of Object.entries(cache)) {
+    if (!key.includes(':') && key.startsWith(legacyPrefix)) return url;
+  }
+
+  return null;
+}
+
+/** Track artwork: exact track → album → artist (broad fallback last). */
 export function resolveTrackArtwork(
   name: string,
   artistName: string,
@@ -160,7 +197,7 @@ export function resolveTrackArtwork(
 ): string | null {
   return (
     resolveArtworkFromCache('track', name, artistName, cache) ??
-    resolveArtistArtwork(artistName, cache) ??
-    (albumName ? resolveArtworkFromCache('album', albumName, artistName, cache) : null)
+    (albumName ? resolveAlbumArtwork(albumName, artistName, cache) : null) ??
+    resolveArtistArtwork(artistName, cache)
   );
 }

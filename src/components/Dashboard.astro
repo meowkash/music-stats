@@ -465,6 +465,7 @@
 <script>
   import {
     getArtworkUrl,
+    getArtistArtworkUrl,
     getColorForUrl,
     loadArtworkCache,
     loadMetaCache,
@@ -474,7 +475,7 @@
   } from "../utils/ui";
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { YearlyTotals } from "../types/music";
-  import { loadYearsData, aggregateTrackCounts, rollupDashboardCounts } from "../utils/scrobbles";
+  import { loadYearsData, aggregateTrackCounts, rollupDashboardCounts, rawArtistNamesForCanonical } from "../utils/scrobbles";
   import { createInfiniteScroll } from "../utils/infiniteScroll";
   import { getGlowStyle } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
@@ -531,6 +532,10 @@
           fetchAppJson<{ uts: number }[]>("/data/recent.json"),
           loadMetaCache(),
         ]);
+        if (!meta) {
+          container.innerHTML = '<div class="no-data-message">Failed to load carousels</div>';
+          return;
+        }
         const artworkCache = await loadArtworkCache();
 
         const latestTimestamp =
@@ -569,7 +574,7 @@
         ): string {
           const img =
             type === "artist"
-              ? getArtworkUrl("artist", item.name, item.name, "", artworkCache)
+              ? getArtistArtworkUrl(item.name, artworkCache, rawArtistNamesForCanonical(item.id, meta))
               : type === "track"
                 ? getArtworkUrl("track", item.name, item.artistName!, item.albumName!, artworkCache)
                 : getArtworkUrl("album", item.name, item.artistName!, item.name, artworkCache);
@@ -579,13 +584,14 @@
           const playsStyle = colorObj ? getGlowStyle(colorObj, { blur: 8, alpha: 0.4, weight: 800 }) : "";
           const shape = type === "artist" ? "circle" : "square";
           const entityType = type === "track" ? "track" : type;
+          const catalogAttr = type === "artist" ? ` data-artist-catalog="canonicalArtists"` : "";
           const subtitle =
             type === "artist"
               ? ""
               : `<span class="carousel-item-subtitle">${escapeHTML(item.artistName || "")}</span>`;
 
           return `
-            <div class="carousel-item clickable-entity" data-type="${entityType}" data-id="${item.id}">
+            <div class="carousel-item clickable-entity" data-type="${entityType}" data-id="${item.id}"${catalogAttr}>
               <div class="carousel-artwork-wrapper ${shape}">
                 <div class="carousel-rank-badge" style="${rankStyleFor(idx)}">${idx + 1}</div>
                 ${thumb}

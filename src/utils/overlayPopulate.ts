@@ -3,6 +3,7 @@ import {
   escapeHTML,
   generateScrobbleRowHTML,
   getArtworkUrl,
+  getArtistArtworkUrl,
   getArtworkThumbHTML,
   getArtworkFallbackHTML,
   getArtworkFallbackIcon,
@@ -12,6 +13,7 @@ import {
   initOverlayAlbumArtwork,
 } from './ui';
 import { getGlowStyle } from './theme';
+import type { ArtistCatalogKey } from './events';
 import {
   crossfadeOverlayArtwork,
   crossfadeOverlayVisuals,
@@ -42,7 +44,7 @@ export interface OverlayElements {
 export interface PopulateContext {
   elements: OverlayElements;
   artworkCache: Record<string, string>;
-  onNavigate: (type: string, id: number) => void;
+  onNavigate: (type: string, id: number, artistCatalog?: ArtistCatalogKey) => void;
   animate?: boolean;
   scrollContainer?: HTMLElement;
   panel?: HTMLElement;
@@ -56,8 +58,20 @@ export interface OverlayPayload {
   subtitleHtml: string;
   metadataStr: string;
   sortedTracks: { name: string; count: number }[] | null;
-  albumsToRender: { id: number; name: string; scrobbles: number }[];
+  albumsToRender: { id: number; name: string; scrobbles: number; artistName?: string }[];
   artistNameForArtworkLookup: string;
+}
+
+
+function enrichAlbumsForArtwork(
+  albums: { id: number; name: string; scrobbles: number }[],
+  catalogData: Record<string, any>,
+  fallbackArtist: string,
+) {
+  return albums.map((alb) => ({
+    ...alb,
+    artistName: catalogData.albums?.[alb.id]?.artistName ?? fallbackArtist,
+  }));
 }
 
 const NEUTRAL_OVERLAY_COLORS: OverlayColorPair = {
@@ -90,7 +104,7 @@ export function buildOverlayPayload(
   let imgUrl: string | null = null;
   let metadataStr = '';
   let sortedTracks: { name: string; count: number }[] | null = [];
-  let albumsToRender: { id: number; name: string; scrobbles: number }[] = [];
+  let albumsToRender: { id: number; name: string; scrobbles: number; artistName?: string }[] = [];
   let artistNameForArtworkLookup = '';
   let artistId = 0;
   let albumId = 0;
@@ -103,9 +117,12 @@ export function buildOverlayPayload(
       : (artistCatalog === 'canonicalArtists'
         ? dictionary.canonicalArtists?.[id]
         : dictionary.artists[id]) ?? dictionary.artists[id] ?? 'Unknown Artist';
-    imgUrl = getArtworkUrl('artist', name, name, '', artworkCache);
     sortedTracks = artistInfo ? artistInfo.tracks : [];
-    albumsToRender = artistInfo ? artistInfo.albums : [];
+    albumsToRender = artistInfo ? enrichAlbumsForArtwork(artistInfo.albums, catalogData, name) : [];
+    const artworkFallbackNames = artistCatalog === 'canonicalArtists'
+      ? albumsToRender.map((alb) => alb.artistName).filter((n): n is string => Boolean(n))
+      : [];
+    imgUrl = getArtistArtworkUrl(name, artworkCache, artworkFallbackNames);
     artistNameForArtworkLookup = name;
     metadataStr = `${sortedTracks.length} Songs • ${(artistInfo?.scrobbles ?? 0).toLocaleString()} Plays`;
   } else if (type === 'album') {
@@ -124,7 +141,11 @@ export function buildOverlayPayload(
     if (artistId) {
       const artistInfo = catalogData.artists[artistId];
       if (artistInfo?.albums) {
-        albumsToRender = artistInfo.albums.filter((alb: any) => alb.id !== id);
+        albumsToRender = enrichAlbumsForArtwork(
+          artistInfo.albums.filter((alb: any) => alb.id !== id),
+          catalogData,
+          subtitle,
+        );
       }
     }
   } else if (type === 'track') {
@@ -141,7 +162,7 @@ export function buildOverlayPayload(
     metadataStr = `Song • ${(catalogData.tracks[id] || 0).toLocaleString()} Plays`;
     const artistInfo = catalogData.artists[artistId];
     if (artistInfo?.albums) {
-      albumsToRender = artistInfo.albums;
+      albumsToRender = enrichAlbumsForArtwork(artistInfo.albums, catalogData, artistName);
     }
   }
 
@@ -150,11 +171,11 @@ export function buildOverlayPayload(
 
   let subtitleHtml = '';
   if (type === 'album') {
-    subtitleHtml = `<span class="clickable-entity overlay-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(subtitle)}</span>`;
+    subtitleHtml = `<span class="clickable-entity overlay-link" data-type="artist" data-id="${artistId}" data-artist-catalog="artists" style="${linkStyle}">${escapeHTML(subtitle)}</span>`;
   } else if (type === 'track') {
     const artistName = dictionary.artists[artistId] || 'Unknown Artist';
     const albumName = dictionary.albums[albumId] || 'Unknown Album';
-    subtitleHtml = `<span class="clickable-entity overlay-link" data-type="album" data-id="${albumId}" style="${linkStyle}">${escapeHTML(albumName)}</span> <span style="color: var(--text-primary); opacity: 0.4; margin: 0 4px;">•</span> <span class="clickable-entity overlay-link" data-type="artist" data-id="${artistId}" style="${linkStyle}">${escapeHTML(artistName)}</span>`;
+    subtitleHtml = `<span class="clickable-entity overlay-link" data-type="album" data-id="${albumId}" style="${linkStyle}">${escapeHTML(albumName)}</span> <span style="color: var(--text-primary); opacity: 0.4; margin: 0 4px;">•</span> <span class="clickable-entity overlay-link" data-type="artist" data-id="${artistId}" data-artist-catalog="artists" style="${linkStyle}">${escapeHTML(artistName)}</span>`;
   }
 
   return {
@@ -337,7 +358,7 @@ function populateTrackList(
 
 function populateAlbums(
   type: string,
-  albumsToRender: { id: number; name: string; scrobbles: number }[],
+  albumsToRender: { id: number; name: string; scrobbles: number; artistName?: string }[],
   artistNameForArtworkLookup: string,
   ctx: {
     overlayAlbumsSection: HTMLElement;
@@ -359,7 +380,8 @@ function populateAlbums(
 
   overlayAlbumsList.innerHTML = albumsToRender
     .map((alb) => {
-      const albImg = getArtworkUrl('album', alb.name, artistNameForArtworkLookup, alb.name, artworkCache);
+      const albumArtist = alb.artistName ?? artistNameForArtworkLookup;
+      const albImg = getArtworkUrl('album', alb.name, albumArtist, alb.name, artworkCache);
       const thumbHtml = getArtworkThumbHTML(albImg, 'album', { shimmer: false });
       return `
         <div class="overlay-album-card clickable-entity" data-type="album" data-id="${alb.id}">
@@ -376,7 +398,7 @@ export { initOverlayAlbumArtwork };
 
 export function bindOverlayClicks(
   panel: HTMLElement,
-  onNavigate: (type: string, id: number) => void,
+  onNavigate: (type: string, id: number, artistCatalog?: ArtistCatalogKey) => void,
 ): void {
   panel.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
@@ -387,7 +409,10 @@ export function bindOverlayClicks(
     const entityType = entity.getAttribute('data-type');
     const entityId = parseInt(entity.getAttribute('data-id') || '0', 10);
     if (entityType && entityId) {
-      onNavigate(entityType, entityId);
+      const catalog = entity.getAttribute('data-artist-catalog');
+      const artistCatalog =
+        catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined;
+      onNavigate(entityType, entityId, artistCatalog);
     }
   });
 }

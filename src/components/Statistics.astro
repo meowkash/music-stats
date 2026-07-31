@@ -372,6 +372,7 @@
     generateScrobbleRowHTML,
     applyCountGlows,
     getArtworkUrl,
+    getArtistArtworkUrl,
     loadArtworkCache,
     loadMetaCache,
     initArtworkImages,
@@ -381,6 +382,7 @@
 
   import { bindEntityClicks } from "../utils/events";
   import type { YearlyTotals } from "../types/music";
+  import { rawArtistNamesForCanonical } from "../utils/scrobbles";
 
   document.addEventListener("DOMContentLoaded", () => {
     let rawStats: Record<string, unknown> | null = null;
@@ -674,6 +676,8 @@
             let imgUrl = null;
             let rowType = "artist";
 
+            let rowArtistCatalog: "artists" | "canonicalArtists" | undefined;
+
             if (type === "tracks" && metaDict.tracks[id]) {
               name = metaDict.tracks[id][0];
               const artistId = metaDict.tracks[id][1];
@@ -709,11 +713,16 @@
                 imgUrl = getArtworkUrl("album", name, "", name, cache);
               }
               rowType = "album";
-            } else if (type === "artists" && metaDict.artists[id]) {
-              name = metaDict.artists[id];
+            } else if (type === "artists" && metaDict.canonicalArtists?.[id]) {
+              name = metaDict.canonicalArtists[id];
               subtitle = "Artist";
               rowType = "artist";
-              imgUrl = getArtworkUrl("artist", name, name, "", cache);
+              rowArtistCatalog = "canonicalArtists";
+              imgUrl = getArtistArtworkUrl(
+                name,
+                cache,
+                rawArtistNamesForCanonical(id, metaDict),
+              );
             }
 
             const idStr = id.toString();
@@ -726,6 +735,7 @@
                 subtitle: subtitle,
                 imgUrl: imgUrl || null,
                 count: count,
+                artistCatalog: rowArtistCatalog,
               },
               false,
             );

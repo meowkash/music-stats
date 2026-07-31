@@ -460,6 +460,7 @@
     generateScrobbleRowHTML,
     applyCountGlows,
     getArtworkUrl,
+    getArtistArtworkUrl,
     loadArtworkCache,
     loadMetaCache,
     initArtworkImages,
@@ -472,6 +473,7 @@
     getYearsInRange,
     aggregateTrackCounts,
     rollupByCategory,
+    rawArtistNamesForCanonical,
     type ArtistRollupMode,
   } from "../utils/scrobbles";
   import { createInfiniteScroll } from "../utils/infiniteScroll";
@@ -548,7 +550,7 @@
             <span class="scrobble-row-subtitle">
               <span class="clickable-entity" data-type="album" data-id="${item.albumId}">${escapeHTML(item.albumName || "")}</span>
               • 
-              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.artistName || "")}</span>
+              <span class="clickable-entity" data-type="artist" data-id="${item.artistId}" data-artist-catalog="artists">${escapeHTML(item.artistName || "")}</span>
             </span>`;
       } else if (activeTab === "albums") {
         imgUrl = getArtworkUrl("album", item.name, item.subtitle || "", item.name, artworkCache);
@@ -556,9 +558,13 @@
         rowId = item.id;
         infoHtml = `
             <span class="scrobble-row-title">${escapeHTML(item.name)}</span>
-            <span class="scrobble-row-subtitle clickable-entity" data-type="artist" data-id="${item.artistId}">${escapeHTML(item.subtitle || "")}</span>`;
+            <span class="scrobble-row-subtitle clickable-entity" data-type="artist" data-id="${item.artistId}" data-artist-catalog="artists">${escapeHTML(item.subtitle || "")}</span>`;
       } else {
-        imgUrl = getArtworkUrl("artist", item.name, item.name, "", artworkCache);
+        const artistFallbacks =
+          artistRankingMode === "canonical" && meta
+            ? rawArtistNamesForCanonical(item.id, meta)
+            : [];
+        imgUrl = getArtistArtworkUrl(item.name, artworkCache, artistFallbacks);
         rowType = "artist";
         rowId = item.id;
         infoHtml = `

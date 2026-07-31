@@ -2,7 +2,7 @@ export { CACHE_VERSION, dataUrl, fetchAppJson } from './dataStore';
 
 import { fetchAppJson, onPathsUpdated } from './dataStore';
 import { getGlowStyle } from './theme';
-import { getStaticArtworkSources, normalizeStaticArtworkUrl, resolveArtworkFromCache, resolveArtistArtwork, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
+import { getStaticArtworkSources, normalizeStaticArtworkUrl, resolveAlbumArtwork, resolveArtistArtwork, resolveArtistArtworkFromCandidates, resolveArtworkFromCache, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
 import { normalizeBottomColor, type Rgb } from './colorSurface';
 
 export interface ScrobbleRowData {
@@ -126,7 +126,17 @@ export function getArtworkUrl(
   if (type === 'artist') {
     return resolveArtistArtwork(name, c);
   }
+  if (type === 'album') return resolveAlbumArtwork(name, artistName, c);
   return resolveArtworkFromCache(type as ArtworkEntityType, name, artistName, c);
+}
+
+export function getArtistArtworkUrl(
+  name: string,
+  cache?: Record<string, string>,
+  fallbackNames: string[] = [],
+): string | null {
+  const c = cache || artworkCache || {};
+  return resolveArtistArtworkFromCandidates([name, ...fallbackNames], c);
 }
 
 export function getArtworkThumbHTML(
