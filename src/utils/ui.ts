@@ -16,6 +16,7 @@ export interface ScrobbleRowData {
   color?: string;
   infoHtml?: string;
   showThumb?: boolean;
+  artistCatalog?: 'artists' | 'canonicalArtists';
 }
 
 const TRACK_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
@@ -470,8 +471,9 @@ export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean
 
   const clickableClass = data.type && data.id !== undefined ? ' clickable-entity' : '';
 
+  const catalogAttr = data.artistCatalog ? ` data-artist-catalog="${data.artistCatalog}"` : '';
   return `
-    <div class="scrobble-row${clickableClass}" data-type="${escapeHTML(data.type)}" data-id="${data.id}">
+    <div class="scrobble-row${clickableClass}" data-type="${escapeHTML(data.type)}" data-id="${data.id}"${catalogAttr}>
       ${rankHtml}
       ${showThumb ? `<div class="scrobble-row-thumb">${thumbContent}</div>` : ''}
       <div class="scrobble-row-info">${infoBlock}</div>

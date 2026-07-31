@@ -29,6 +29,7 @@ AGENTS.md
 
 /public/data
 /src/data/
+!src/data/artist-overrides.json
 
 # generated at build time by scripts/generate-sw.js
 /public/sw.js

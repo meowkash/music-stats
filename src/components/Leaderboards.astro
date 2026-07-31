@@ -32,33 +32,50 @@
   </div>
 
   <!-- Sub-Tabs (Songs, Albums, Artists) -->
-  <div class="leaderboard-tabs" style="position: relative;">
-    <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight"></div>
-    <button class="sub-tab-btn active" data-tab="songs">Songs</button>
-    <button class="sub-tab-btn" data-tab="albums">Albums</button>
-    <button class="sub-tab-btn" data-tab="artists">Artists</button>
+  <div class="leaderboard-tabs">
+    <div class="leaderboard-tab-group" style="position: relative;">
+      <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight"></div>
+      <button class="sub-tab-btn active" data-tab="songs">Songs</button>
+      <button class="sub-tab-btn" data-tab="albums">Albums</button>
+      <button class="sub-tab-btn" data-tab="artists">Artists</button>
+    </div>
   </div>
 
-  <!-- Search / Filter bar inside leaderboard -->
-  <div class="search-bar-wrapper">
-    <svg
-      class="search-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <circle cx="11" cy="11" r="8"></circle>
-      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-    </svg>
-    <input
-      type="text"
-      id="leaderboardSearch"
-      class="glass-input search-input"
-      placeholder="Search entries..."
-    />
+  <!-- Search + artist mode toggle -->
+  <div class="search-bar-row">
+    <div class="search-bar-wrapper">
+      <svg
+        class="search-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input
+        type="text"
+        id="leaderboardSearch"
+        class="glass-input search-input"
+        placeholder="Search entries..."
+      />
+    </div>
+    <div class="artist-ranking-toggle hidden" id="artistRankingToggle">
+      <span class="unified-label">Unified</span>
+      <button
+        type="button"
+        class="toggle-switch active"
+        id="artistRankingSwitch"
+        role="switch"
+        aria-checked="true"
+        aria-label="Unified artist rankings"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </div>
   </div>
 
   <!-- Leaderboard List -->
@@ -76,6 +93,110 @@
 <style>
   .leaderboard-container {
     /* panel-container handles layout */
+  }
+
+  .leaderboard-tab-group {
+    display: flex;
+    position: relative;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .search-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .search-bar-row .search-bar-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .artist-ranking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+
+  .artist-ranking-toggle.hidden {
+    display: none;
+  }
+
+  .unified-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    transition: color 0.2s ease;
+  }
+
+  .artist-ranking-toggle:has(.toggle-switch.active) .unified-label {
+    color: #fff;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  .toggle-switch.active {
+    background: rgba(249, 115, 22, 0.35);
+    border-color: rgba(249, 115, 22, 0.55);
+  }
+
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease;
+  }
+
+  .toggle-switch.active .toggle-knob {
+    transform: translateX(18px);
+  }
+
+  @media (min-width: 768px) {
+    .artist-ranking-toggle {
+      gap: 10px;
+    }
+
+    .unified-label {
+      font-size: 15px;
+    }
+
+    .toggle-switch {
+      width: 52px;
+      height: 30px;
+    }
+
+    .toggle-knob {
+      width: 22px;
+      height: 22px;
+      top: 3px;
+      left: 3px;
+    }
+
+    .toggle-switch.active .toggle-knob {
+      transform: translateX(22px);
+    }
   }
 
 
@@ -161,7 +282,7 @@
   }
 
   .date-input-group label {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -174,14 +295,6 @@
   }
 
   /* Sub tabs */
-  .leaderboard-tabs {
-    display: flex;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 4px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
   .sub-tab-btn {
     position: relative;
     z-index: 2;
@@ -359,6 +472,7 @@
     getYearsInRange,
     aggregateTrackCounts,
     rollupByCategory,
+    type ArtistRollupMode,
   } from "../utils/scrobbles";
   import { createInfiniteScroll } from "../utils/infiniteScroll";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
@@ -372,6 +486,9 @@
 
     let activeTab = "songs";
     let activeRange = "7d";
+    const ARTIST_MODE_KEY = "artistRankingMode";
+    let artistRankingMode: ArtistRollupMode =
+      (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw" ? "raw" : "canonical";
     const CHUNK_SIZE = 50;
     let fullItemsList: ReturnType<typeof rollupByCategory> = [];
     let searchQuery = "";
@@ -382,6 +499,9 @@
     const startDateInput = document.getElementById("startDate") as HTMLInputElement;
     const endDateInput = document.getElementById("endDate") as HTMLInputElement;
     const searchInput = document.getElementById("leaderboardSearch") as HTMLInputElement;
+    const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
+    const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
+
     const scrollRoot = listContainer.closest(".panel-section") as HTMLElement | null;
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -446,6 +566,13 @@
             <span class="scrobble-row-subtitle"></span>`;
       }
 
+      const artistCatalog =
+        rowType === "artist"
+          ? artistRankingMode === "raw"
+            ? "artists"
+            : "canonicalArtists"
+          : undefined;
+
       return generateScrobbleRowHTML(
         {
           type: rowType,
@@ -456,6 +583,7 @@
           infoHtml,
           imgUrl: imgUrl || null,
           count: item.count,
+          artistCatalog,
         },
         true,
       );
@@ -520,7 +648,9 @@
 
       const trackCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
       const category = activeTab === "songs" ? "tracks" : activeTab === "albums" ? "albums" : "artists";
-      let itemsList = rollupByCategory(trackCounts, dictionary, category);
+      let itemsList = rollupByCategory(trackCounts, dictionary, category, {
+        artistMode: category === "artists" ? artistRankingMode : undefined,
+      });
 
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -557,7 +687,7 @@
 
     const subTabHighlightCtrl = createSlidingHighlight({
       highlightEl: subTabHighlight,
-      buttons: document.querySelectorAll(".sub-tab-btn"),
+      buttons: document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
       colorMap: (btn) => {
         const tabName = btn.getAttribute("data-tab") || "";
         return getCategoryAccent(tabName);
@@ -596,16 +726,36 @@
       if (activeRange === "custom") updateLeaderboard();
     });
 
-    document.querySelectorAll(".sub-tab-btn").forEach((btn) => {
+    function syncArtistRankingToggle() {
+      const isArtists = activeTab === "artists";
+      artistRankingToggle.classList.toggle("hidden", !isArtists);
+      const isUnified = artistRankingMode === "canonical";
+      artistRankingSwitch.classList.toggle("active", isUnified);
+      artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
+    }
+
+    function setArtistRankingMode(mode: ArtistRollupMode) {
+      artistRankingMode = mode;
+      localStorage.setItem(ARTIST_MODE_KEY, mode);
+      syncArtistRankingToggle();
+      if (activeTab === "artists") updateLeaderboard();
+    }
+
+    artistRankingSwitch.addEventListener("click", () => {
+      setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
+    });
+
+    document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tab = btn.getAttribute("data-tab");
         if (!tab) return;
 
-        document.querySelectorAll(".sub-tab-btn").forEach((b) => b.classList.remove("active"));
+        document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         subTabHighlightCtrl.sync(btn as HTMLElement);
 
         activeTab = tab;
+        syncArtistRankingToggle();
         updateLeaderboard();
       });
     });
@@ -618,6 +768,7 @@
     });
 
     bindEntityClicks(listContainer);
+    syncArtistRankingToggle();
     updateLeaderboard();
 
     onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {

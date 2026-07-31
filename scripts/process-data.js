@@ -1,3 +1,4 @@
+import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -73,6 +74,7 @@ function main() {
   const dailyRecords = {};
 
   const artistCounts = [];
+  const canonicalArtistCounts = [];
   const trackCounts = [];
   let totalScrobbles = 0;
 
@@ -133,9 +135,20 @@ function main() {
 
   console.log(`Parsed database. Unique artists: ${artists.length}, Unique albums: ${albums.length}, Unique tracks: ${tracks.length}`);
 
+  const overrides = loadOverrides();
+  const { canonicalArtists, rawToCanonical, trackToCanonical, parseReport } = buildArtistAttribution(artists, overrides, artistCounts, tracks, trackCounts);
+  console.log(`Built canonical artist graph: ${canonicalArtists.length} canonical entities`);
+
+  for (let trackId = 0; trackId < tracks.length; trackId++) {
+    const count = trackCounts[trackId] || 0;
+    if (count === 0) continue;
+    const artistId = tracks[trackId][1];
+    addTrackCanonicalCredits(canonicalArtistCounts, trackId, artistId, count, trackToCanonical, rawToCanonical);
+  }
+
   // Write meta.json
   const metaPath = path.join(PUBLIC_DATA_DIR, 'meta.json');
-  fs.writeFileSync(metaPath, JSON.stringify({ artists, albums, tracks }), 'utf-8');
+  fs.writeFileSync(metaPath, JSON.stringify({ artists, albums, tracks, canonicalArtists, rawToCanonical, trackToCanonical }), 'utf-8');
   console.log(`Wrote dictionary metadata to ${metaPath}`);
 
   // Group daily records by year
@@ -165,7 +178,9 @@ function main() {
         
         // Aggregate yearly stats
         yearlyStats[yearStr].tracks[trackId] = (yearlyStats[yearStr].tracks[trackId] || 0) + count;
-        yearlyStats[yearStr].artists[artistId] = (yearlyStats[yearStr].artists[artistId] || 0) + count;
+        for (const cId of trackToCanonical[trackId] ?? rawToCanonical[artistId] ?? [artistId]) {
+          yearlyStats[yearStr].artists[cId] = (yearlyStats[yearStr].artists[cId] || 0) + count;
+        }
         // Only count valid albums (not empty)
         if (albums[albumId] !== "") {
           yearlyStats[yearStr].albums[albumId] = (yearlyStats[yearStr].albums[albumId] || 0) + count;
@@ -264,9 +279,9 @@ function main() {
 
   // Calculate Highlights
   let bestArtistId = -1, bestArtistCount = 0;
-  for (let i = 0; i < artistCounts.length; i++) {
-    if ((artistCounts[i] || 0) > bestArtistCount) {
-      bestArtistCount = artistCounts[i];
+  for (let i = 0; i < canonicalArtistCounts.length; i++) {
+    if ((canonicalArtistCounts[i] || 0) > bestArtistCount) {
+      bestArtistCount = canonicalArtistCounts[i];
       bestArtistId = i;
     }
   }
@@ -281,7 +296,7 @@ function main() {
 
   const highlights = {
     totalScrobbles,
-    topArtist: bestArtistId >= 0 ? artists[bestArtistId] : null,
+    topArtist: bestArtistId >= 0 ? canonicalArtists[bestArtistId] : null,
     topArtistPlays: bestArtistCount,
     topTrack: bestTrackId >= 0 ? tracks[bestTrackId][0] : null,
     topTrackArtist: bestTrackId >= 0 ? artists[tracks[bestTrackId][1]] : null,
@@ -308,6 +323,7 @@ function main() {
     const [trackName, artistId, albumId] = tracks[tId];
     const count = trackCounts[tId] || 0;
     if (count === 0) continue;
+    if (albums[albumId] === '') continue;
 
     albumArtistId[albumId] = artistId;
     albumScrobbles[albumId] = (albumScrobbles[albumId] || 0) + count;
@@ -332,23 +348,19 @@ function main() {
     };
   }
 
-  const artistTrackCounts = {}; // artistId -> array of { name, count }
-  const artistAlbums = {}; // artistId -> Set of albumIds
+  const artistTrackCounts = {};
+  const artistAlbums = {};
 
   for (let tId = 0; tId < tracks.length; tId++) {
     const [trackName, artistId, albumId] = tracks[tId];
     const count = trackCounts[tId] || 0;
     if (count === 0) continue;
 
-    if (!artistTrackCounts[artistId]) {
-      artistTrackCounts[artistId] = [];
-    }
+    if (!artistTrackCounts[artistId]) artistTrackCounts[artistId] = [];
     artistTrackCounts[artistId].push({ name: trackName, count });
 
-    if (!artistAlbums[artistId]) {
-      artistAlbums[artistId] = new Set();
-    }
-    if (albumId !== undefined && albumId !== null && albumId !== 0) {
+    if (!artistAlbums[artistId]) artistAlbums[artistId] = new Set();
+    if (albumId !== undefined && albumId !== null && albumId !== 0 && albums[albumId] !== '') {
       artistAlbums[artistId].add(albumId);
     }
   }
@@ -357,18 +369,57 @@ function main() {
     const count = artistCounts[artistId] || 0;
     if (count === 0) continue;
 
-    const artTracks = artistTrackCounts[artistId] || [];
-    artTracks.sort((a, b) => b.count - a.count);
-
+    const artTracks = (artistTrackCounts[artistId] || []).sort((a, b) => b.count - a.count);
     const artAlbs = Array.from(artistAlbums[artistId] || []);
-    artAlbs.sort((a, b) => {
-      const aScrobbles = albumScrobbles[a] || 0;
-      const bScrobbles = albumScrobbles[b] || 0;
-      return bScrobbles - aScrobbles;
-    });
+    artAlbs.sort((a, b) => (albumScrobbles[b] || 0) - (albumScrobbles[a] || 0));
 
     catalog.artists[artistId] = {
       name: artists[artistId],
+      scrobbles: count,
+      tracks: artTracks,
+      albums: artAlbs.map(albId => ({
+        id: albId,
+        name: albums[albId],
+        scrobbles: albumScrobbles[albId] || 0
+      }))
+    };
+  }
+
+  const canonicalTrackCounts = {};
+  const canonicalAlbumSets = {};
+
+  for (let tId = 0; tId < tracks.length; tId++) {
+    const [trackName, artistId, albumId] = tracks[tId];
+    const count = trackCounts[tId] || 0;
+    if (count === 0) continue;
+
+    const creditedIds = trackToCanonical[tId] ?? rawToCanonical[artistId] ?? [artistId];
+    for (const cId of creditedIds) {
+      if (!canonicalTrackCounts[cId]) canonicalTrackCounts[cId] = {};
+      canonicalTrackCounts[cId][trackName] = (canonicalTrackCounts[cId][trackName] || 0) + count;
+
+      if (!canonicalAlbumSets[cId]) canonicalAlbumSets[cId] = new Set();
+      if (albumId !== undefined && albumId !== null && albumId !== 0 && albums[albumId] !== '') {
+        canonicalAlbumSets[cId].add(albumId);
+      }
+    }
+  }
+
+  catalog.canonicalArtists = {};
+  for (let cId = 0; cId < canonicalArtists.length; cId++) {
+    const count = canonicalArtistCounts[cId] || 0;
+    if (count === 0) continue;
+
+    const trackMap = canonicalTrackCounts[cId] || {};
+    const artTracks = Object.entries(trackMap)
+      .map(([name, trackCount]) => ({ name, count: trackCount }))
+      .sort((a, b) => b.count - a.count);
+
+    const artAlbs = Array.from(canonicalAlbumSets[cId] || []);
+    artAlbs.sort((a, b) => (albumScrobbles[b] || 0) - (albumScrobbles[a] || 0));
+
+    catalog.canonicalArtists[cId] = {
+      name: canonicalArtists[cId],
       scrobbles: count,
       tracks: artTracks,
       albums: artAlbs.map(albId => ({

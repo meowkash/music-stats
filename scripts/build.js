@@ -13,6 +13,7 @@ function run(label, command, args = []) {
 
 console.log(refresh ? 'Building with media refresh (artwork + colors)' : 'Building');
 
+run('Bootstrap artist overrides', 'node', ['scripts/bootstrap-artist-overrides.js']);
 run('Process scrobbles → JSON', 'node', ['scripts/process-data.js']);
 
 const hasLastfm = process.env.LASTFM_API_KEY && process.env.LASTFM_USERNAME;

@@ -1,4 +1,6 @@
 import type { MetaData, YearData } from '../types/music';
+
+export type ArtistRollupMode = 'canonical' | 'raw';
 import { fetchAppJson, onPathsUpdated } from './dataStore';
 
 const yearCache: Record<string, YearData> = {};
@@ -29,6 +31,43 @@ export function getYearsInRange(startStr: string, endStr: string): string[] {
 }
 
 /** Lexical YYYY-MM-DD comparison matches chronological order. */
+
+function creditArtistRollup(
+  counts: Record<number, number>,
+  trackId: number,
+  rawArtistId: number,
+  playCount: number,
+  meta: MetaData,
+  mode: ArtistRollupMode = 'canonical',
+): void {
+  if (mode === 'raw') {
+    counts[rawArtistId] = (counts[rawArtistId] || 0) + playCount;
+    return;
+  }
+  const trackMap = meta.trackToCanonical;
+  const mapping = meta.rawToCanonical;
+  const canonical = meta.canonicalArtists;
+  if (canonical) {
+    const ids = trackMap?.[trackId] ?? mapping?.[rawArtistId] ?? [rawArtistId];
+    for (const cId of ids) {
+      counts[cId] = (counts[cId] || 0) + playCount;
+    }
+    return;
+  }
+  counts[rawArtistId] = (counts[rawArtistId] || 0) + playCount;
+}
+
+function isValidAlbum(meta: MetaData, albumId: number): boolean {
+  const name = meta.albums[albumId];
+  return albumId > 0 && typeof name === 'string' && name.trim() !== '';
+}
+
+function artistDisplayName(meta: MetaData, artistId: number, mode: ArtistRollupMode = 'canonical'): string {
+  if (mode === 'raw') return meta.artists[artistId];
+  if (meta.canonicalArtists?.[artistId]) return meta.canonicalArtists[artistId];
+  return meta.artists[artistId];
+}
+
 export function aggregateTrackCounts(
   years: string[],
   startStr: string,
@@ -57,6 +96,7 @@ export function rollupByCategory(
   trackCounts: Record<number, number>,
   meta: MetaData,
   category: 'tracks' | 'artists' | 'albums',
+  options?: { artistMode?: ArtistRollupMode },
 ): Array<{ id: number; name: string; subtitle?: string; count: number; artistId?: number; albumId?: number; artistName?: string; albumName?: string }> {
   if (category === 'tracks') {
     return Object.entries(trackCounts).map(([tIdStr, count]) => {
@@ -79,15 +119,16 @@ export function rollupByCategory(
   }
 
   if (category === 'artists') {
+    const artistMode = options?.artistMode ?? 'canonical';
     const artistCounts: Record<number, number> = {};
     for (const [tIdStr, count] of Object.entries(trackCounts)) {
       const tId = parseInt(tIdStr, 10);
       const artistId = meta.tracks[tId][1];
-      artistCounts[artistId] = (artistCounts[artistId] || 0) + count;
+      creditArtistRollup(artistCounts, tId, artistId, count, meta, artistMode);
     }
     return Object.entries(artistCounts).map(([artIdStr, count]) => ({
       id: parseInt(artIdStr, 10),
-      name: meta.artists[parseInt(artIdStr, 10)],
+      name: artistDisplayName(meta, parseInt(artIdStr, 10), artistMode),
       count,
     }));
   }
@@ -97,6 +138,7 @@ export function rollupByCategory(
     const tId = parseInt(tIdStr, 10);
     const albumId = meta.tracks[tId][2];
     const artistId = meta.tracks[tId][1];
+    if (!isValidAlbum(meta, albumId)) continue;
     if (!albumCounts[albumId]) {
       albumCounts[albumId] = { count: 0, artistId };
     }
@@ -130,8 +172,8 @@ export function rollupDashboardCounts(
     const [, artistId, albumId] = trackInfo;
 
     songCounts[trackId] = (songCounts[trackId] || 0) + count;
-    artistCounts[artistId] = (artistCounts[artistId] || 0) + count;
-    if (albumId) {
+    creditArtistRollup(artistCounts, trackId, artistId, count, meta);
+    if (isValidAlbum(meta, albumId)) {
       if (!albumCounts[albumId]) {
         albumCounts[albumId] = { count: 0, artistId };
       }
@@ -141,7 +183,7 @@ export function rollupDashboardCounts(
 
   return {
     artists: Object.entries(artistCounts)
-      .map(([id, count]) => ({ id: parseInt(id, 10), name: meta.artists[id], count }))
+      .map(([id, count]) => ({ id: parseInt(id, 10), name: artistDisplayName(meta, parseInt(id, 10)), count }))
       .sort((a, b) => b.count - a.count),
     tracks: Object.entries(songCounts)
       .map(([id, count]) => {

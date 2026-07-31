@@ -2,15 +2,22 @@ import type { EntityType } from '../types/music';
 
 export const ENTITY_DETAILS_EVENT = 'open-entity-details';
 
+export type ArtistCatalogKey = 'artists' | 'canonicalArtists';
+
 export interface EntityDetailsDetail {
   type: EntityType | string;
   id: number;
+  artistCatalog?: ArtistCatalogKey;
 }
 
-export function openEntityDetails(type: EntityType | string, id: number): void {
+export function openEntityDetails(
+  type: EntityType | string,
+  id: number,
+  artistCatalog?: ArtistCatalogKey,
+): void {
   window.dispatchEvent(
     new CustomEvent<EntityDetailsDetail>(ENTITY_DETAILS_EVENT, {
-      detail: { type, id },
+      detail: { type, id, ...(artistCatalog ? { artistCatalog } : {}) },
     }),
   );
 }
@@ -34,7 +41,12 @@ export function bindEntityClicks(
         const type = entityEl.getAttribute('data-type');
         const idStr = entityEl.getAttribute('data-id');
         if (type && idStr && idStr !== '0') {
-          openEntityDetails(type, parseInt(idStr, 10));
+          const catalog = entityEl.getAttribute('data-artist-catalog');
+          openEntityDetails(
+            type,
+            parseInt(idStr, 10),
+            catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined,
+          );
         }
         return;
       }
@@ -46,7 +58,12 @@ export function bindEntityClicks(
     const type = row.getAttribute('data-type');
     const idStr = row.getAttribute('data-id');
     if (type && idStr && idStr !== '0') {
-      openEntityDetails(type, parseInt(idStr, 10));
+      const catalog = row.getAttribute('data-artist-catalog');
+      openEntityDetails(
+        type,
+        parseInt(idStr, 10),
+        catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined,
+      );
     }
   });
 }

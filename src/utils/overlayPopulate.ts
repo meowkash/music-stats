@@ -83,6 +83,7 @@ export function buildOverlayPayload(
   dictionary: MetaData,
   catalogData: Record<string, any>,
   artworkCache: Record<string, string>,
+  artistCatalog: 'artists' | 'canonicalArtists' = 'canonicalArtists',
 ): OverlayPayload {
   let name = '';
   let subtitle = '';
@@ -95,8 +96,13 @@ export function buildOverlayPayload(
   let albumId = 0;
 
   if (type === 'artist') {
-    const artistInfo = catalogData.artists[id];
-    name = artistInfo ? artistInfo.name : dictionary.artists[id] || 'Unknown Artist';
+    const artistBucket = catalogData[artistCatalog] ?? catalogData.artists ?? catalogData.canonicalArtists;
+    const artistInfo = artistBucket?.[id];
+    name = artistInfo
+      ? artistInfo.name
+      : (artistCatalog === 'canonicalArtists'
+        ? dictionary.canonicalArtists?.[id]
+        : dictionary.artists[id]) ?? dictionary.artists[id] ?? 'Unknown Artist';
     imgUrl = getArtworkUrl('artist', name, name, '', artworkCache);
     sortedTracks = artistInfo ? artistInfo.tracks : [];
     albumsToRender = artistInfo ? artistInfo.albums : [];
@@ -266,9 +272,10 @@ export async function populateOverlay(
   dictionary: MetaData,
   catalogData: Record<string, any>,
   ctx: PopulateContext,
+  artistCatalog: 'artists' | 'canonicalArtists' = 'canonicalArtists',
 ): Promise<void> {
   const { elements, artworkCache, animate = false, scrollContainer, panel } = ctx;
-  const payload = buildOverlayPayload(type, id, dictionary, catalogData, artworkCache);
+  const payload = buildOverlayPayload(type, id, dictionary, catalogData, artworkCache, artistCatalog);
 
   applyOverlayContent(payload, elements, artworkCache, scrollContainer, panel);
 

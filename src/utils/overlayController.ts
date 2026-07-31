@@ -25,7 +25,7 @@ import {
   dualLayerTransition,
   sleep,
 } from './overlayTransitions';
-import { onEntityDetails } from './events';
+import { onEntityDetails, type ArtistCatalogKey } from './events';
 import { onReady } from './dom';
 
 function getCachedData(): { meta: MetaData; catalog: Record<string, unknown> } | null {
@@ -115,7 +115,7 @@ export function initDetailOverlay(): void {
   };
 
   const contentRegions = [overlayHeaderContent, overlayContentWrapper];
-  let currentEntity: { type: string; id: number } | null = null;
+  let currentEntity: { type: string; id: number; artistCatalog?: ArtistCatalogKey } | null = null;
   const navHistory: { type: string; id: number }[] = [];
 
   function closeDetails() {
@@ -139,11 +139,16 @@ export function initDetailOverlay(): void {
     elements.overlayColorWashBack.style.opacity = '0';
   }
 
-  async function openDetails(type: string, id: number, isBack = false) {
+  async function openDetails(
+    type: string,
+    id: number,
+    isBack = false,
+    artistCatalog?: ArtistCatalogKey,
+  ) {
     if (!isBack && currentEntity) {
       navHistory.push(currentEntity);
     }
-    currentEntity = { type, id };
+    currentEntity = { type, id, artistCatalog };
 
     const isSwitchingEntity = panel.classList.contains('visible');
     const direction: OverlayNavDirection = isBack ? 'back' : 'forward';
@@ -159,7 +164,15 @@ export function initDetailOverlay(): void {
     if (!data) return;
 
     const artworkCache = getArtworkCacheSync() || {};
-    const payload = buildOverlayPayload(type, id, data.meta, data.catalog, artworkCache);
+    const catalogKey = artistCatalog ?? (type === 'artist' ? 'canonicalArtists' : undefined);
+    const payload = buildOverlayPayload(
+      type,
+      id,
+      data.meta,
+      data.catalog,
+      artworkCache,
+      catalogKey ?? 'canonicalArtists',
+    );
 
     if (isSwitchingEntity) {
       overlayScrollContainer.scrollTo({ top: 0, behavior: 'auto' });
@@ -189,11 +202,11 @@ export function initDetailOverlay(): void {
     await populateOverlay(type, id, data.meta, data.catalog, {
       elements,
       artworkCache,
-      onNavigate: openDetails,
+      onNavigate: (t, i) => openDetails(t, i, false, artistCatalog),
       animate: false,
       scrollContainer: overlayScrollContainer,
       panel,
-    });
+    }, artistCatalog ?? 'canonicalArtists');
   }
 
   overlayCloseBtn.addEventListener('click', () => {
@@ -220,7 +233,7 @@ export function initDetailOverlay(): void {
   });
 
   bindOverlayClicks(panel, openDetails);
-  onEntityDetails(({ type, id }) => openDetails(type, id));
+  onEntityDetails(({ type, id, artistCatalog }) => openDetails(type, id, false, artistCatalog));
 
   // iOS text autosizing can cache inflated sizes across rotation when the
   // sheet is open; reset inline layout state after the viewport settles.
