@@ -99,7 +99,10 @@
     transition: transform 0.5s var(--ios-spring);
     will-change: transform;
     overflow: hidden;
-    contain: layout style;
+    /* paint only — layout/style containment caused stale widths on iOS rotation */
+    contain: paint;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   .overlay-scroll-container {
@@ -224,7 +227,10 @@
   /* Header text + body slide together during in-sheet navigation */
   .overlay-slide-region {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+    transform: none;
+  }
+
+  .overlay-slide-region.is-sliding {
     will-change: transform, opacity;
   }
 
@@ -430,6 +436,32 @@
     padding: 8px 10px;
     gap: 10px;
     border-radius: var(--radius-sm);
+  }
+
+  /* Fixed typography inside the sheet — avoids viewport MQ + iOS autosize drift */
+  .details-overlay-panel :global(.scrobble-row-title) {
+    font-size: 15px;
+  }
+
+  .details-overlay-panel :global(.scrobble-row-subtitle) {
+    font-size: 13px;
+  }
+
+  .details-overlay-panel :global(.scrobble-row-right) {
+    font-size: 13px;
+  }
+
+  .details-overlay-panel :global(.scrobble-row-rank) {
+    font-size: 15px;
+  }
+
+  .details-overlay-panel :global(.scrobble-row-rank.rank-1) {
+    font-size: 17px;
+  }
+
+  .details-overlay-panel :global(.scrobble-row-rank.rank-2),
+  .details-overlay-panel :global(.scrobble-row-rank.rank-3) {
+    font-size: 16px;
   }
 
   .overlay-albums-section {

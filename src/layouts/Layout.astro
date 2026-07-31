@@ -241,6 +241,12 @@ const pageUrl = Astro.url.href;
 		padding: 0;
 	}
 
+	html {
+		/* Prevent iOS Safari text autosizing from inflating fonts on rotation */
+		-webkit-text-size-adjust: 100%;
+		text-size-adjust: 100%;
+	}
+
 	html,
 	body {
 		width: 100%;

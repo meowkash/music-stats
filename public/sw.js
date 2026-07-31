@@ -1,5 +1,5 @@
-const CACHE_NAME = 'aakashmusic-cache-1785477910';
-const CACHE_VERSION = '1785477910';
+const CACHE_NAME = 'aakashmusic-cache-1785513886';
+const CACHE_VERSION = '1785513886';
 
 const STATIC_ASSETS = [
   '/',

@@ -46,6 +46,7 @@ async function ensureData(): Promise<{ meta: MetaData; catalog: Record<string, u
 function slideContentOut(regions: HTMLElement[], ms: number, direction: OverlayNavDirection): void {
   const transition = dualLayerTransition(ms);
   regions.forEach((el) => {
+    el.classList.add('is-sliding');
     el.style.transition = transition;
     el.style.opacity = '1';
     el.style.transform = slideTransform(direction, 'in-end');
@@ -63,6 +64,7 @@ function slideContentOut(regions: HTMLElement[], ms: number, direction: OverlayN
 function slideContentIn(regions: HTMLElement[], ms: number, direction: OverlayNavDirection): void {
   const transition = dualLayerTransition(ms);
   regions.forEach((el) => {
+    el.classList.add('is-sliding');
     el.style.transition = 'none';
     el.style.opacity = '0';
     el.style.transform = slideTransform(direction, 'in-start');
@@ -80,6 +82,7 @@ function slideContentIn(regions: HTMLElement[], ms: number, direction: OverlayNa
 
 function clearContentTransition(regions: HTMLElement[]): void {
   regions.forEach((el) => {
+    el.classList.remove('is-sliding');
     el.style.transition = '';
     el.style.opacity = '';
     el.style.transform = '';
@@ -218,6 +221,21 @@ export function initDetailOverlay(): void {
 
   bindOverlayClicks(panel, openDetails);
   onEntityDetails(({ type, id }) => openDetails(type, id));
+
+  // iOS text autosizing can cache inflated sizes across rotation when the
+  // sheet is open; reset inline layout state after the viewport settles.
+  function resetOverlayLayoutAfterRotation() {
+    if (!panel.classList.contains('visible')) return;
+    panel.style.transform = '';
+    panel.style.transition = '';
+    clearContentTransition(contentRegions);
+  }
+
+  window.addEventListener('orientationchange', () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resetOverlayLayoutAfterRotation);
+    });
+  });
 }
 
 onReady(initDetailOverlay);

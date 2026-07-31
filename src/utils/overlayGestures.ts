@@ -57,6 +57,15 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
     }
   }
 
+  function cancelDrag() {
+    if (!isDragging) return;
+    isDragging = false;
+    isDismissing = false;
+    cancelPendingDragFrame();
+    panel.style.transition = '';
+    panel.style.transform = '';
+  }
+
   function handleTouchEnd() {
     if (!isDragging) return;
     isDragging = false;
@@ -75,4 +84,5 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   panel.addEventListener('touchstart', handleTouchStart, { passive: true });
   panel.addEventListener('touchmove', handleTouchMove, { passive: false });
   panel.addEventListener('touchend', handleTouchEnd);
+  window.addEventListener('orientationchange', cancelDrag);
 }
