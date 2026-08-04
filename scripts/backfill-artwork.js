@@ -5,7 +5,14 @@ import {
   normalizeStaticArtworkUrl,
   fetchValidatedStaticArtwork,
 } from './artwork-utils.js';
-import { artworkCacheKey, resolveLegacyArtworkKey, storeArtworkInCache } from './artwork-keys.js';
+import {
+  artworkCacheKey,
+  rawArtistNamesForCanonical,
+  resolveArtistArtworkFromCache,
+  resolveArtistArtworkFromCandidates,
+  resolveLegacyArtworkKey,
+  storeArtworkInCache,
+} from './artwork-keys.js';
 
 const envPath = path.resolve('.env');
 if (fs.existsSync(envPath)) {
@@ -167,6 +174,72 @@ async function backfillType(artworkCache, type, items, label) {
   return fetchedCount;
 }
 
+async function backfillCanonicalArtists(artworkCache, catalog, meta) {
+  const items = Object.entries(catalog.canonicalArtists || {})
+    .sort(([, a], [, b]) => b.scrobbles - a.scrobbles)
+    .map(([id, artist]) => ({ canonicalId: parseInt(id, 10), name: artist.name }));
+
+  let fetchedCount = 0;
+  let saveInterval = 0;
+
+  console.log(`\n=== Backfilling canonical artists (${items.length} items) ===`);
+
+  for (let i = 0; i < items.length; i++) {
+    const { canonicalId, name } = items[i];
+    const fallbacks = rawArtistNamesForCanonical(canonicalId, meta);
+
+    if (!refresh && resolveArtistArtworkFromCache(name, artworkCache)) {
+      continue;
+    }
+
+    const cached = resolveArtistArtworkFromCandidates(fallbacks, artworkCache);
+    if (cached && !resolveArtistArtworkFromCache(name, artworkCache)) {
+      storeArtworkInCache(artworkCache, 'artist', name, '', cached);
+      fetchedCount++;
+      saveInterval++;
+      console.log(`[${i + 1}/${items.length}] canonical: "${name}" -> promoted from cache`);
+      if (saveInterval >= 10) {
+        fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+        saveInterval = 0;
+      }
+      continue;
+    }
+
+    console.log(`[${i + 1}/${items.length}] canonical artist: "${name}"...`);
+
+    let imgUrl = await fetchEntityArtwork('artist', { name, artistName: '' });
+    if (!imgUrl) {
+      for (const fallback of fallbacks) {
+        if (fallback === name) continue;
+        imgUrl = await fetchEntityArtwork('artist', { name: fallback, artistName: '' });
+        if (imgUrl) break;
+      }
+    }
+
+    if (imgUrl) {
+      const validated = await fetchValidatedStaticArtwork(imgUrl);
+      if (validated && cacheArtworkUrl(artworkCache, 'artist', name, '', validated)) {
+        fetchedCount++;
+        saveInterval++;
+        console.log('   -> Cached artwork');
+      } else {
+        console.log('   -> Rejected (animated or validation failed)');
+      }
+    } else {
+      console.log('   -> No artwork found (will use placeholder in UI)');
+    }
+
+    if (saveInterval >= 10) {
+      fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+      saveInterval = 0;
+    }
+
+    await delay(150);
+  }
+
+  return fetchedCount;
+}
+
 async function main() {
   console.log(refresh
     ? `Refreshing all artwork for user: ${USERNAME}`
@@ -214,6 +287,7 @@ async function main() {
   let total = 0;
   total += await backfillType(artworkCache, 'album', albums, 'albums');
   total += await backfillType(artworkCache, 'artist', artists, 'artists');
+  total += await backfillCanonicalArtists(artworkCache, catalog, meta);
   total += await backfillType(artworkCache, 'track', tracks, 'top tracks');
 
   fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');

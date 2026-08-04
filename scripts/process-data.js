@@ -1,4 +1,5 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
+import { promoteCanonicalArtworkCache } from './artwork-keys.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -442,8 +443,14 @@ function main() {
   fs.writeFileSync(catalogPath, JSON.stringify(catalog), 'utf-8');
   console.log(`Wrote pre-aggregated catalog to ${catalogPath}`);
 
-  // Copy Artwork if exists
+  // Promote raw-artist artwork onto canonical display names, then publish cache
   if (fs.existsSync(ARTWORK_PATH)) {
+    const artworkCache = JSON.parse(fs.readFileSync(ARTWORK_PATH, 'utf-8'));
+    const promoted = promoteCanonicalArtworkCache(artworkCache, canonicalArtists, { artists, rawToCanonical });
+    if (promoted > 0) {
+      fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+      console.log(`Promoted artwork for ${promoted} canonical artists`);
+    }
     fs.copyFileSync(ARTWORK_PATH, path.join(PUBLIC_DATA_DIR, 'artwork.json'));
     console.log(`Copied artwork.json to public directory`);
   }

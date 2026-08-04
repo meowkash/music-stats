@@ -40,6 +40,29 @@ function cacheKeyForPath(pathname) {
   return new Request(pathname, { mode: 'same-origin' });
 }
 
+async function respondWithDataJson(event, dataPath) {
+  const cacheKey = cacheKeyForPath(dataPath);
+
+  try {
+    const response = await fetch(event.request);
+    if (response.ok) {
+      const clone = response.clone();
+      event.waitUntil(
+        caches.open(DATA_CACHE).then((cache) => cache.put(cacheKey, clone))
+      );
+    }
+    return response;
+  } catch {
+    const cache = await caches.open(DATA_CACHE);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+    return new Response('{}', {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 async function matchShellCache(cache, request) {
   const direct = await cache.match(request);
   if (direct) return direct;
@@ -48,27 +71,6 @@ async function matchShellCache(cache, request) {
     if (hit) return hit;
   }
   return undefined;
-}
-
-function staleWhileRevalidate(cacheName, cacheKey, networkRequest) {
-  return caches.open(cacheName).then(async (cache) => {
-    const cached = await cache.match(cacheKey);
-    const networkPromise = fetch(networkRequest)
-      .then((response) => {
-        if (response.ok) {
-          cache.put(cacheKey, response.clone());
-        }
-        return response;
-      })
-      .catch(() => null);
-
-    if (cached) {
-      return { response: cached, revalidate: networkPromise };
-    }
-
-    const network = await networkPromise;
-    return { response: network, revalidate: null };
-  });
 }
 
 async function respondWithShell(event) {
@@ -131,17 +133,7 @@ self.addEventListener('fetch', event => {
   const dataPath = dataPathname(requestUrl);
 
   if (dataPath) {
-    const cacheKey = cacheKeyForPath(dataPath);
-    event.respondWith(
-      staleWhileRevalidate(DATA_CACHE, cacheKey, event.request).then(({ response, revalidate }) => {
-        if (revalidate) event.waitUntil(revalidate);
-        if (response) return response;
-        return new Response('{}', {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      })
-    );
+    event.respondWith(respondWithDataJson(event, dataPath));
     return;
   }
 

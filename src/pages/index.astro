@@ -153,25 +153,22 @@ import { TAB_ORDER } from "../utils/tabs";
     startBackgroundArtworkPreload,
   } from "../utils/ui";
   import { setActiveTab } from "../utils/tabs";
-  import { warmDataCache, scheduleRevalidate } from "../utils/dataStore";
+  import {
+    warmDataCache,
+    ensureCacheVersion,
+    revalidateCriticalData,
+    CRITICAL_DATA_PATHS,
+  } from "../utils/dataStore";
   import { hideSplashScreen } from "../utils/dataRefresh";
-
-  const CRITICAL_DATA_PATHS = [
-    "/data/meta.json",
-    "/data/artwork.json",
-    "/data/recent.json",
-    "/data/yearly-totals.json",
-    "/data/yearly-stats.json",
-    "/data/colors.json",
-  ];
 
   document.addEventListener("DOMContentLoaded", () => {
     hideSplashScreen();
 
     void (async () => {
       try {
-        await warmDataCache(CRITICAL_DATA_PATHS);
-        CRITICAL_DATA_PATHS.forEach(scheduleRevalidate);
+        await ensureCacheVersion();
+        await warmDataCache([...CRITICAL_DATA_PATHS]);
+        void revalidateCriticalData();
         await Promise.all([loadColorsCache(), preloadAppData()]);
         startBackgroundArtworkPreload();
       } catch (err) {
