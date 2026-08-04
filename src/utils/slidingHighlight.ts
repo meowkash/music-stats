@@ -243,6 +243,8 @@ export interface SlidingHighlightOptions {
  */
 export function createSlidingHighlight(options: SlidingHighlightOptions): {
   sync: (btn: HTMLElement, animate?: boolean) => void;
+  /** Paint the pill at a fractional index (e.g. while a pager is dragging). */
+  scrub: (fraction: number) => void;
   observe: () => ResizeObserver;
 } {
   const { highlightEl, onSync, durationMs = 340 } = options;
@@ -323,8 +325,32 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     });
   });
 
+  function scrub(fraction: number) {
+    cancel?.();
+    cancel = null;
+    // Measure only when empty — per-frame measure during a pager drag is waste.
+    if (track.count() === 0) track.measure();
+    if (track.count() === 0) return;
+
+    const clamped = Math.min(Math.max(fraction, 0), buttons.length - 1);
+    track.render(clamped);
+
+    // Remember the interpolated rect so the next discrete sync starts here.
+    const i0 = Math.floor(clamped);
+    const i1 = Math.min(i0 + 1, buttons.length - 1);
+    const t = clamped - i0;
+    const a = track.rectAt(i0);
+    const b = track.rectAt(i1);
+    if (a && b) paintedRect = lerpRect(a, b, t);
+
+    currentIndex = Math.round(clamped);
+    // Intentionally no onSync here — callers that scrub (pagers) own accent /
+    // label colour so it can stay locked to the same fraction as the pill.
+  }
+
   return {
     sync,
+    scrub,
     observe: () => {
       buttons.forEach((btn) => ro.observe(btn));
       return ro;

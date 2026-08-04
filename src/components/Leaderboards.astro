@@ -78,14 +78,22 @@
     </div>
   </div>
 
-  <!-- Leaderboard List -->
-  <div class="leaderboard-list-wrapper panel-scroll">
+  <!-- Swipeable Songs / Albums / Artists lists -->
+  <div class="leaderboard-list-viewport" id="leaderboardViewport">
     <div class="loader-wrapper hidden" id="leaderboardLoader">
       <div class="loader"></div>
       <span>Aggregating scrobbles...</span>
     </div>
-    <div class="leaderboard-list" id="leaderboardList">
-      <!-- List items will be injected here by client JS -->
+    <div class="leaderboard-list-track" id="leaderboardListTrack">
+      <div class="leaderboard-list-page panel-scroll panel-scroll-active" data-tab="songs" id="leaderboardPageSongs">
+        <div class="leaderboard-list" id="leaderboardListSongs"></div>
+      </div>
+      <div class="leaderboard-list-page panel-scroll" data-tab="albums" id="leaderboardPageAlbums">
+        <div class="leaderboard-list" id="leaderboardListAlbums"></div>
+      </div>
+      <div class="leaderboard-list-page panel-scroll" data-tab="artists" id="leaderboardPageArtists">
+        <div class="leaderboard-list" id="leaderboardListArtists"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -310,8 +318,15 @@
     font-weight: 600;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: var(--transition-smooth);
+    transition:
+      color var(--duration-normal) var(--ios-spring),
+      text-shadow var(--duration-normal) var(--ios-spring);
     font-family: var(--font-body);
+  }
+
+  /* JS paints colour frame-by-frame while the pager moves — CSS must not smear it. */
+  .leaderboard-tab-group.tabs-paging .sub-tab-btn {
+    transition: none;
   }
 
   .sub-tab-btn.active {
@@ -361,9 +376,36 @@
     background: rgba(0, 0, 0, 0.15);
   }
 
-  .leaderboard-list-wrapper {
+  .leaderboard-list-viewport {
     position: relative;
+    flex: 1;
     min-height: 0;
+    overflow: hidden;
+  }
+
+  .leaderboard-list-track {
+    display: flex;
+    height: 100%;
+    backface-visibility: hidden;
+  }
+
+  .leaderboard-list-track.pager-moving {
+    will-change: transform;
+  }
+
+  .leaderboard-list-page {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  .leaderboard-list-page.panel-scroll {
+    flex: 0 0 100%;
   }
 
   /* Invisible trigger element used for infinite-scroll chunk loading */
@@ -478,27 +520,44 @@
     rawArtistNamesForCanonical,
     type ArtistRollupMode,
   } from "../utils/scrobbles";
-  import { createInfiniteScroll } from "../utils/infiniteScroll";
+  import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
   import { getCategoryAccent } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
+  import { bindPagerSwipe } from "../utils/pagerSwipe";
+  import { colorToCss, lerpColor, parseColor, withAlpha, type Rgba } from "../utils/motion";
+
+  const RANKING_TABS = ["songs", "albums", "artists"] as const;
+  type RankingTab = (typeof RANKING_TABS)[number];
+  type RankItem = ReturnType<typeof rollupByCategory>[number];
+
+  const PAGE_IDS: Record<RankingTab, string> = {
+    songs: "leaderboardListSongs",
+    albums: "leaderboardListAlbums",
+    artists: "leaderboardListArtists",
+  };
 
   document.addEventListener("DOMContentLoaded", () => {
     let meta: MetaData | null = null;
     let availableYears: number[] = [];
     let artworkCache: Record<string, string> = {};
 
-    let activeTab = "songs";
+    let activeIndex = 0;
     let activeRange = "7d";
     const ARTIST_MODE_KEY = "artistRankingMode";
     let artistRankingMode: ArtistRollupMode =
       (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw" ? "raw" : "canonical";
     const CHUNK_SIZE = 50;
-    let fullItemsList: ReturnType<typeof rollupByCategory> = [];
     let searchQuery = "";
+    /** Items keyed by tab for the current range/search snapshot. */
+    const itemsByTab: Partial<Record<RankingTab, RankItem[]>> = {};
+    const renderedTabs = new Set<RankingTab>();
+    const scrollControllers: Partial<Record<RankingTab, InfiniteScrollController>> = {};
+    let dataEpoch = 0;
 
     const loader = document.getElementById("leaderboardLoader") as HTMLDivElement;
-    const listContainer = document.getElementById("leaderboardList") as HTMLDivElement;
+    const viewportEl = document.getElementById("leaderboardViewport") as HTMLDivElement;
+    const trackEl = document.getElementById("leaderboardListTrack") as HTMLDivElement;
     const customDateContainer = document.getElementById("customDateInputs") as HTMLDivElement;
     const startDateInput = document.getElementById("startDate") as HTMLInputElement;
     const endDateInput = document.getElementById("endDate") as HTMLInputElement;
@@ -506,13 +565,25 @@
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
 
-    const scrollRoot = listContainer.closest(".panel-scroll") as HTMLElement | null;
-
     const todayStr = new Date().toISOString().split("T")[0];
     endDateInput.value = todayStr;
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     startDateInput.value = sevenDaysAgo.toISOString().split("T")[0];
+
+    function activeTab(): RankingTab {
+      return RANKING_TABS[activeIndex];
+    }
+
+    function listEl(tab: RankingTab): HTMLDivElement {
+      return document.getElementById(PAGE_IDS[tab]) as HTMLDivElement;
+    }
+
+    function pageEl(tab: RankingTab): HTMLDivElement {
+      return document.getElementById(
+        tab === "songs" ? "leaderboardPageSongs" : tab === "albums" ? "leaderboardPageAlbums" : "leaderboardPageArtists",
+      ) as HTMLDivElement;
+    }
 
     async function loadMeta() {
       if (meta) return meta;
@@ -537,13 +608,13 @@
       }
     }
 
-    function renderRow(item: (typeof fullItemsList)[0], index: number): string {
+    function renderRow(tab: RankingTab, item: RankItem, index: number): string {
       let imgUrl = null;
       let infoHtml = "";
       let rowType = "";
       let rowId = 0;
 
-      if (activeTab === "songs") {
+      if (tab === "songs") {
         imgUrl = getArtworkUrl("track", item.name, item.artistName || "", item.albumName || "", artworkCache);
         rowType = "track";
         rowId = item.id;
@@ -554,7 +625,7 @@
               • 
               <span class="clickable-entity" data-type="artist" data-id="${item.artistId}" data-artist-catalog="artists">${escapeHTML(item.artistName || "")}</span>
             </span>`;
-      } else if (activeTab === "albums") {
+      } else if (tab === "albums") {
         imgUrl = getArtworkUrl("album", item.name, item.subtitle || "", item.name, artworkCache);
         rowType = "album";
         rowId = item.id;
@@ -597,35 +668,66 @@
       );
     }
 
-    const scrollController = createInfiniteScroll({
-      container: listContainer,
-      items: [],
-      chunkSize: CHUNK_SIZE,
-      renderItem: renderRow,
-      root: scrollRoot,
-      rootMargin: "600px 0px",
-      sentinelClass: "leaderboard-scroll-sentinel",
-      onChunkRendered: () => {
-        initArtworkImages(listContainer);
-        applyCountGlows(listContainer);
-      },
-    });
+    function paintPage(tab: RankingTab, items: RankItem[]) {
+      const container = listEl(tab);
+      itemsByTab[tab] = items;
+
+      if (items.length === 0) {
+        container.innerHTML =
+          '<div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>';
+        delete scrollControllers[tab];
+        renderedTabs.add(tab);
+        return;
+      }
+
+      if (!scrollControllers[tab]) {
+        container.replaceChildren();
+        scrollControllers[tab] = createInfiniteScroll({
+          container,
+          items,
+          chunkSize: CHUNK_SIZE,
+          renderItem: (item, idx) => renderRow(tab, item, idx),
+          root: pageEl(tab),
+          rootMargin: "600px 0px",
+          sentinelClass: "leaderboard-scroll-sentinel",
+          onChunkRendered: () => {
+            initArtworkImages(container);
+            applyCountGlows(container);
+          },
+        });
+      } else {
+        container.replaceChildren();
+        scrollControllers[tab]!.reset(items);
+      }
+      renderedTabs.add(tab);
+    }
+
+    function ensurePage(tab: RankingTab) {
+      if (renderedTabs.has(tab) && itemsByTab[tab]) {
+        // Already painted for this data epoch.
+        return;
+      }
+      const items = itemsByTab[tab];
+      if (items) paintPage(tab, items);
+    }
 
     async function updateLeaderboard() {
-      const isFirstLoad = listContainer.children.length === 0;
-      if (isFirstLoad) {
+      const epoch = ++dataEpoch;
+      const anyRendered = renderedTabs.size > 0;
+      if (!anyRendered) {
         loader.classList.remove("hidden", "overlay");
       } else {
         loader.classList.remove("hidden");
         loader.classList.add("overlay");
-        listContainer.classList.add("updating");
       }
 
       const dictionary = await loadMeta();
+      if (epoch !== dataEpoch) return;
       if (!dictionary) {
         loader.classList.add("hidden");
-        listContainer.classList.remove("updating");
-        listContainer.innerHTML = '<div class="no-data-message">Failed to load metadata</div>';
+        for (const tab of RANKING_TABS) {
+          listEl(tab).innerHTML = '<div class="no-data-message">Failed to load metadata</div>';
+        }
         return;
       }
 
@@ -653,36 +755,42 @@
 
       const yearsToLoad = getYearsInRange(startStr, endStr);
       await loadYearsData(yearsToLoad);
+      if (epoch !== dataEpoch) return;
 
       const trackCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
-      const category = activeTab === "songs" ? "tracks" : activeTab === "albums" ? "albums" : "artists";
-      let itemsList = rollupByCategory(trackCounts, dictionary, category, {
-        artistMode: category === "artists" ? artistRankingMode : undefined,
-      });
+      const query = searchQuery.toLowerCase();
 
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        itemsList = itemsList.filter(
-          (item) =>
-            item.name.toLowerCase().includes(query) ||
-            (item.subtitle && item.subtitle.toLowerCase().includes(query)),
-        );
+      // Fresh snapshot — clear painted pages so ensure/paint refill them.
+      renderedTabs.clear();
+      for (const key of Object.keys(scrollControllers) as RankingTab[]) {
+        delete scrollControllers[key];
       }
 
-      itemsList.sort((a, b) => b.count - a.count);
+      for (const tab of RANKING_TABS) {
+        const category = tab === "songs" ? "tracks" : tab === "albums" ? "albums" : "artists";
+        let itemsList = rollupByCategory(trackCounts, dictionary, category, {
+          artistMode: category === "artists" ? artistRankingMode : undefined,
+        });
+
+        if (query) {
+          itemsList = itemsList.filter(
+            (item) =>
+              item.name.toLowerCase().includes(query) ||
+              (item.subtitle && item.subtitle.toLowerCase().includes(query)),
+          );
+        }
+
+        itemsList.sort((a, b) => b.count - a.count);
+        itemsByTab[tab] = itemsList;
+      }
 
       loader.classList.add("hidden");
-      listContainer.classList.remove("updating");
 
-      if (itemsList.length === 0) {
-        fullItemsList = [];
-        listContainer.innerHTML = '<div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>';
-        return;
-      }
-
-      fullItemsList = itemsList;
-      listContainer.innerHTML = "";
-      scrollController.reset(itemsList);
+      // Active page + neighbours so a swipe never lands on an empty pane.
+      const tabsToPaint = new Set<RankingTab>([activeTab()]);
+      if (activeIndex > 0) tabsToPaint.add(RANKING_TABS[activeIndex - 1]);
+      if (activeIndex < RANKING_TABS.length - 1) tabsToPaint.add(RANKING_TABS[activeIndex + 1]);
+      for (const tab of tabsToPaint) paintPage(tab, itemsByTab[tab] || []);
     }
 
     const rangeHighlight = document.getElementById("rangeHighlight") as HTMLDivElement;
@@ -693,9 +801,23 @@
       buttons: document.querySelectorAll(".range-btn"),
     });
 
+    const tabGroup = document.querySelector(".leaderboard-tab-group") as HTMLElement;
+    const subTabButtons = [
+      ...document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
+    ] as HTMLElement[];
+    const idleTabRgba: Rgba = parseColor("rgba(255, 255, 255, 0.8)") ?? {
+      r: 255,
+      g: 255,
+      b: 255,
+      a: 0.8,
+    };
+    const tabAccentRgba: Rgba[] = RANKING_TABS.map(
+      (tab) => parseColor(getCategoryAccent(tab).color) ?? idleTabRgba,
+    );
+
     const subTabHighlightCtrl = createSlidingHighlight({
       highlightEl: subTabHighlight,
-      buttons: document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
+      buttons: subTabButtons,
       accentFor: (btn) => {
         const tabName = btn.getAttribute("data-tab") || "";
         return getCategoryAccent(tabName);
@@ -707,6 +829,114 @@
         rangeHighlight.style.setProperty("--range-glow", accent.glow);
       },
     });
+
+    /** Drive label + date-pill colours from the same fraction as the pager. */
+    function paintTabColors(fraction: number) {
+      tabGroup.classList.add("tabs-paging");
+      for (let i = 0; i < subTabButtons.length; i++) {
+        const activeness = Math.max(0, 1 - Math.abs(fraction - i));
+        subTabButtons[i].style.color = colorToCss(
+          lerpColor(idleTabRgba, tabAccentRgba[i], activeness),
+        );
+        subTabButtons[i].style.textShadow =
+          activeness > 0.04
+            ? `0 0 12px ${withAlpha(tabAccentRgba[i], 0.4 * activeness)}`
+            : "none";
+      }
+      const i0 = Math.floor(fraction);
+      const i1 = Math.min(i0 + 1, tabAccentRgba.length - 1);
+      const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], fraction - i0);
+      rangeHighlight.style.setProperty("--range-color", colorToCss(mixed));
+      rangeHighlight.style.setProperty("--range-glow", withAlpha(mixed, 0.4));
+    }
+
+    function clearTabColorPaint() {
+      tabGroup.classList.remove("tabs-paging");
+      for (const btn of subTabButtons) {
+        btn.style.color = "";
+        btn.style.textShadow = "";
+      }
+    }
+
+    function syncArtistRankingToggle() {
+      const isArtists = activeTab() === "artists";
+      artistRankingToggle.classList.toggle("hidden", !isArtists);
+      const isUnified = artistRankingMode === "canonical";
+      artistRankingSwitch.classList.toggle("active", isUnified);
+      artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
+    }
+
+    function applyActiveTab(
+      index: number,
+      opts?: {
+        syncHighlight?: boolean;
+        animateHighlight?: boolean;
+        updateActiveClass?: boolean;
+      },
+    ) {
+      activeIndex = index;
+      const tab = RANKING_TABS[index];
+
+      if (opts?.updateActiveClass !== false) {
+        subTabButtons.forEach((b) => {
+          b.classList.toggle("active", b.getAttribute("data-tab") === tab);
+        });
+      }
+
+      for (const t of RANKING_TABS) {
+        pageEl(t).classList.toggle("panel-scroll-active", t === tab);
+      }
+
+      if (opts?.syncHighlight !== false) {
+        const btn = subTabButtons.find((b) => b.getAttribute("data-tab") === tab);
+        if (btn) subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
+      }
+
+      syncArtistRankingToggle();
+      ensurePage(tab);
+      if (index > 0) ensurePage(RANKING_TABS[index - 1]);
+      if (index < RANKING_TABS.length - 1) ensurePage(RANKING_TABS[index + 1]);
+    }
+
+    const pager = bindPagerSwipe({
+      gestureEl: viewportEl,
+      trackEl,
+      viewportEl,
+      pageCount: RANKING_TABS.length,
+      onProgress: (fraction) => {
+        const lo = Math.floor(fraction);
+        const hi = Math.ceil(fraction);
+        if (lo >= 0 && lo < RANKING_TABS.length) ensurePage(RANKING_TABS[lo]);
+        if (hi >= 0 && hi < RANKING_TABS.length) ensurePage(RANKING_TABS[hi]);
+        subTabHighlightCtrl.scrub(fraction);
+        paintTabColors(fraction);
+      },
+      onSettled: (index) => {
+        clearTabColorPaint();
+        applyActiveTab(index, {
+          syncHighlight: true,
+          animateHighlight: false,
+          updateActiveClass: true,
+        });
+      },
+    });
+
+    function selectRankingTab(tab: string, animate = true) {
+      const index = RANKING_TABS.indexOf(tab as RankingTab);
+      if (index === -1 || index === activeIndex) return;
+      const from = activeIndex;
+      // Keep .active / CSS colours off until settle so JS can interpolate them
+      // in lockstep with the pager + pill.
+      applyActiveTab(index, {
+        syncHighlight: !animate,
+        animateHighlight: false,
+        updateActiveClass: !animate,
+      });
+      // Seed paint at the current tab so the first tween frame doesn't flash
+      // CSS .active colours before onProgress takes over.
+      if (animate) paintTabColors(from);
+      pager.goTo(index, animate);
+    }
 
     document.querySelectorAll(".range-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -734,19 +964,11 @@
       if (activeRange === "custom") updateLeaderboard();
     });
 
-    function syncArtistRankingToggle() {
-      const isArtists = activeTab === "artists";
-      artistRankingToggle.classList.toggle("hidden", !isArtists);
-      const isUnified = artistRankingMode === "canonical";
-      artistRankingSwitch.classList.toggle("active", isUnified);
-      artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
-    }
-
     function setArtistRankingMode(mode: ArtistRollupMode) {
       artistRankingMode = mode;
       localStorage.setItem(ARTIST_MODE_KEY, mode);
       syncArtistRankingToggle();
-      if (activeTab === "artists") updateLeaderboard();
+      if (activeTab() === "artists") updateLeaderboard();
     }
 
     artistRankingSwitch.addEventListener("click", () => {
@@ -756,15 +978,7 @@
     document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tab = btn.getAttribute("data-tab");
-        if (!tab) return;
-
-        document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        subTabHighlightCtrl.sync(btn as HTMLElement);
-
-        activeTab = tab;
-        syncArtistRankingToggle();
-        updateLeaderboard();
+        if (tab) selectRankingTab(tab, true);
       });
     });
 
@@ -775,8 +989,12 @@
       searchDebounce = setTimeout(updateLeaderboard, 250);
     });
 
-    bindEntityClicks(listContainer);
+    for (const tab of RANKING_TABS) {
+      bindEntityClicks(listEl(tab));
+    }
+
     syncArtistRankingToggle();
+    applyActiveTab(0, { syncHighlight: false });
     updateLeaderboard();
 
     onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {
@@ -795,15 +1013,15 @@
       if (tabBtn) subTabHighlightCtrl.sync(tabBtn, animate);
     }
 
-    // Place both pills without animating; only user selections should glide.
     placeHighlights(false);
 
-    // Rankings may have been measured while its panel was off-screen (zero
-    // geometry). Re-place when the tab becomes active so the next tap glides
-    // from the real chip, not from top-left.
     window.addEventListener("tab-navigated", ((e: CustomEvent<{ tab: string }>) => {
       if (e.detail?.tab === "rankings") {
-        requestAnimationFrame(() => placeHighlights(false));
+        requestAnimationFrame(() => {
+          placeHighlights(false);
+          pager.measure();
+          pager.goTo(activeIndex, false);
+        });
       }
     }) as EventListener);
   });

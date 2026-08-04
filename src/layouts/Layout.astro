@@ -22,7 +22,9 @@ const pageUrl = Astro.url.href;
 			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
 		/>
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+		<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+		<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
 		<link rel="manifest" href="/manifest.json" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta
@@ -697,10 +699,10 @@ const pageUrl = Astro.url.href;
 	}
 
 	/* A backdrop-filtered surface has to re-blur what is behind it on every
-	   frame the content under it moves. Dropping blur during the deck slide
-	   is the single biggest compositor win in the app. */
-	.view-deck.tab-dragging .glass-card,
-	body:has(.view-deck.tab-dragging) .main-tab-bar {
+	   frame the content under it moves. Drop glass-card blur during the deck
+	   slide — but keep the nav bar's blur. Stripping nav blur made the bar
+	   flash semi-transparent in browser mode (its fill is only ~38% opaque). */
+	.view-deck.tab-dragging .glass-card {
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
 		transition: none;

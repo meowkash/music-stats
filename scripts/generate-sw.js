@@ -15,6 +15,8 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/favicon.svg',
   '/logo-mark.svg',
+  '/og-image.png',
+  '/icons/icon-32.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
