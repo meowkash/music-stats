@@ -78,14 +78,29 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 0 calc(16px + env(safe-area-inset-right))
+    /* Horizontal padding matches .panel-section so the bar lines up with the
+       cards above it. */
+    padding: 0 calc(10px + env(safe-area-inset-right))
       calc(var(--nav-bar-gap) + env(safe-area-inset-bottom))
-      calc(16px + env(safe-area-inset-left));
+      calc(10px + env(safe-area-inset-left));
     z-index: var(--z-nav);
     display: flex;
     flex-direction: column;
     align-items: center;
     pointer-events: none;
+    touch-action: pan-y;
+  }
+
+  @media (max-width: 767px) {
+    .bottom-nav-container {
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    /* Cards above are full width, so the bar is too. */
+    .main-tab-bar {
+      max-width: none;
+    }
   }
 
   .main-tab-bar {
@@ -95,10 +110,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 28px;
+    /* Matches the card/sheet radius language used across the app */
+    border-radius: var(--radius-xl);
     /* Minimal tint — blur samples whatever is actually behind */
-    background: rgba(14, 14, 18, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(14, 14, 18, 0.38);
+    border: 1px solid var(--panel-border-hover);
     box-shadow:
       0 12px 36px rgba(0, 0, 0, 0.45),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -106,8 +122,8 @@
     pointer-events: auto;
     position: relative;
     z-index: 1;
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
   }
 
   @supports not (backdrop-filter: blur(1px)) {
@@ -116,11 +132,16 @@
     }
   }
 
+  /* Colour is driven by a single inherited `color`, so the icon, label and
+     glow can be interpolated together by navBar.ts during a drag. */
   .tab-btn {
+    --btn-accent: var(--text-primary);
+    --btn-glow: transparent;
     background: none;
     border: none;
     outline: none;
     color: var(--text-secondary);
+    text-shadow: 0 0 10px var(--btn-glow);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -128,17 +149,29 @@
     gap: 4px;
     flex: 1;
     height: 48px;
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: var(--transition-smooth);
+    transition:
+      color var(--duration-nav) var(--ios-spring),
+      text-shadow var(--duration-nav) var(--ios-spring);
     position: relative;
     z-index: 2;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  /* JS drives colour frame by frame while animating; CSS must not smear it. */
+  .main-tab-bar.nav-animating .tab-btn,
+  .main-tab-bar.nav-animating .tab-icon {
+    transition: none;
+  }
+
 
   .tab-icon {
     width: 20px;
     height: 20px;
-    transition: var(--transition-smooth);
+    color: inherit;
+    /* text-shadow on the button covers the glow — SVG filter:drop-shadow is
+       far more expensive when colour interpolates every frame. */
     flex-shrink: 0;
   }
 
@@ -146,69 +179,71 @@
     font-size: 10px;
     font-weight: 500;
     font-family: var(--font-body);
-    transition: var(--transition-smooth);
+    color: inherit;
+  }
+
+  .tab-btn[data-tab="dashboard"] {
+    --btn-accent: var(--accent-pink);
+    --btn-accent-glow: var(--accent-pink-glow);
+  }
+  .tab-btn[data-tab="rankings"] {
+    --btn-accent: var(--accent-cyan);
+    --btn-accent-glow: var(--accent-cyan-glow);
+  }
+  .tab-btn[data-tab="recents"] {
+    --btn-accent: var(--accent-violet);
+    --btn-accent-glow: var(--accent-violet-glow);
+  }
+  .tab-btn[data-tab="statistics"] {
+    --btn-accent: var(--accent-green);
+    --btn-accent-glow: var(--accent-green-glow);
   }
 
   .tab-btn.active {
-    color: var(--text-primary);
-  }
-
-  .tab-btn[data-tab="dashboard"].active {
-    color: var(--accent-pink);
-    text-shadow: 0 0 10px var(--accent-pink-glow);
-  }
-  .tab-btn[data-tab="dashboard"].active .tab-icon {
-    stroke: var(--accent-pink);
-    filter: drop-shadow(0 0 4px var(--accent-pink-glow));
-  }
-
-  .tab-btn[data-tab="rankings"].active {
-    color: var(--accent-cyan);
-    text-shadow: 0 0 10px var(--accent-cyan-glow);
-  }
-  .tab-btn[data-tab="rankings"].active .tab-icon {
-    stroke: var(--accent-cyan);
-    filter: drop-shadow(0 0 4px var(--accent-cyan-glow));
-  }
-
-  .tab-btn[data-tab="recents"].active {
-    color: var(--accent-violet);
-    text-shadow: 0 0 10px var(--accent-violet-glow);
-  }
-  .tab-btn[data-tab="recents"].active .tab-icon {
-    stroke: var(--accent-violet);
-    filter: drop-shadow(0 0 4px var(--accent-violet-glow));
-  }
-
-  .tab-btn[data-tab="statistics"].active {
-    color: var(--accent-green);
-    text-shadow: 0 0 10px var(--accent-green-glow);
-  }
-  .tab-btn[data-tab="statistics"].active .tab-icon {
-    stroke: var(--accent-green);
-    filter: drop-shadow(0 0 4px var(--accent-green-glow));
+    color: var(--btn-accent);
+    --btn-glow: var(--btn-accent-glow);
   }
 
   .nav-slider-highlight {
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     background: color-mix(
       in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 12%,
+      var(--hl-color, rgba(255, 255, 255, 0.25)) 14%,
       rgba(0, 0, 0, 0.35)
     );
     border: 1px solid
       color-mix(
         in srgb,
-        var(--hl-color, rgba(255, 255, 255, 0.35)) 28%,
+        var(--hl-color, rgba(255, 255, 255, 0.35)) 30%,
         rgba(255, 255, 255, 0.06)
       );
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
       0 2px 10px var(--hl-glow, rgba(0, 0, 0, 0.45));
   }
 
-  .tab-btn:hover {
-    color: var(--text-primary);
+  /* Liquid-glass grab state */
+  .main-tab-bar.nav-dragging .nav-slider-highlight {
+    background: color-mix(
+      in srgb,
+      var(--hl-color, rgba(255, 255, 255, 0.25)) 22%,
+      rgba(0, 0, 0, 0.28)
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 6px 22px var(--hl-glow, rgba(0, 0, 0, 0.45));
+  }
+
+  .main-tab-bar.nav-dragging {
+    cursor: grabbing;
+  }
+
+  /* Must not apply to the selected tab: a tap leaves :hover stuck on touch
+     devices, which was overriding the accent colour after the animation. */
+  @media (hover: hover) and (pointer: fine) {
+    .tab-btn:not(.active):hover {
+      color: var(--text-primary);
+    }
   }
 
   @media (min-width: 768px) {
@@ -225,14 +260,14 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 16px;
-      background: rgba(14, 14, 18, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      border-radius: 24px;
+      background: rgba(14, 14, 18, 0.38);
+      border: 1px solid var(--panel-border-hover);
+      border-radius: var(--radius-xl);
       box-shadow:
         0 12px 36px rgba(0, 0, 0, 0.45),
         inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(20px) saturate(150%);
-      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
       pointer-events: auto;
     }
 
@@ -255,7 +290,7 @@
     .tab-btn {
       width: 100%;
       height: 48px;
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       padding: 0 16px;
       display: flex !important;
       flex-direction: row !important;
@@ -274,58 +309,8 @@
 </style>
 
 <script>
-  import { createSlidingHighlight } from "../utils/slidingHighlight";
   import { onReady } from "../utils/dom";
+  import { initNavBar } from "../utils/navBar";
 
-  function initNav() {
-    const tabs = document.querySelectorAll(".tab-btn");
-    const highlight = document.getElementById("navSliderHighlight") as HTMLDivElement;
-    const activeTab = document.querySelector(".tab-btn.active") as HTMLElement;
-
-    const navColors: Record<string, { color: string; glow: string }> = {
-      dashboard: { color: "var(--accent-pink)", glow: "var(--accent-pink-glow)" },
-      rankings: { color: "var(--accent-cyan)", glow: "var(--accent-cyan-glow)" },
-      recents: { color: "var(--accent-violet)", glow: "var(--accent-violet-glow)" },
-      statistics: { color: "var(--accent-green)", glow: "var(--accent-green-glow)" },
-    };
-
-    const { sync, observe } = createSlidingHighlight({
-      highlightEl: highlight,
-      buttons: tabs,
-      colorMap: (btn) => {
-        const tabName = btn.getAttribute("data-tab") || "";
-        return navColors[tabName] || null;
-      },
-    });
-
-    tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const targetTab = tab.getAttribute("data-tab");
-        if (!targetTab) return;
-
-        try {
-          localStorage.setItem("last-music-stats-tab", targetTab);
-        } catch {}
-
-        tabs.forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
-        sync(tab as HTMLElement);
-
-        window.dispatchEvent(
-          new CustomEvent("tab-change", { detail: { tab: targetTab } }),
-        );
-      });
-    });
-
-    observe();
-
-    if (activeTab && highlight) {
-      highlight.style.transition = "none";
-      sync(activeTab);
-      highlight.offsetHeight;
-      highlight.style.transition = "";
-    }
-  }
-
-  onReady(initNav);
+  onReady(initNavBar);
 </script>

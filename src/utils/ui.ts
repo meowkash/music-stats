@@ -2,7 +2,7 @@ export { CACHE_VERSION, dataUrl, fetchAppJson } from './dataStore';
 
 import { fetchAppJson, onPathsUpdated } from './dataStore';
 import { getGlowStyle } from './theme';
-import { getStaticArtworkSources, normalizeStaticArtworkUrl, resolveAlbumArtwork, resolveArtistArtwork, resolveArtistArtworkFromCandidates, resolveArtworkFromCache, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
+import { getStaticArtworkSources, getThumbArtworkSources, normalizeStaticArtworkUrl, resolveAlbumArtwork, resolveArtistArtwork, resolveArtistArtworkFromCandidates, resolveArtworkFromCache, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
 import { normalizeBottomColor, type Rgb } from './colorSurface';
 
 export interface ScrobbleRowData {
@@ -147,16 +147,18 @@ export function getArtworkThumbHTML(
   if (!imgUrl) {
     return getArtworkFallbackHTML(type);
   }
-  const sources = getStaticArtworkSources(imgUrl);
-  const highRes = sources[0] || normalizeStaticArtworkUrl(imgUrl) || imgUrl;
-  const lowRes = sources[sources.length - 1] || highRes;
+  // Smallest source first: these render at ~44px, so a 500px bitmap costs ~13x
+  // the bytes and decode time for pixels that get thrown away.
+  const sources = getThumbArtworkSources(imgUrl);
+  const lowRes = sources[0] || normalizeStaticArtworkUrl(imgUrl) || imgUrl;
+  const highRes = sources[sources.length - 1] || lowRes;
   const shimmerHtml = options?.shimmer === false
     ? ''
     : '<div class="artwork-shimmer" aria-hidden="true"></div>';
   return `
     ${shimmerHtml}
-    <img class="artwork-img" src="${escapeHTML(highRes)}" alt="" crossorigin="anonymous"
-         data-fallback-src="${escapeHTML(lowRes)}" />
+    <img class="artwork-img" src="${escapeHTML(lowRes)}" alt="" crossorigin="anonymous"
+         decoding="async" data-artwork-thumb="true" data-fallback-src="${escapeHTML(highRes)}" />
   `;
 }
 
@@ -272,7 +274,9 @@ function bindArtworkImage(img: HTMLImageElement) {
 
   const primarySrc = img.src;
   const fallbackSrc = img.dataset.fallbackSrc || primarySrc;
-  const sources = getStaticArtworkSources(primarySrc);
+  const sources = img.dataset.artworkThumb
+    ? getThumbArtworkSources(primarySrc)
+    : getStaticArtworkSources(primarySrc);
   if (sources.length === 0) {
     sources.push(primarySrc);
     if (fallbackSrc !== primarySrc) sources.push(fallbackSrc);
@@ -434,40 +438,6 @@ export function bindOverlayArtwork(img: HTMLImageElement, url: string | null, fa
   });
 }
 
-let preloadStarted = false;
-const preloadedUrls = new Set<string>();
-
-export function startBackgroundArtworkPreload() {
-  if (preloadStarted) return;
-  preloadStarted = true;
-
-  scheduleIdle(async () => {
-    const cache = await loadArtworkCache();
-    const urls = Object.values(cache).filter(Boolean);
-    let index = 0;
-
-    const preloadNext = () => {
-      if (index >= urls.length) return;
-      const batch = urls.slice(index, index + 5);
-      index += 5;
-
-      batch.forEach(rawUrl => {
-        const sources = getStaticArtworkSources(rawUrl);
-        const url = sources[0] || normalizeStaticArtworkUrl(rawUrl) || rawUrl;
-        if (preloadedUrls.has(url)) return;
-        preloadedUrls.add(url);
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = url;
-      });
-
-      scheduleIdle(preloadNext);
-    };
-
-    preloadNext();
-  });
-}
-
 export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean = true): string {
   const showThumb = data.showThumb !== false;
   const thumbContent = showThumb ? getArtworkThumbHTML(data.imgUrl, data.type || 'track') : '';
@@ -544,6 +514,10 @@ function urlVariants(url: string): string[] {
   variants.add(cleanUrl.replace('/1000x1000bb.jpg', '/600x600bb.jpg'));
   variants.add(cleanUrl.replace('/1000x1000bb.jpg', '/500x500/'));
   variants.add(cleanUrl.replace('/600x600bb.jpg', '/300x300bb.jpg'));
+  // Thumbnails now load the smallest variant, but colours were extracted from
+  // the largest, so the lookup has to climb back up as well as down.
+  variants.add(cleanUrl.replace('/300x300bb.jpg', '/1000x1000bb.jpg'));
+  variants.add(cleanUrl.replace('/600x600bb.jpg', '/1000x1000bb.jpg'));
   return [...variants];
 }
 

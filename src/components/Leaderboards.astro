@@ -1,14 +1,14 @@
 ---
 ---
 
-<div class="leaderboard-container glass-card panel-container">
+<div class="leaderboard-container glass-card panel-container panel-fill">
   <div class="view-header">
     <h2>Rankings</h2>
     <p class="subtitle">The songs that make my world go round...</p>
   </div>
 
   <!-- Date Selector Section -->
-  <div class="date-selector-section">
+  <div class="date-selector-section shrink-0">
     <div class="quick-ranges" style="position: relative;">
       <div id="rangeHighlight" class="range-highlight sliding-highlight"></div>
       <button class="range-btn active" data-range="7d">7 Days</button>
@@ -32,7 +32,7 @@
   </div>
 
   <!-- Sub-Tabs (Songs, Albums, Artists) -->
-  <div class="leaderboard-tabs">
+  <div class="leaderboard-tabs shrink-0">
     <div class="leaderboard-tab-group" style="position: relative;">
       <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight"></div>
       <button class="sub-tab-btn active" data-tab="songs">Songs</button>
@@ -42,7 +42,7 @@
   </div>
 
   <!-- Search + artist mode toggle -->
-  <div class="search-bar-row">
+  <div class="search-bar-row shrink-0">
     <div class="search-bar-wrapper">
       <svg
         class="search-icon"
@@ -79,7 +79,7 @@
   </div>
 
   <!-- Leaderboard List -->
-  <div class="leaderboard-list-wrapper">
+  <div class="leaderboard-list-wrapper panel-scroll">
     <div class="loader-wrapper hidden" id="leaderboardLoader">
       <div class="loader"></div>
       <span>Aggregating scrobbles...</span>
@@ -132,7 +132,7 @@
     font-weight: 600;
     color: var(--text-secondary);
     white-space: nowrap;
-    transition: color 0.2s ease;
+    transition: color var(--duration-fast) var(--ios-spring);
   }
 
   .artist-ranking-toggle:has(.toggle-switch.active) .unified-label {
@@ -149,7 +149,9 @@
     cursor: pointer;
     padding: 0;
     flex-shrink: 0;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition:
+      background-color var(--duration-fast) var(--ios-spring),
+      border-color var(--duration-fast) var(--ios-spring);
   }
 
   .toggle-switch.active {
@@ -166,7 +168,7 @@
     border-radius: 50%;
     background: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-    transition: transform 0.2s ease;
+    transition: transform var(--duration-fast) var(--ios-spring);
   }
 
   .toggle-switch.active .toggle-knob {
@@ -256,7 +258,7 @@
     border: 1px solid rgba(255, 255, 255, 0.04);
     padding: 12px;
     border-radius: 12px;
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeIn var(--duration-normal) var(--ios-spring);
   }
 
   .custom-date-inputs.hidden {
@@ -361,7 +363,7 @@
 
   .leaderboard-list-wrapper {
     position: relative;
-    min-height: 120px;
+    min-height: 0;
   }
 
   /* Invisible trigger element used for infinite-scroll chunk loading */
@@ -385,7 +387,7 @@
     -webkit-backdrop-filter: blur(4px);
     border-radius: 12px;
     z-index: 5;
-    transition: opacity 0.25s ease;
+    transition: opacity var(--duration-normal) var(--ios-spring);
   }
 
   .loader-wrapper.overlay {
@@ -395,7 +397,7 @@
   .leaderboard-list.updating {
     opacity: 0.55;
     pointer-events: none;
-    transition: opacity 0.25s ease;
+    transition: opacity var(--duration-normal) var(--ios-spring);
   }
 
   .loader-wrapper.hidden {
@@ -421,7 +423,7 @@
   /* Clickable entity links inside leaderboards */
   .leaderboard-container :global(.clickable-entity) {
     cursor: pointer;
-    transition: color 0.15s ease;
+    transition: color var(--duration-fast) var(--ios-spring);
   }
   .leaderboard-container :global(.clickable-entity:hover) {
     color: var(--accent-pink) !important;
@@ -504,7 +506,7 @@
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
 
-    const scrollRoot = listContainer.closest(".panel-section") as HTMLElement | null;
+    const scrollRoot = listContainer.closest(".panel-scroll") as HTMLElement | null;
 
     const todayStr = new Date().toISOString().split("T")[0];
     endDateInput.value = todayStr;
@@ -694,7 +696,7 @@
     const subTabHighlightCtrl = createSlidingHighlight({
       highlightEl: subTabHighlight,
       buttons: document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
-      colorMap: (btn) => {
+      accentFor: (btn) => {
         const tabName = btn.getAttribute("data-tab") || "";
         return getCategoryAccent(tabName);
       },
@@ -784,10 +786,11 @@
     rangeHighlightCtrl.observe();
     subTabHighlightCtrl.observe();
 
+    // Place both pills without animating; only user selections should glide.
     const initialRange = document.querySelector(".range-btn.active") as HTMLElement;
-    if (initialRange) rangeHighlightCtrl.sync(initialRange);
+    if (initialRange) rangeHighlightCtrl.sync(initialRange, false);
 
     const initialTab = document.querySelector(".sub-tab-btn.active") as HTMLElement;
-    if (initialTab) subTabHighlightCtrl.sync(initialTab);
+    if (initialTab) subTabHighlightCtrl.sync(initialTab, false);
   });
 </script>

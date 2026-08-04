@@ -25,8 +25,36 @@ export function applyNavButtonStates(tab: string): void {
   });
 }
 
+export function getActiveTab(): TabId {
+  const active = document.querySelector('.panel-section.active');
+  const id = active?.getAttribute('id')?.replace('view-', '') ?? 'dashboard';
+  return TAB_ORDER.includes(id as TabId) ? (id as TabId) : 'dashboard';
+}
+
+/** Drives the ambient background gradient crossfade. */
+export function applyTabAccent(tab: string): void {
+  if (TAB_ORDER.indexOf(tab as TabId) === -1) return;
+  document.body.dataset.activeTab = tab;
+}
+
 export function setActiveTab(tab: string): void {
   applyPanelStates(tab);
+  applyNavButtonStates(tab);
+  applyTabAccent(tab);
+}
+
+export function navigateToTab(tab: string): void {
+  if (TAB_ORDER.indexOf(tab as TabId) === -1) return;
+
+  setActiveTab(tab);
+
+  try {
+    localStorage.setItem('last-music-stats-tab', tab);
+  } catch {
+    // localStorage unavailable
+  }
+
+  window.dispatchEvent(new CustomEvent('tab-navigated', { detail: { tab } }));
 }
 
 export function restoreTabFromStorage(): void {
@@ -35,6 +63,7 @@ export function restoreTabFromStorage(): void {
     if (lastTab && lastTab !== 'dashboard') {
       applyPanelStates(lastTab);
       applyNavButtonStates(lastTab);
+      applyTabAccent(lastTab);
     }
   } catch {
     // localStorage unavailable

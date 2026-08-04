@@ -38,15 +38,8 @@ export function createInfiniteScroll<T>(options: InfiniteScrollOptions<T>): Infi
     { root, rootMargin },
   );
 
-  function syncSentinel() {
-    if (sentinel) {
-      observer.unobserve(sentinel);
-      sentinel.remove();
-      sentinel = null;
-    }
-
-    if (renderedCount >= items.length) return;
-
+  function ensureSentinel() {
+    if (sentinel) return;
     sentinel = document.createElement('div');
     sentinel.className = sentinelClass;
     sentinel.setAttribute('aria-hidden', 'true');
@@ -54,34 +47,43 @@ export function createInfiniteScroll<T>(options: InfiniteScrollOptions<T>): Infi
     observer.observe(sentinel);
   }
 
+  function hideSentinel() {
+    if (!sentinel) return;
+    observer.unobserve(sentinel);
+    sentinel.remove();
+    sentinel = null;
+  }
+
   function renderNextChunk() {
-    if (renderedCount >= items.length) return;
+    if (renderedCount >= items.length) {
+      hideSentinel();
+      return;
+    }
 
     const nextSlice = items.slice(renderedCount, renderedCount + chunkSize);
     const startIndex = renderedCount;
+    const html = nextSlice.map((item, i) => renderItem(item, startIndex + i)).join('');
 
-    const fragment = document.createElement('div');
-    fragment.innerHTML = nextSlice
-      .map((item, i) => renderItem(item, startIndex + i))
-      .join('');
-
-    while (fragment.firstChild) {
-      container.insertBefore(fragment.firstChild, sentinel);
+    // insertAdjacentHTML avoids the wrapper-div parse + child-move dance.
+    if (sentinel) {
+      sentinel.insertAdjacentHTML('beforebegin', html);
+    } else {
+      container.insertAdjacentHTML('beforeend', html);
     }
 
     renderedCount += nextSlice.length;
     onChunkRendered?.();
-    syncSentinel();
+
+    if (renderedCount >= items.length) hideSentinel();
+    else ensureSentinel();
   }
 
   function reset(newItems: unknown[]) {
     items = newItems as T[];
     renderedCount = 0;
-    if (sentinel) {
-      observer.unobserve(sentinel);
-      sentinel.remove();
-      sentinel = null;
-    }
+    hideSentinel();
+    // Clear existing rows without destroying a reused sentinel we just hid.
+    container.replaceChildren();
     renderNextChunk();
   }
 

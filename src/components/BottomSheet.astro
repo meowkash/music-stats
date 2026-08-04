@@ -1,0 +1,32 @@
+---
+interface Props {
+  /** Element id prefix — yields `${id}Backdrop`, `${id}Panel`, `${id}Scroll`. */
+  id: string;
+  label: string;
+  panelClass?: string;
+  /**
+   * Mobile sheet height, as any CSS length (e.g. `"56lvh"`). Defaults to a
+   * near-fullscreen sheet. Ignored by the desktop side-panel layout.
+   */
+  height?: string;
+}
+
+const { id, label, panelClass = "", height, ...panelAttrs } = Astro.props;
+---
+
+<div class="app-sheet-backdrop" id={`${id}Backdrop`}></div>
+
+<div
+  class:list={["app-sheet-panel", panelClass]}
+  id={`${id}Panel`}
+  role="dialog"
+  aria-modal="true"
+  aria-label={label}
+  style={height ? `--sheet-height: ${height}` : undefined}
+  {...panelAttrs}
+>
+  <div class="app-sheet-scroll" id={`${id}Scroll`}>
+    <div class="sheet-drag-handle" aria-hidden="true"></div>
+    <slot />
+  </div>
+</div>

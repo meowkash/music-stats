@@ -1,16 +1,20 @@
 import type { CategoryTab } from '../types/music';
 
+/**
+ * Absolute colours (not `var()`) so animations can interpolate them.
+ * Keep in sync with the --accent-cat-* tokens in Layout.astro.
+ */
 export function getCategoryAccent(category: string): { color: string; glow: string } {
   switch (category) {
     case 'artists':
-      return { color: 'var(--accent-cat-artists)', glow: 'var(--accent-cat-artists-glow)' };
+      return { color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)' };
     case 'albums':
-      return { color: 'var(--accent-cat-albums)', glow: 'var(--accent-cat-albums-glow)' };
+      return { color: '#10b981', glow: 'rgba(16, 185, 129, 0.4)' };
     case 'tracks':
     case 'songs':
-      return { color: 'var(--accent-cat-songs)', glow: 'var(--accent-cat-songs-glow)' };
+      return { color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.4)' };
     default:
-      return { color: 'rgba(255,255,255,0.25)', glow: 'rgba(0,0,0,0.4)' };
+      return { color: 'rgba(255, 255, 255, 0.25)', glow: 'rgba(0, 0, 0, 0.4)' };
   }
 }
 

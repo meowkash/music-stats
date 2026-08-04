@@ -1,112 +1,42 @@
 ---
 ---
 
-<div class="compare-container glass-card panel-container">
-  <div class="view-header">
+<div class="compare-container glass-card panel-container panel-fill">
+  <div class="view-header shrink-0">
     <h2>Statistics</h2>
     <p class="subtitle">Welcome to my nerdy side...</p>
   </div>
 
   <!-- Chart Controls -->
-  <div class="chart-controls">
+  <div class="chart-controls shrink-0">
     <div class="control-group">
       <span class="control-label">Select Years</span>
-      <div class="year-checkbox-group" id="yearCheckboxes">
+      <div class="year-checkbox-group" id="yearCheckboxes" data-scroll-x>
         <!-- Injected by client JS -->
       </div>
     </div>
   </div>
 
   <!-- Chart Display Canvas -->
-  <div class="chart-wrapper">
+  <div class="chart-wrapper panel-fill">
     <div class="chart-canvas-container">
       <canvas id="yearlyCompareChart"></canvas>
     </div>
-  </div>
-
-  <!-- Mobile Swipe Indicator (Only visible on small screens) -->
-  <div class="mobile-swipe-indicator">
-    <svg
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"><path d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg
-    >
-    Swipe horizontally to explore
-    <svg
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"><path d="M7 16l-4-4m0 0l4-4m-4 4h20"></path></svg
-    >
-  </div>
-
-  <!-- Yearly Stats View -->
-  <div class="yearly-stats-container">
-    <div class="yearly-stats-card" id="activeStatsCard">
-      <div class="yearly-stats-header" id="statsCardHeader">
-        <div class="custom-dropdown" id="yearDropdownContainer">
-          <button class="dropdown-trigger" id="yearDropdownBtn">
-            <span id="yearDropdownText">Year</span>
-            <svg
-              viewBox="0 0 24 24"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg
-            >
-          </button>
-          <div class="dropdown-popover" id="yearDropdownPopover"></div>
-        </div>
-
-        <h3>Top</h3>
-
-        <div class="custom-dropdown" id="categoryDropdownContainer">
-          <button class="dropdown-trigger" id="categoryDropdownBtn">
-            <span id="categoryDropdownText">Songs</span>
-            <svg
-              viewBox="0 0 24 24"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg
-            >
-          </button>
-          <div class="dropdown-popover" id="categoryDropdownPopover">
-            <div class="dropdown-item" data-val="tracks">Songs</div>
-            <div class="dropdown-item" data-val="albums">Albums</div>
-            <div class="dropdown-item" data-val="artists">Artists</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="stats-list" id="activeStatsList">
-        <!-- Injected by client JS -->
-      </div>
-    </div>
+    <button class="chart-sheet-btn" id="openStatsSheetBtn" type="button" aria-label="View top lists">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"></line>
+        <line x1="8" y1="12" x2="21" y2="12"></line>
+        <line x1="8" y1="18" x2="21" y2="18"></line>
+        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+      </svg>
+      Top Lists
+    </button>
   </div>
 </div>
 
 <style>
-  .compare-container {
-    /* panel-container handles layout */
-  }
-
-  /* Controls */
   .chart-controls {
     display: flex;
     flex-direction: column;
@@ -164,7 +94,6 @@
     display: none;
   }
 
-  /* LED indicator styling */
   .year-checkbox-group :global(.led-indicator) {
     width: 8px;
     height: 8px;
@@ -176,50 +105,23 @@
     box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
   }
 
-  /* Checked/selected state */
   .year-checkbox-group :global(.checkbox-label.checked) {
     opacity: 1;
     border-color: var(--year-color);
     background: rgba(255, 255, 255, 0.05);
-    box-shadow:
-      0 0 12px var(--year-color-glow),
-      inset 0 0 4px var(--year-color-glow);
+    box-shadow: 0 0 12px var(--year-color-glow), inset 0 0 4px var(--year-color-glow);
   }
 
   .year-checkbox-group :global(.checkbox-label.checked .led-indicator) {
     background: var(--year-color);
     border-color: #fff;
-    box-shadow:
-      0 0 8px var(--year-led-glow),
-      0 0 16px var(--year-color-glow),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 8px var(--year-led-glow), 0 0 16px var(--year-color-glow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   }
 
-  .mobile-swipe-indicator {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin: 12px 0 0 0;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    animation: pulse 2s infinite;
-  }
-
-  @media (max-width: 768px) {
-    .mobile-swipe-indicator {
-      display: flex;
-    }
-  }
-
-  /* Canvas */
   .chart-wrapper {
     position: relative;
     width: 100%;
-    height: 350px;
+    min-height: 0;
     background: rgba(0, 0, 0, 0.1);
     border-radius: 16px;
     padding: 12px;
@@ -237,133 +139,37 @@
     height: 100% !important;
   }
 
-  /* Yearly Stats Carousel */
-  .yearly-stats-container {
-    margin-top: 16px;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .yearly-stats-container :global(.yearly-stats-card) {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    background: rgba(20, 20, 25, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 20px;
-    padding: 20px;
-    flex-shrink: 0;
-    width: 100%;
-    scroll-snap-align: start;
-  }
-
-  .yearly-stats-container :global(.yearly-stats-header) {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .yearly-stats-container :global(.yearly-stats-header h3) {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  /* Custom Dropdowns */
-  .custom-dropdown {
-    position: relative;
-  }
-
-  .dropdown-trigger {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 6px 14px;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 700;
-    font-family: var(--font-header);
-    cursor: pointer;
-    transition: var(--transition-smooth);
-    user-select: none;
-  }
-
-  .dropdown-trigger:hover {
-    background: rgba(255, 255, 255, 0.12);
-  }
-
-  .dropdown-popover {
+  /* Sits inside the plot area, clear of the x-axis tick labels below it. */
+  .chart-sheet-btn {
     position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    min-width: 140px;
-    background: rgba(20, 20, 25, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 6px;
+    bottom: 44px;
+    right: 14px;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-8px);
-    transition: var(--transition-smooth);
-    z-index: var(--z-dropdown);
-  }
-
-  .custom-dropdown.open .dropdown-popover {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-  }
-
-  .dropdown-popover :global(.dropdown-item) {
-    padding: 8px 12px;
-    border-radius: 8px;
-    color: var(--text-secondary);
-    font-size: 14px;
-    font-weight: 600;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 13px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(14, 14, 18, 0.72);
+    backdrop-filter: blur(8px) saturate(140%);
+    -webkit-backdrop-filter: blur(8px) saturate(140%);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-body);
     cursor: pointer;
     transition: var(--transition-smooth);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 2;
   }
 
-  .dropdown-popover :global(.dropdown-item:hover) {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+  .chart-sheet-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
   }
 
-  .dropdown-popover :global(.dropdown-item.active) {
-    background: var(--active-color, rgba(255, 255, 255, 0.1));
-    color: #fff;
-  }
-  
-  #categoryDropdownPopover :global(.dropdown-item.active) {
-    background: var(--cat-active-color, rgba(255, 255, 255, 0.1));
-    color: #fff;
-  }
-
-  @keyframes pulse {
-    0% {
-      opacity: 0.5;
-    }
-    50% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0.5;
-    }
-  }
-
-  .yearly-stats-container :global(.stats-list) {
-    display: flex;
-    flex-direction: column;
-  }
+  /* Top-lists sheet lives in StatsTopSheet.astro (shared BottomSheet). */
 </style>
 
 <script>
@@ -379,10 +185,11 @@
     getArtworkCacheSync,
   } from "../utils/ui";
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
-
   import { bindEntityClicks } from "../utils/events";
   import type { YearlyTotals } from "../types/music";
   import { rawArtistNamesForCanonical } from "../utils/scrobbles";
+  import { bindHorizontalSwipe } from "../utils/horizontalSwipe";
+  import { createSheet } from "../utils/sheet";
 
   document.addEventListener("DOMContentLoaded", () => {
     let rawStats: Record<string, unknown> | null = null;
@@ -390,32 +197,35 @@
     let activeCategory: "tracks" | "albums" | "artists" = "tracks";
     let rawTotals: YearlyTotals | null = null;
     let metaDict: any = null;
+    let lastSwipeTarget: "year" | "category" = "year";
 
     let chart: Chart | null = null;
     const selectedYears = new Set<string>();
-    const datasetMap = new Map<string, any>();
+    const checkboxGroup = document.getElementById("yearCheckboxes") as HTMLDivElement;
 
-    const checkboxGroup = document.getElementById(
-      "yearCheckboxes",
-    ) as HTMLDivElement;
+    const sheetPanel = document.getElementById("statsSheetPanel") as HTMLDivElement;
+    const statsList = document.getElementById("activeStatsList") as HTMLDivElement;
+    const openBtn = document.getElementById("openStatsSheetBtn") as HTMLButtonElement;
+    const closeBtn = document.getElementById("statsSheetCloseBtn") as HTMLButtonElement;
 
-    const colors = [
-      "#ff2d55",
-      "#00f0ff",
-      "#8b5cf6",
-      "#22c55e",
-      "#f97316",
-      "#eab308",
-    ];
+    const colors = ["#ff2d55", "#00f0ff", "#8b5cf6", "#22c55e", "#f97316", "#eab308"];
     let yearColorMap: { [year: string]: string } = {};
+
+    const sheet = createSheet({
+      id: "statsSheet",
+      scrollContainer: statsList,
+      bodyClass: "stats-sheet-open",
+      onOpen: () => renderYearlyStats(),
+    });
+
+    openBtn?.addEventListener("click", () => sheet?.open());
+    closeBtn?.addEventListener("click", () => sheet?.close());
 
     const generateLabels = (): string[] => {
       const labels = [];
       const d = new Date(2024, 0, 1);
       for (let i = 0; i < 366; i++) {
-        labels.push(
-          d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        );
+        labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
         d.setDate(d.getDate() + 1);
       }
       return labels;
@@ -436,7 +246,7 @@
 
         initializeCheckboxes(rawTotals!);
         updateChart();
-        renderYearlyStats();
+        if (sheet?.isOpen()) renderYearlyStats();
       } catch (err) {
         console.error("Failed to load statistics data:", err);
       }
@@ -450,16 +260,13 @@
     }
 
     function buildDataset(year: string, totals: YearlyTotals): any {
-      const ctx = (
-        document.getElementById("yearlyCompareChart") as HTMLCanvasElement
-      )?.getContext("2d");
+      const ctx = (document.getElementById("yearlyCompareChart") as HTMLCanvasElement)?.getContext("2d");
       if (!ctx) return null;
 
       const color = yearColorMap[year] || "#888";
       const dailyCounts = totals[year] || [];
-
       let sum = 0;
-      let chartData = dailyCounts.map((count) => {
+      const chartData = dailyCounts.map((count) => {
         sum += count;
         return sum;
       });
@@ -488,9 +295,7 @@
 
     function ensureChart() {
       if (chart) return;
-      const ctx = (
-        document.getElementById("yearlyCompareChart") as HTMLCanvasElement
-      )?.getContext("2d");
+      const ctx = (document.getElementById("yearlyCompareChart") as HTMLCanvasElement)?.getContext("2d");
       if (!ctx) return;
 
       chart = new Chart(ctx, {
@@ -516,19 +321,13 @@
               boxWidth: 8,
               boxHeight: 8,
               boxPadding: 8,
-              titleFont: {
-                family: "Outfit",
-                weight: "bold" as const,
-                size: 18,
-              },
+              titleFont: { family: "Outfit", weight: "bold" as const, size: 18 },
               bodyFont: { family: "Inter", size: 15 },
               callbacks: {
                 label: (context) => {
                   let label = context.dataset.label || "";
                   if (label) label += ": ";
-                  if (context.parsed.y !== null) {
-                    label += context.parsed.y.toLocaleString() + " plays";
-                  }
+                  if (context.parsed.y !== null) label += context.parsed.y.toLocaleString() + " plays";
                   return label;
                 },
               },
@@ -538,19 +337,12 @@
           scales: {
             x: {
               grid: { display: false },
-              ticks: {
-                color: "rgba(255,255,255,0.3)",
-                font: { family: "Inter", size: 10 },
-                maxTicksLimit: 12,
-              },
+              ticks: { color: "rgba(255,255,255,0.3)", font: { family: "Inter", size: 10 }, maxTicksLimit: 12 },
               border: { display: false },
             },
             y: {
               grid: { color: "rgba(255,255,255,0.03)" },
-              ticks: {
-                color: "rgba(255,255,255,0.3)",
-                font: { family: "Inter", size: 10 },
-              },
+              ticks: { color: "rgba(255,255,255,0.3)", font: { family: "Inter", size: 10 } },
               border: { display: false },
             },
           },
@@ -565,42 +357,26 @@
         yearPopover.innerHTML = sortedSelectedYears
           .map(
             (year) => `
-          <div class="dropdown-item ${year === activeYear ? "active" : ""}" data-val="${year}">
-            ${year}
-          </div>
+          <div class="dropdown-item ${year === activeYear ? "active" : ""}" data-val="${year}">${year}</div>
         `,
           )
           .join("");
       }
 
-      document.getElementById("yearDropdownText")!.innerText =
-        activeYear || "Select";
+      document.getElementById("yearDropdownText")!.innerText = activeYear || "Select";
 
       const catText =
-        activeCategory === "tracks"
-          ? "Songs"
-          : activeCategory === "albums"
-            ? "Albums"
-            : "Artists";
+        activeCategory === "tracks" ? "Songs" : activeCategory === "albums" ? "Albums" : "Artists";
       document.getElementById("categoryDropdownText")!.innerText = catText;
 
-      document
-        .querySelectorAll("#categoryDropdownPopover .dropdown-item")
-        .forEach((item) => {
-          item.classList.toggle(
-            "active",
-            item.getAttribute("data-val") === activeCategory,
-          );
-        });
+      document.querySelectorAll("#categoryDropdownPopover .dropdown-item").forEach((item) => {
+        item.classList.toggle("active", item.getAttribute("data-val") === activeCategory);
+      });
 
       let catColor = "#ffffff";
-      if (activeCategory === "tracks") {
-        catColor = "var(--accent-cat-songs)";
-      } else if (activeCategory === "albums") {
-        catColor = "var(--accent-cat-albums)";
-      } else if (activeCategory === "artists") {
-        catColor = "var(--accent-cat-artists)";
-      }
+      if (activeCategory === "tracks") catColor = "var(--accent-cat-songs)";
+      else if (activeCategory === "albums") catColor = "var(--accent-cat-albums)";
+      else if (activeCategory === "artists") catColor = "var(--accent-cat-artists)";
 
       const catBtn = document.getElementById("categoryDropdownBtn");
       if (catBtn) {
@@ -615,22 +391,13 @@
       );
 
       const color = activeYear ? yearColorMap[activeYear] : "#ffffff";
-      document.documentElement.style.setProperty(
-        "--active-color",
-        color + "40",
-      );
+      document.documentElement.style.setProperty("--active-color", color + "40");
 
-      const card = document.getElementById("activeStatsCard");
-      if (card && activeYear) {
-        card.style.borderColor = color + "40";
-        card.style.boxShadow = `0 8px 32px ${color}15`;
-
-        const yearBtn = document.getElementById("yearDropdownBtn");
-        if (yearBtn) {
-          yearBtn.style.color = color;
-          yearBtn.style.borderColor = color + "40";
-          yearBtn.style.background = color + "10";
-        }
+      const yearBtn = document.getElementById("yearDropdownBtn");
+      if (yearBtn && activeYear) {
+        yearBtn.style.color = color;
+        yearBtn.style.borderColor = color + "40";
+        yearBtn.style.background = color + "10";
       }
     }
 
@@ -638,13 +405,8 @@
       const container = document.getElementById("activeStatsList");
       if (!container || !rawStats || !metaDict || selectedYears.size === 0) {
         if (container) container.innerHTML = "";
-        const card = document.getElementById("activeStatsCard");
-        if (card) card.style.display = "none";
         return;
       }
-
-      const card = document.getElementById("activeStatsCard");
-      if (card) card.style.display = "flex";
 
       const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
       if (!activeYear || !selectedYears.has(activeYear)) {
@@ -653,96 +415,70 @@
 
       updateDropdownsUI();
 
-      const stats = rawStats[activeYear];
+      const stats = rawStats[activeYear] as Record<string, [number, number][]> | undefined;
       if (!stats) {
         container.innerHTML = "";
         return;
       }
 
       const items = stats[activeCategory] || [];
-
       const cache = getArtworkCacheSync() || {};
 
-      const renderList = (
-        items: any[],
-        type: "artists" | "albums" | "tracks",
-      ) =>
-        items
-          .map((item, idx) => {
-            const id = item[0];
-            const count = item[1];
-            let name = "Unknown";
-            let subtitle = "";
-            let imgUrl = null;
-            let rowType = "artist";
+      container.innerHTML = items
+        .map((item: [number, number], idx: number) => {
+          const id = item[0];
+          const count = item[1];
+          let name = "Unknown";
+          let subtitle = "";
+          let imgUrl = null;
+          let rowType = "artist";
+          let rowArtistCatalog: "artists" | "canonicalArtists" | undefined;
 
-            let rowArtistCatalog: "artists" | "canonicalArtists" | undefined;
-
-            if (type === "tracks" && metaDict.tracks[id]) {
-              name = metaDict.tracks[id][0];
-              const artistId = metaDict.tracks[id][1];
-              const albumId = metaDict.tracks[id][2];
-              const artistName = metaDict.artists[artistId] || "Unknown Artist";
-              const albumName = metaDict.albums[albumId] || "Unknown Album";
+          if (activeCategory === "tracks" && metaDict.tracks[id]) {
+            name = metaDict.tracks[id][0];
+            const artistId = metaDict.tracks[id][1];
+            const albumId = metaDict.tracks[id][2];
+            const artistName = metaDict.artists[artistId] || "Unknown Artist";
+            const albumName = metaDict.albums[albumId] || "Unknown Album";
+            subtitle = artistName;
+            rowType = "track";
+            imgUrl = getArtworkUrl("track", name, artistName, albumName, cache);
+          } else if (activeCategory === "albums" && metaDict.albums[id]) {
+            name = metaDict.albums[id];
+            const trackEntry = metaDict.tracks.find((t: any) => t && t[2] == id);
+            if (trackEntry) {
+              const artistName = metaDict.artists[trackEntry[1]];
               subtitle = artistName;
-              rowType = "track";
-              imgUrl = getArtworkUrl(
-                "track",
-                name,
-                artistName,
-                albumName,
-                cache,
-              );
-            } else if (type === "albums" && metaDict.albums[id]) {
-              name = metaDict.albums[id];
-              const trackEntry = metaDict.tracks.find(
-                (t: any) => t && t[2] == id,
-              );
-              if (trackEntry) {
-                const artistName = metaDict.artists[trackEntry[1]];
-                subtitle = artistName;
-                imgUrl = getArtworkUrl(
-                  "album",
-                  name,
-                  artistName,
-                  name,
-                  cache,
-                );
-              } else {
-                subtitle = "Album";
-                imgUrl = getArtworkUrl("album", name, "", name, cache);
-              }
-              rowType = "album";
-            } else if (type === "artists" && metaDict.canonicalArtists?.[id]) {
-              name = metaDict.canonicalArtists[id];
-              subtitle = "Artist";
-              rowType = "artist";
-              rowArtistCatalog = "canonicalArtists";
-              imgUrl = getArtistArtworkUrl(
-                name,
-                cache,
-                rawArtistNamesForCanonical(id, metaDict),
-              );
+              imgUrl = getArtworkUrl("album", name, artistName, name, cache);
+            } else {
+              subtitle = "Album";
+              imgUrl = getArtworkUrl("album", name, "", name, cache);
             }
+            rowType = "album";
+          } else if (activeCategory === "artists" && metaDict.canonicalArtists?.[id]) {
+            name = metaDict.canonicalArtists[id];
+            subtitle = "Artist";
+            rowType = "artist";
+            rowArtistCatalog = "canonicalArtists";
+            imgUrl = getArtistArtworkUrl(name, cache, rawArtistNamesForCanonical(id, metaDict));
+          }
 
-            const idStr = id.toString();
+          return generateScrobbleRowHTML(
+            {
+              type: rowType,
+              id: id.toString(),
+              rank: idx + 1,
+              name,
+              subtitle,
+              imgUrl: imgUrl || null,
+              count,
+              artistCatalog: rowArtistCatalog,
+            },
+            true,
+          );
+        })
+        .join("");
 
-            return generateScrobbleRowHTML(
-              {
-                type: rowType,
-                id: idStr,
-                name: name,
-                subtitle: subtitle,
-                imgUrl: imgUrl || null,
-                count: count,
-                artistCatalog: rowArtistCatalog,
-              },
-              false,
-            );
-          })
-          .join("");
-
-      container.innerHTML = renderList(items, activeCategory);
       initArtworkImages(container);
       applyCountGlows(container);
     }
@@ -750,23 +486,19 @@
     function updateChart() {
       if (!chart) return;
 
-      // Remove unselected datasets
       for (let i = chart.data.datasets.length - 1; i >= 0; i--) {
         if (!selectedYears.has(chart.data.datasets[i].label as string)) {
           chart.data.datasets.splice(i, 1);
         }
       }
 
-      // Add newly selected datasets
       const currentLabels = new Set(chart.data.datasets.map((d: any) => d.label));
       const sortedYears = Array.from(selectedYears).sort().reverse();
 
       for (const year of sortedYears) {
         if (!currentLabels.has(year)) {
           const ds = buildDataset(year, rawTotals!);
-          if (ds) {
-            chart.data.datasets.push(ds);
-          }
+          if (ds) chart.data.datasets.push(ds);
         }
       }
 
@@ -786,7 +518,7 @@
       });
 
       checkboxGroup.innerHTML = years
-        .map((year, idx) => {
+        .map((year) => {
           const color = yearColorMap[year];
           const glow = hexToRgba(color, 0.4);
           const ledGlow = hexToRgba(color, 0.85);
@@ -804,127 +536,88 @@
         .join("");
     }
 
-    // Event Listeners
-    document
-      .getElementById("yearCheckboxes")
-      ?.addEventListener("change", (e) => {
-        const target = e.target as HTMLInputElement;
-        if (target.tagName !== "INPUT") return;
+    document.getElementById("yearCheckboxes")?.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.tagName !== "INPUT") return;
+      const year = target.value;
+      if (target.checked) selectedYears.add(year);
+      else selectedYears.delete(year);
+      target.closest("label")?.classList.toggle("checked", target.checked);
+      updateChart();
+      renderYearlyStats();
+    });
 
-        const year = target.value;
-        if (target.checked) {
-          selectedYears.add(year);
-        } else {
-          selectedYears.delete(year);
-        }
-
-        target.closest("label")?.classList.toggle("checked", target.checked);
-        updateChart();
-        renderYearlyStats();
-      });
-
-    // Delegation for clicking entities and dropdowns
     document.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
 
-      // Close dropdowns if clicking outside
       if (!target.closest(".custom-dropdown")) {
-        document
-          .querySelectorAll(".custom-dropdown")
-          .forEach((el) => el.classList.remove("open"));
+        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
       }
 
-      // Handle dropdown triggers
       const trigger = target.closest(".dropdown-trigger");
       if (trigger) {
         const container = trigger.closest(".custom-dropdown");
         const wasOpen = container?.classList.contains("open");
-        document
-          .querySelectorAll(".custom-dropdown")
-          .forEach((el) => el.classList.remove("open"));
-        if (!wasOpen) {
-          container?.classList.add("open");
-        }
+        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
+        if (!wasOpen) container?.classList.add("open");
         return;
       }
 
-      // Handle dropdown item selection
       const dropItem = target.closest(".dropdown-item");
       if (dropItem) {
         const val = dropItem.getAttribute("data-val");
         const container = dropItem.closest("#yearDropdownContainer");
-        if (container && val) {
-          activeYear = val;
-        } else if (val) {
-          activeCategory = val as any;
-        }
-        document
-          .querySelectorAll(".custom-dropdown")
-          .forEach((el) => el.classList.remove("open"));
+        if (container && val) activeYear = val;
+        else if (val) activeCategory = val as typeof activeCategory;
+        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
         renderYearlyStats();
-        return;
       }
-
-      // Entity clicks handled via bindEntityClicks on activeStatsList
     });
 
-    // Horizontal swipe logic
-    let touchStartX = 0;
-    let touchStartY = 0;
-    const statsContainer = document.getElementById("activeStatsCard");
-    if (statsContainer) {
-      statsContainer.addEventListener(
-        "touchstart",
-        (e) => {
-          touchStartX = e.changedTouches[0].screenX;
-          touchStartY = e.changedTouches[0].screenY;
-        },
-        { passive: true },
-      );
+    bindHorizontalSwipe({
+      element: sheetPanel,
+      onSwipeLeft: () => {
+        const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
+        if (lastSwipeTarget === "category") {
+          const cats = ["tracks", "albums", "artists"] as const;
+          let idx = cats.indexOf(activeCategory);
+          idx = Math.min(idx + 1, 2);
+          activeCategory = cats[idx];
+        } else if (activeYear) {
+          let idx = sortedSelectedYears.indexOf(activeYear);
+          idx = Math.min(idx + 1, sortedSelectedYears.length - 1);
+          if (activeYear !== sortedSelectedYears[idx]) activeYear = sortedSelectedYears[idx];
+        }
+        renderYearlyStats();
+      },
+      onSwipeRight: () => {
+        const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
+        if (lastSwipeTarget === "category") {
+          const cats = ["tracks", "albums", "artists"] as const;
+          let idx = cats.indexOf(activeCategory);
+          idx = Math.max(idx - 1, 0);
+          activeCategory = cats[idx];
+        } else if (activeYear) {
+          let idx = sortedSelectedYears.indexOf(activeYear);
+          idx = Math.max(idx - 1, 0);
+          if (activeYear !== sortedSelectedYears[idx]) activeYear = sortedSelectedYears[idx];
+        }
+        renderYearlyStats();
+      },
+    });
 
-      statsContainer.addEventListener(
-        "touchend",
-        (e) => {
-          const touchEndX = e.changedTouches[0].screenX;
-          const touchEndY = e.changedTouches[0].screenY;
-          const diffX = touchStartX - touchEndX;
-          const diffY = touchStartY - touchEndY;
+    sheetPanel.addEventListener(
+      "touchstart",
+      (e) => {
+        const target = e.target as HTMLElement;
+        lastSwipeTarget = target.closest("#categoryDropdownContainer") ? "category" : "year";
+      },
+      { passive: true },
+    );
 
-          // 50px threshold to minimize accidental swipes
-          if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
-            const sortedSelectedYears = Array.from(selectedYears)
-              .sort()
-              .reverse();
-            const target = e.target as HTMLElement;
-
-            if (target.closest("#categoryDropdownContainer")) {
-              const cats = ["tracks", "albums", "artists"];
-              let idx = cats.indexOf(activeCategory);
-              if (diffX > 0) idx = Math.min(idx + 1, 2);
-              else idx = Math.max(idx - 1, 0);
-              activeCategory = cats[idx] as any;
-              renderYearlyStats();
-            } else if (activeYear) {
-              let idx = sortedSelectedYears.indexOf(activeYear);
-              if (diffX > 0)
-                idx = Math.min(idx + 1, sortedSelectedYears.length - 1); // Swipe left = older year
-              else idx = Math.max(idx - 1, 0); // Swipe right = newer year
-              
-              if (activeYear !== sortedSelectedYears[idx]) {
-                activeYear = sortedSelectedYears[idx];
-                renderYearlyStats();
-              }
-            }
-          }
-        },
-        { passive: true },
-      );
-    }
-
-    const statsList = document.getElementById("activeStatsList");
     if (statsList) bindEntityClicks(statsList);
 
-    window.addEventListener("tab-change", (e: Event) => {
+    window.addEventListener("tab-navigated", (e: Event) => {
       if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") {
         setTimeout(() => {
           if (chart) chart.resize();

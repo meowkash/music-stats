@@ -1,0 +1,227 @@
+---
+import BottomSheet from "./BottomSheet.astro";
+---
+
+<BottomSheet
+  id="statsSheet"
+  label="Top lists"
+  panelClass="stats-sheet-panel"
+  height="56lvh"
+  data-horizontal-swipe
+>
+  <div class="stats-sheet-header">
+    <span class="stats-sheet-eyebrow">Top</span>
+
+    <div class="custom-dropdown" id="categoryDropdownContainer">
+      <button class="dropdown-trigger" id="categoryDropdownBtn" type="button">
+        <span id="categoryDropdownText">Songs</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg
+        >
+      </button>
+      <div class="dropdown-popover" id="categoryDropdownPopover">
+        <div class="dropdown-item" data-val="tracks">Songs</div>
+        <div class="dropdown-item" data-val="albums">Albums</div>
+        <div class="dropdown-item" data-val="artists">Artists</div>
+      </div>
+    </div>
+
+    <div class="custom-dropdown" id="yearDropdownContainer">
+      <button class="dropdown-trigger" id="yearDropdownBtn" type="button">
+        <span id="yearDropdownText">Year</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg
+        >
+      </button>
+      <div class="dropdown-popover" id="yearDropdownPopover"></div>
+    </div>
+
+    <button
+      class="nav-circle-btn stats-sheet-close"
+      id="statsSheetCloseBtn"
+      type="button"
+      aria-label="Close top lists"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+
+  <div class="stats-list panel-scroll" id="activeStatsList"></div>
+</BottomSheet>
+
+<style>
+  .stats-sheet-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 24px var(--spacing-section) 12px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  @media (min-width: 768px) {
+    .stats-sheet-header {
+      padding: var(--spacing-section) var(--spacing-section) 12px;
+    }
+  }
+
+  .stats-sheet-eyebrow {
+    font-family: var(--font-header);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .stats-sheet-close {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .stats-list {
+    padding: 10px var(--spacing-section) calc(env(safe-area-inset-bottom) + 16px);
+  }
+
+  .custom-dropdown {
+    position: relative;
+  }
+
+  .dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--panel-border-hover);
+    border-radius: var(--radius-md);
+    padding: 6px 11px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font-header);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .dropdown-trigger:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .dropdown-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 140px;
+    background: rgba(20, 20, 25, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: var(--transition-smooth);
+    z-index: var(--z-dropdown);
+  }
+
+  /* Right-aligned so it can't overflow the sheet edge */
+  #yearDropdownContainer .dropdown-popover {
+    left: auto;
+    right: 0;
+  }
+
+  .custom-dropdown.open .dropdown-popover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .dropdown-popover .dropdown-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  .dropdown-popover .dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .dropdown-popover :global(.dropdown-item.active) {
+    background: var(--active-color, rgba(255, 255, 255, 0.1));
+    color: #fff;
+  }
+
+  #categoryDropdownPopover :global(.dropdown-item.active) {
+    background: var(--cat-active-color, rgba(255, 255, 255, 0.1));
+    color: #fff;
+  }
+
+  #yearDropdownPopover :global(.dropdown-item) {
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  #yearDropdownPopover :global(.dropdown-item:hover) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .nav-circle-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--panel-border-hover);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+  }
+
+  .nav-circle-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-circle-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+</style>

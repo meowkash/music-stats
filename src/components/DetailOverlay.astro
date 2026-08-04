@@ -1,9 +1,9 @@
 ---
 ---
 
-<div class="overlay-backdrop" id="detailsOverlayBackdrop"></div>
+<div class="overlay-backdrop app-sheet-backdrop" id="detailsOverlayBackdrop"></div>
 
-<div class="details-overlay-panel" id="detailsOverlayPanel">
+<div class="details-overlay-panel app-sheet-panel" id="detailsOverlayPanel">
   <!-- Scroll on inner wrapper; panel stays transform-only for compositor animation -->
   <div class="overlay-scroll-container" id="overlayScrollContainer">
     <div class="sheet-drag-handle" id="sheetDragHandle"></div>
@@ -73,37 +73,8 @@
 </div>
 
 <style>
-  .overlay-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-overlay-backdrop);
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.5s var(--ios-spring);
-  }
-
-  .overlay-backdrop.visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  /* No overflow here — scroll lives in .overlay-scroll-container */
-  .details-overlay-panel {
-    position: fixed;
-    z-index: var(--z-overlay-panel);
-    background: var(--overlay-bg-bottom, var(--surface-elevated));
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    transition: transform 0.5s var(--ios-spring);
-    will-change: transform;
-    overflow: hidden;
-    /* paint only — layout/style containment caused stale widths on iOS rotation */
-    contain: paint;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-  }
+  /* Geometry, entry transform and drag handle come from the shared
+     .app-sheet-panel / .app-sheet-backdrop rules in Layout.astro. */
 
   .overlay-scroll-container {
     position: relative;
@@ -135,58 +106,12 @@
   }
 
   @media (max-width: 767px) {
-    .details-overlay-panel {
-      left: 0;
-      right: 0;
-      bottom: 0;
-      top: max(8lvh, env(safe-area-inset-top) + 24px);
-      border-top-left-radius: 20px;
-      border-top-right-radius: 20px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      transform: translate3d(0, 100%, 0);
-    }
-
     .overlay-header,
     .overlay-artwork-wrapper {
-      border-top-left-radius: 20px;
-      border-top-right-radius: 20px;
+      border-top-left-radius: var(--radius-sheet);
+      border-top-right-radius: var(--radius-sheet);
       overflow: hidden;
     }
-
-    .sheet-drag-handle {
-      display: block;
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 40px;
-      height: 5px;
-      border-radius: 2.5px;
-      background: rgba(255, 255, 255, 0.45);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-      flex-shrink: 0;
-      cursor: grab;
-      z-index: 50;
-    }
-  }
-
-  @media (min-width: 768px) {
-    .details-overlay-panel {
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 480px;
-      border-left: 1px solid rgba(255, 255, 255, 0.08);
-      transform: translate3d(100%, 0, 0);
-    }
-
-    .sheet-drag-handle {
-      display: none;
-    }
-  }
-
-  .details-overlay-panel.visible {
-    transform: none;
   }
 
   .overlay-background-blur {
@@ -197,7 +122,7 @@
     height: 380px;
     background-size: cover;
     background-position: center;
-    filter: blur(32px) saturate(1.4);
+    filter: blur(22px) saturate(1.3);
     opacity: 0;
     z-index: 0;
     pointer-events: none;
@@ -252,8 +177,8 @@
     height: 36px;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     color: var(--text-primary);
@@ -314,7 +239,7 @@
     border-radius: 0;
     z-index: 3;
     opacity: 1;
-    transition: opacity 120ms ease;
+    transition: opacity var(--duration-fast) var(--ios-spring);
     background: linear-gradient(
       100deg,
       rgba(255, 255, 255, 0.01) 0%,

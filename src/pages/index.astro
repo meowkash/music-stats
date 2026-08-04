@@ -6,6 +6,7 @@ import Recents from "../components/Recents.astro";
 import Statistics from "../components/Statistics.astro";
 import BottomNav from "../components/BottomNav.astro";
 import DetailOverlay from "../components/DetailOverlay.astro";
+import StatsTopSheet from "../components/StatsTopSheet.astro";
 import { TAB_ORDER } from "../utils/tabs";
 ---
 
@@ -56,6 +57,7 @@ import { TAB_ORDER } from "../utils/tabs";
               btn.classList.add('active');
             }
           });
+          document.body.dataset.activeTab = lastTab;
         }
       }
     } catch (e) {
@@ -63,6 +65,7 @@ import { TAB_ORDER } from "../utils/tabs";
     }
   </script>
 
+  <StatsTopSheet />
   <DetailOverlay />
 </Layout>
 
@@ -74,7 +77,8 @@ import { TAB_ORDER } from "../utils/tabs";
     flex-direction: column;
     overflow: hidden;
     position: absolute;
-    transition: padding 0.5s var(--ios-spring);
+    z-index: 1;
+    transition: padding var(--duration-slow) var(--ios-spring);
   }
 
   @media (min-width: 768px) {
@@ -95,17 +99,24 @@ import { TAB_ORDER } from "../utils/tabs";
   .panel-section {
     position: absolute;
     inset: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     visibility: hidden;
     pointer-events: none;
     width: 100%;
-    transition:
-      padding 0.5s var(--ios-spring),
-      transform var(--duration-slow) var(--ios-spring),
-      visibility 0s linear var(--duration-slow);
+    transition: transform var(--duration-normal) var(--ios-spring);
+    backface-visibility: hidden;
+  }
+
+  .view-deck.tab-dragging .panel-section {
+    transition: none !important;
     will-change: transform;
+  }
+
+  .panel-section > :global(*) {
+    flex: 1;
+    min-height: 0;
   }
 
   .panel-section.inactive-left {
@@ -139,20 +150,11 @@ import { TAB_ORDER } from "../utils/tabs";
     visibility: visible;
     transform: translate3d(0, 0, 0);
     pointer-events: auto;
-    transition:
-      padding 0.5s var(--ios-spring),
-      transform var(--duration-slow) var(--ios-spring),
-      visibility 0s linear 0s;
   }
 </style>
 
 <script>
-  import {
-    loadColorsCache,
-    preloadAppData,
-    startBackgroundArtworkPreload,
-  } from "../utils/ui";
-  import { setActiveTab } from "../utils/tabs";
+  import { loadColorsCache, preloadAppData } from "../utils/ui";
   import {
     warmDataCache,
     ensureCacheVersion,
@@ -170,15 +172,9 @@ import { TAB_ORDER } from "../utils/tabs";
         await warmDataCache([...CRITICAL_DATA_PATHS]);
         void revalidateCriticalData();
         await Promise.all([loadColorsCache(), preloadAppData()]);
-        startBackgroundArtworkPreload();
       } catch (err) {
         console.warn("Background data hydration failed:", err);
       }
     })();
-
-    window.addEventListener("tab-change", (e: Event) => {
-      const tab = (e as CustomEvent<{ tab: string }>).detail.tab;
-      setActiveTab(tab);
-    });
   });
 </script>

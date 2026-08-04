@@ -229,6 +229,7 @@ export function initDetailOverlay(): void {
   bindSwipeDismiss({
     panel,
     scrollContainer: overlayScrollContainer,
+    backdrop,
     onDismiss: closeDetails,
   });
 

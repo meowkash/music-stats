@@ -7,8 +7,22 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshing = false;
 let suppressUpdateToasts = false;
 
-const PULL_THRESHOLD = 72;
-const MAX_PULL = 120;
+const PULL_THRESHOLD = 108;
+const MAX_PULL = 150;
+const MIN_PULL_SHOW = 28;
+const PULL_DAMPING = 0.32;
+
+function isOverlayOpen(): boolean {
+  return (
+    document.body.classList.contains('overlay-open') ||
+    document.body.classList.contains('stats-sheet-open')
+  );
+}
+
+function isOverlayTouch(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return !!target.closest('.app-sheet-panel, .app-sheet-backdrop');
+}
 
 export function hideSplashScreen(): void {
   if (splashHidden) return;
@@ -47,8 +61,27 @@ function getActivePanel(): HTMLElement | null {
   return document.querySelector('.panel-section.active');
 }
 
+function getActiveScrollContainer(): HTMLElement | null {
+  const panel = getActivePanel();
+  if (!panel) return null;
+  return (
+    (panel.querySelector('.panel-scroll-active') as HTMLElement | null) ||
+    (panel.querySelector('.panel-scroll') as HTMLElement | null)
+  );
+}
+
+function isScrollAtTop(): boolean {
+  const scrollEl = getActiveScrollContainer();
+  if (scrollEl) return scrollEl.scrollTop <= 2;
+  const panel = getActivePanel();
+  return !panel || panel.scrollTop <= 2;
+}
+
+let pullIndicator: HTMLElement | null = null;
+
 function getPullIndicator(): HTMLElement | null {
-  return document.getElementById('pull-refresh-indicator');
+  if (!pullIndicator) pullIndicator = document.getElementById('pull-refresh-indicator');
+  return pullIndicator;
 }
 
 function setPullOffset(offset: number): void {
@@ -103,12 +136,33 @@ function initPullToRefresh(): void {
   let startY = 0;
   let pulling = false;
   let currentPull = 0;
+  /** Resolved once per gesture instead of re-queried on every touchmove. */
+  let scrollEl: HTMLElement | null = null;
+  let pendingPull: number | null = null;
+  let pullRafId: number | null = null;
+
+  function atTop(): boolean {
+    return scrollEl ? scrollEl.scrollTop <= 2 : isScrollAtTop();
+  }
+
+  function flushPull() {
+    pullRafId = null;
+    if (pendingPull === null) return;
+    setPullOffset(pendingPull);
+    pendingPull = null;
+  }
+
+  function cancelPendingPull() {
+    if (pullRafId !== null) cancelAnimationFrame(pullRafId);
+    pullRafId = null;
+    pendingPull = null;
+  }
 
   const onTouchStart = (event: TouchEvent) => {
-    if (refreshing) return;
-    const panel = getActivePanel();
-    if (!panel || panel.scrollTop > 2) return;
+    if (refreshing || isOverlayOpen() || isOverlayTouch(event.target)) return;
+    if (!isScrollAtTop()) return;
 
+    scrollEl = getActiveScrollContainer();
     startY = event.touches[0].clientY;
     pulling = true;
     currentPull = 0;
@@ -116,11 +170,18 @@ function initPullToRefresh(): void {
 
   const onTouchMove = (event: TouchEvent) => {
     if (!pulling || refreshing) return;
-
-    const panel = getActivePanel();
-    if (!panel || panel.scrollTop > 2) {
+    if (isOverlayOpen() || isOverlayTouch(event.target)) {
       pulling = false;
       currentPull = 0;
+      cancelPendingPull();
+      resetPullUi();
+      return;
+    }
+
+    if (!atTop()) {
+      pulling = false;
+      currentPull = 0;
+      cancelPendingPull();
       resetPullUi();
       return;
     }
@@ -128,19 +189,24 @@ function initPullToRefresh(): void {
     const delta = event.touches[0].clientY - startY;
     if (delta <= 0) {
       currentPull = 0;
+      cancelPendingPull();
       resetPullUi();
       return;
     }
 
+    if (delta < MIN_PULL_SHOW) return;
+
     event.preventDefault();
-    currentPull = Math.min(delta * 0.45, MAX_PULL);
+    currentPull = Math.min(delta * PULL_DAMPING, MAX_PULL);
     getPullIndicator()?.classList.add('visible');
-    setPullOffset(currentPull);
+    pendingPull = currentPull;
+    if (pullRafId === null) pullRafId = requestAnimationFrame(flushPull);
   };
 
   const onTouchEnd = () => {
     if (!pulling) return;
     pulling = false;
+    cancelPendingPull();
 
     if (currentPull >= PULL_THRESHOLD) {
       setPullOffset(PULL_THRESHOLD);
