@@ -6,11 +6,12 @@ export interface SwipeDismissOptions {
   backdrop?: HTMLElement | null;
   threshold?: number;
   /**
-   * Touches that begin this many px from the left edge are reserved for the
-   * iOS-style edge-swipe back gesture. Pass a function when the reserve width
-   * depends on runtime state (e.g. only while the overlay has history).
+   * Touches that begin this many px from the left/right edge are reserved for
+   * in-sheet edge navigation. Pass a function when the width depends on
+   * runtime state (e.g. only while the overlay has back/forward history).
    */
   reserveLeftEdgePx?: number | (() => number);
+  reserveRightEdgePx?: number | (() => number);
 }
 
 /** Distance the finger must travel before the sheet starts following it. */
@@ -26,6 +27,7 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
     backdrop,
     threshold = 100,
     reserveLeftEdgePx = 0,
+    reserveRightEdgePx = 0,
   } = options;
 
   let startX = 0;
@@ -81,9 +83,12 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
     if (window.innerWidth >= 768) return;
     if (e.touches.length !== 1) return;
     if (scrollContainer.scrollTop > 5) return;
-    // Leave the left edge for the interactive back gesture when reserved.
-    const edgePx = typeof reserveLeftEdgePx === 'function' ? reserveLeftEdgePx() : reserveLeftEdgePx;
-    if (edgePx > 0 && e.touches[0].clientX <= edgePx) return;
+    // Leave edges for interactive back/forward navigation when reserved.
+    const leftPx = typeof reserveLeftEdgePx === 'function' ? reserveLeftEdgePx() : reserveLeftEdgePx;
+    const rightPx = typeof reserveRightEdgePx === 'function' ? reserveRightEdgePx() : reserveRightEdgePx;
+    const x = e.touches[0].clientX;
+    if (leftPx > 0 && x <= leftPx) return;
+    if (rightPx > 0 && x >= window.innerWidth - rightPx) return;
 
     panelHeight = panel.offsetHeight || window.innerHeight;
     startX = e.touches[0].clientX;
@@ -177,7 +182,7 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   window.addEventListener('orientationchange', cancelDrag);
 }
 
-export interface EdgeSwipeBackOptions {
+export interface EdgeSwipeNavOptions {
   /** Listens for the edge gesture — typically the sheet panel. */
   gestureEl: HTMLElement;
   /**
@@ -185,18 +190,27 @@ export interface EdgeSwipeBackOptions {
    * The sheet panel itself must not move.
    */
   contentEls: HTMLElement[];
-  /** True when there is navigation history to pop (chevron back). */
-  canGoBack: () => boolean;
   /**
-   * Pop one level. Called only after a committed swipe, with content already
-   * painted at the "back out" end state so the incoming slide can continue.
+   * `back` — left edge, swipe right (pop history).
+   * `forward` — right edge, swipe left (redo).
    */
-  onBack: () => void;
-  /** Width of the invisible left-edge hit target. */
+  direction: 'back' | 'forward';
+  canNavigate: () => boolean;
+  /**
+   * Called after a committed swipe with content already at the "out" end
+   * state for this direction, so the incoming slide can continue seamlessly.
+   */
+  onNavigate: () => void;
   edgeWidth?: number;
   /** Max slide distance in px — keep in sync with OVERLAY_SLIDE_PX. */
   slidePx?: number;
 }
+
+/** @deprecated Prefer `bindEdgeSwipeNav` with `direction: 'back'`. */
+export type EdgeSwipeBackOptions = Omit<EdgeSwipeNavOptions, 'direction' | 'canNavigate' | 'onNavigate'> & {
+  canGoBack: () => boolean;
+  onBack: () => void;
+};
 
 const EDGE_ENGAGE = 8;
 const EDGE_FLICK = 0.45;
@@ -205,19 +219,23 @@ const EDGE_COMMIT = 0.28;
 const EDGE_FULL_DX = 120;
 
 /**
- * iOS-style interactive edge swipe for in-sheet navigation: the content slides
- * out under the finger (reverse of the forward push), while the sheet stays put.
- * Pull-down remains the only way to dismiss the sheet.
+ * iOS-style interactive edge swipe for in-sheet navigation. Content slides
+ * under the finger; the sheet stays put. Pull-down still dismisses.
  */
-export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
+export function bindEdgeSwipeNav(options: EdgeSwipeNavOptions): void {
   const {
     gestureEl,
     contentEls,
-    canGoBack,
-    onBack,
+    direction,
+    canNavigate,
+    onNavigate,
     edgeWidth = 22,
     slidePx = 28,
   } = options;
+
+  const goingBack = direction === 'back';
+  // Back: content exits to the right (+x). Forward: content exits to the left (−x).
+  const slideSign = goingBack ? 1 : -1;
 
   let tracking = false;
   let engaged = false;
@@ -232,7 +250,7 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
 
   function paint(p: number) {
     progress = Math.min(Math.max(p, 0), 1);
-    const x = progress * slidePx;
+    const x = progress * slidePx * slideSign;
     const opacity = String(1 - progress);
     for (const el of contentEls) {
       el.style.transform = `translate3d(${x}px, 0, 0)`;
@@ -284,12 +302,17 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
   function onStart(e: TouchEvent) {
     if (window.innerWidth >= 768) return;
     if (e.touches.length !== 1) return;
-    if (e.touches[0].clientX > edgeWidth) return;
-    if (!canGoBack()) return;
+    if (!canNavigate()) return;
+
+    const x = e.touches[0].clientX;
+    const edgeOk = goingBack
+      ? x <= edgeWidth
+      : x >= window.innerWidth - edgeWidth;
+    if (!edgeOk) return;
 
     tracking = true;
     engaged = false;
-    startX = e.touches[0].clientX;
+    startX = x;
     startY = e.touches[0].clientY;
     lastX = startX;
     lastTime = performance.now();
@@ -307,7 +330,9 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
 
     if (!engaged) {
       if (Math.abs(dx) < EDGE_ENGAGE && Math.abs(dy) < EDGE_ENGAGE) return;
-      if (Math.abs(dy) > Math.abs(dx) || dx < 0) {
+      // Must move in the swipe direction for this edge; vertical → abandon.
+      const horizontalOk = goingBack ? dx > 0 : dx < 0;
+      if (Math.abs(dy) > Math.abs(dx) || !horizontalOk) {
         tracking = false;
         return;
       }
@@ -326,7 +351,8 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
       lastTime = now;
     }
 
-    pendingProgress = Math.min(Math.max(dx, 0) / EDGE_FULL_DX, 1);
+    const travel = goingBack ? Math.max(dx, 0) : Math.max(-dx, 0);
+    pendingProgress = Math.min(travel / EDGE_FULL_DX, 1);
     if (dragRafId === null) dragRafId = requestAnimationFrame(flush);
   }
 
@@ -338,13 +364,12 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
     if (!engaged) return;
     engaged = false;
 
-    const commit = progress > EDGE_COMMIT || velocityX > EDGE_FLICK;
-    if (commit && canGoBack()) {
-      // Hold the content at the fully slid-out state; onBack continues into
-      // the normal "slide previous content in from the left" animation.
+    const flick = goingBack ? velocityX > EDGE_FLICK : velocityX < -EDGE_FLICK;
+    const commit = progress > EDGE_COMMIT || flick;
+    if (commit && canNavigate()) {
       paint(1);
       for (const el of contentEls) el.style.transition = 'none';
-      onBack();
+      onNavigate();
       return;
     }
 
@@ -363,4 +388,14 @@ export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
   gestureEl.addEventListener('touchmove', onMove, { passive: false });
   gestureEl.addEventListener('touchend', onEnd, { passive: true });
   gestureEl.addEventListener('touchcancel', onCancel, { passive: true });
+}
+
+/** Left-edge swipe → go back in the overlay stack. */
+export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
+  bindEdgeSwipeNav({
+    ...options,
+    direction: 'back',
+    canNavigate: options.canGoBack,
+    onNavigate: options.onBack,
+  });
 }

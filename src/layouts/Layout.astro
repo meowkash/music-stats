@@ -484,16 +484,20 @@ const pageUrl = Astro.url.href;
 		overflow: hidden;
 	}
 
-	/* Plain vertical gradients — no blur filters, so each layer rasterises
-	   once and the crossfade is pure compositing. */
+	/* Bilinear vertical wash: colour at the top, soft through the middle,
+	   colour again at the bottom. No blur — crossfade stays compositor-cheap. */
 	#app-bg-gradient .bg-layer {
 		position: absolute;
 		inset: 0;
 		opacity: 0;
 		transition: opacity var(--duration-slow) var(--ios-spring);
-		background:
-			linear-gradient(to bottom, var(--layer-top) 0%, transparent 55%),
-			linear-gradient(to top, var(--layer-bottom) 0%, transparent 30%);
+		background: linear-gradient(
+			to bottom,
+			var(--layer-top) 0%,
+			var(--layer-mid) 42%,
+			var(--layer-mid) 58%,
+			var(--layer-bottom) 100%
+		);
 	}
 
 	/* Promote only while a JS-driven crossfade is writing opacity. */
@@ -502,20 +506,24 @@ const pageUrl = Astro.url.href;
 	}
 
 	#app-bg-gradient .bg-layer[data-tab="dashboard"] {
-		--layer-top: rgba(255, 45, 85, 0.1);
-		--layer-bottom: rgba(255, 45, 85, 0.05);
+		--layer-top: rgba(255, 45, 85, 0.12);
+		--layer-mid: rgba(255, 45, 85, 0.03);
+		--layer-bottom: rgba(255, 45, 85, 0.1);
 	}
 	#app-bg-gradient .bg-layer[data-tab="rankings"] {
-		--layer-top: rgba(0, 240, 255, 0.08);
-		--layer-bottom: rgba(37, 99, 235, 0.05);
+		--layer-top: rgba(0, 240, 255, 0.1);
+		--layer-mid: rgba(37, 99, 235, 0.025);
+		--layer-bottom: rgba(37, 99, 235, 0.09);
 	}
 	#app-bg-gradient .bg-layer[data-tab="recents"] {
-		--layer-top: rgba(139, 92, 246, 0.1);
-		--layer-bottom: rgba(217, 70, 239, 0.05);
+		--layer-top: rgba(139, 92, 246, 0.12);
+		--layer-mid: rgba(139, 92, 246, 0.03);
+		--layer-bottom: rgba(217, 70, 239, 0.1);
 	}
 	#app-bg-gradient .bg-layer[data-tab="statistics"] {
-		--layer-top: rgba(34, 197, 94, 0.09);
-		--layer-bottom: rgba(13, 148, 136, 0.05);
+		--layer-top: rgba(34, 197, 94, 0.11);
+		--layer-mid: rgba(13, 148, 136, 0.025);
+		--layer-bottom: rgba(13, 148, 136, 0.09);
 	}
 
 	/* Selector must include the id to outrank the `opacity: 0` default above. */
@@ -1018,6 +1026,9 @@ const pageUrl = Astro.url.href;
 		transform-origin: 0 0;
 		pointer-events: none;
 		z-index: 1;
+		/* Geometry is JS-driven; a CSS transform transition would restart every
+		   glide from the stylesheet default (top-left) and look broken. */
+		transition: none !important;
 	}
 
 	.main-tab-bar.nav-animating .sliding-highlight,

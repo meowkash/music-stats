@@ -6,7 +6,7 @@ import {
   getCatalogCache,
   loadCatalogCache,
 } from './ui';
-import { bindEdgeSwipeBack, bindSwipeDismiss } from './overlayGestures';
+import { bindEdgeSwipeNav, bindSwipeDismiss } from './overlayGestures';
 import {
   populateOverlay,
   bindOverlayClicks,
@@ -116,8 +116,12 @@ export function initDetailOverlay(): void {
   };
 
   const contentRegions = [overlayHeaderContent, overlayContentWrapper];
-  let currentEntity: { type: string; id: number; artistCatalog?: ArtistCatalogKey } | null = null;
-  const navHistory: { type: string; id: number; artistCatalog?: ArtistCatalogKey }[] = [];
+  type NavEntry = { type: string; id: number; artistCatalog?: ArtistCatalogKey };
+  let currentEntity: NavEntry | null = null;
+  const navHistory: NavEntry[] = [];
+  /** Entries popped by back — right-edge swipe / redo restores these. */
+  const forwardStack: NavEntry[] = [];
+  type NavMode = 'push' | 'back' | 'forward';
 
   let closeCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -147,6 +151,7 @@ export function initDetailOverlay(): void {
     document.body.classList.remove('overlay-open');
     currentEntity = null;
     navHistory.length = 0;
+    forwardStack.length = 0;
     panel.style.transform = '';
 
     // Let the slide-out start on the compositor before tearing down artwork /
@@ -170,7 +175,7 @@ export function initDetailOverlay(): void {
   async function openDetails(
     type: string,
     id: number,
-    isBack = false,
+    mode: NavMode | boolean = 'push',
     artistCatalog?: ArtistCatalogKey,
     opts?: { fromEdgeSwipe?: boolean },
   ) {
@@ -180,14 +185,19 @@ export function initDetailOverlay(): void {
       runCloseCleanup();
     }
 
-    if (!isBack && currentEntity) {
+    // Boolean kept for older call sites: true → back, false → push.
+    const navMode: NavMode = mode === true ? 'back' : mode === false ? 'push' : mode;
+
+    if (navMode === 'push' && currentEntity) {
       navHistory.push(currentEntity);
+      // New branch invalidates anything that was ahead.
+      forwardStack.length = 0;
     }
     currentEntity = { type, id, artistCatalog };
 
     const isSwitchingEntity = panel.classList.contains('visible');
-    const direction: OverlayNavDirection = isBack ? 'back' : 'forward';
-    const fromEdgeSwipe = Boolean(opts?.fromEdgeSwipe && isBack);
+    const direction: OverlayNavDirection = navMode === 'back' ? 'back' : 'forward';
+    const fromEdgeSwipe = Boolean(opts?.fromEdgeSwipe);
 
     document.body.classList.add('overlay-open');
 
@@ -234,12 +244,12 @@ export function initDetailOverlay(): void {
       );
 
       if (fromEdgeSwipe) {
-        // Edge swipe already drove content to the "back out" end state.
+        // Edge swipe already drove content to this direction's "out" end state.
         contentRegions.forEach((el) => {
           el.classList.add('is-sliding');
           el.style.transition = 'none';
           el.style.opacity = '0';
-          el.style.transform = slideTransform('back', 'out');
+          el.style.transform = slideTransform(direction, 'out');
         });
       } else {
         slideContentOut(contentRegions, OVERLAY_CONTENT_OUT_MS, direction);
@@ -258,7 +268,7 @@ export function initDetailOverlay(): void {
     await populateOverlay(type, id, data.meta, data.catalog, {
       elements,
       artworkCache,
-      onNavigate: (t, i, catalog) => openDetails(t, i, false, catalog),
+      onNavigate: (t, i, catalog) => openDetails(t, i, 'push', catalog),
       animate: false,
       scrollContainer: overlayScrollContainer,
       panel,
@@ -267,8 +277,9 @@ export function initDetailOverlay(): void {
 
   function goBackOrClose() {
     if (navHistory.length > 0) {
+      if (currentEntity) forwardStack.push(currentEntity);
       const prev = navHistory.pop()!;
-      void openDetails(prev.type, prev.id, true, prev.artistCatalog);
+      void openDetails(prev.type, prev.id, 'back', prev.artistCatalog);
     } else {
       closeDetails();
     }
@@ -289,24 +300,41 @@ export function initDetailOverlay(): void {
     scrollContainer: overlayScrollContainer,
     backdrop,
     onDismiss: closeDetails,
-    // Only steal the left edge while there is something to pop.
+    // Steal edges only while the matching stack has somewhere to go.
     reserveLeftEdgePx: () => (navHistory.length > 0 ? 22 : 0),
+    reserveRightEdgePx: () => (forwardStack.length > 0 ? 22 : 0),
   });
 
-  bindEdgeSwipeBack({
+  bindEdgeSwipeNav({
     gestureEl: panel,
     contentEls: contentRegions,
-    canGoBack: () => navHistory.length > 0,
+    direction: 'back',
+    canNavigate: () => navHistory.length > 0,
     slidePx: OVERLAY_SLIDE_PX,
-    onBack: () => {
-      if (navHistory.length === 0) return;
+    onNavigate: () => {
+      if (navHistory.length === 0 || !currentEntity) return;
+      forwardStack.push(currentEntity);
       const prev = navHistory.pop()!;
-      void openDetails(prev.type, prev.id, true, prev.artistCatalog, { fromEdgeSwipe: true });
+      void openDetails(prev.type, prev.id, 'back', prev.artistCatalog, { fromEdgeSwipe: true });
     },
   });
 
-  bindOverlayClicks(panel, (type, id, catalog) => openDetails(type, id, false, catalog));
-  onEntityDetails(({ type, id, artistCatalog }) => openDetails(type, id, false, artistCatalog));
+  bindEdgeSwipeNav({
+    gestureEl: panel,
+    contentEls: contentRegions,
+    direction: 'forward',
+    canNavigate: () => forwardStack.length > 0,
+    slidePx: OVERLAY_SLIDE_PX,
+    onNavigate: () => {
+      if (forwardStack.length === 0 || !currentEntity) return;
+      navHistory.push(currentEntity);
+      const next = forwardStack.pop()!;
+      void openDetails(next.type, next.id, 'forward', next.artistCatalog, { fromEdgeSwipe: true });
+    },
+  });
+
+  bindOverlayClicks(panel, (type, id, catalog) => openDetails(type, id, 'push', catalog));
+  onEntityDetails(({ type, id, artistCatalog }) => openDetails(type, id, 'push', artistCatalog));
 
   // iOS text autosizing can cache inflated sizes across rotation when the
   // sheet is open; reset inline layout state after the viewport settles.

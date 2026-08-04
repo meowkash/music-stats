@@ -786,11 +786,25 @@
     rangeHighlightCtrl.observe();
     subTabHighlightCtrl.observe();
 
-    // Place both pills without animating; only user selections should glide.
-    const initialRange = document.querySelector(".range-btn.active") as HTMLElement;
-    if (initialRange) rangeHighlightCtrl.sync(initialRange, false);
+    function placeHighlights(animate = false) {
+      const rangeBtn = document.querySelector(".range-btn.active") as HTMLElement | null;
+      if (rangeBtn) rangeHighlightCtrl.sync(rangeBtn, animate);
+      const tabBtn = document.querySelector(
+        ".leaderboard-tab-group .sub-tab-btn.active",
+      ) as HTMLElement | null;
+      if (tabBtn) subTabHighlightCtrl.sync(tabBtn, animate);
+    }
 
-    const initialTab = document.querySelector(".sub-tab-btn.active") as HTMLElement;
-    if (initialTab) subTabHighlightCtrl.sync(initialTab, false);
+    // Place both pills without animating; only user selections should glide.
+    placeHighlights(false);
+
+    // Rankings may have been measured while its panel was off-screen (zero
+    // geometry). Re-place when the tab becomes active so the next tap glides
+    // from the real chip, not from top-left.
+    window.addEventListener("tab-navigated", ((e: CustomEvent<{ tab: string }>) => {
+      if (e.detail?.tab === "rankings") {
+        requestAnimationFrame(() => placeHighlights(false));
+      }
+    }) as EventListener);
   });
 </script>
