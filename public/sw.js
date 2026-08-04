@@ -1,6 +1,6 @@
-const SHELL_CACHE = 'music-stats-shell-1785819250';
+const SHELL_CACHE = 'music-stats-shell-1785822723';
 const DATA_CACHE = 'music-stats-data-v1';
-const CACHE_VERSION = '1785819250';
+const CACHE_VERSION = '1785822723';
 
 const STATIC_ASSETS = [
   '/',
@@ -8,6 +8,8 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/favicon.svg',
   '/logo-mark.svg',
+  '/og-image.png',
+  '/icons/icon-32.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
