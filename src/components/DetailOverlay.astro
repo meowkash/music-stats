@@ -189,9 +189,15 @@
     transition: var(--transition-smooth);
   }
 
-  .nav-circle-btn:hover {
+  @media (hover: hover) and (pointer: fine) {
+    .nav-circle-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: scale(1.05);
+    }
+  }
+
+  .nav-circle-btn.is-pressed {
     background: rgba(255, 255, 255, 0.16);
-    transform: scale(1.05);
   }
 
   .nav-circle-btn svg {
@@ -333,9 +339,11 @@
     text-decoration-skip-ink: none;
   }
 
-  .overlay-subtitle :global(.overlay-link:hover) {
-    color: var(--text-primary) !important;
-    text-decoration-color: var(--text-primary) !important;
+  @media (hover: hover) and (pointer: fine) {
+    .overlay-subtitle :global(.overlay-link:hover) {
+      color: var(--text-primary) !important;
+      text-decoration-color: var(--text-primary) !important;
+    }
   }
 
   .overlay-metadata {
@@ -428,8 +436,14 @@
     transition: var(--transition-smooth);
   }
 
-  .overlay-albums-list :global(.overlay-album-card:hover) {
-    transform: translateY(-4px);
+  @media (hover: hover) and (pointer: fine) {
+    .overlay-albums-list :global(.overlay-album-card:hover) {
+      transform: translateY(-4px);
+    }
+  }
+
+  .overlay-albums-list :global(.overlay-album-card.is-pressed) {
+    opacity: 0.85;
   }
 
   .overlay-albums-list :global(.overlay-album-card-artwork) {

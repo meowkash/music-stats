@@ -63,7 +63,7 @@
         placeholder="Search entries..."
       />
     </div>
-    <div class="artist-ranking-toggle hidden" id="artistRankingToggle">
+    <div class="artist-ranking-toggle" id="artistRankingToggle">
       <span class="unified-label">Unified</span>
       <button
         type="button"
@@ -115,7 +115,11 @@
   .search-bar-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    /* Gap is folded into the toggle's padding so width animates cleanly. */
+    gap: 0;
+    --toggle-reveal: 0;
+    --search-accent: var(--accent-cat-songs);
+    --search-glow: var(--accent-cat-songs-glow);
   }
 
   .search-bar-row .search-bar-wrapper {
@@ -123,16 +127,40 @@
     min-width: 0;
   }
 
+  /*
+   * Unified toggle slides in with the Artists page. --toggle-reveal is 0..1,
+   * driven by the pager fraction so search width + toggle stay in lockstep.
+   */
   .artist-ranking-toggle {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-    padding: 0 2px;
+    box-sizing: border-box;
+    max-width: calc(var(--toggle-reveal) * 9.75rem);
+    padding-left: calc(var(--toggle-reveal) * 12px);
+    opacity: var(--toggle-reveal);
+    transform: translate3d(calc((1 - var(--toggle-reveal)) * 14px), 0, 0);
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    will-change: max-width, opacity, transform;
   }
 
-  .artist-ranking-toggle.hidden {
-    display: none;
+  .search-bar-row:not(.toggle-paging) .artist-ranking-toggle {
+    transition:
+      max-width var(--duration-normal) var(--ios-spring),
+      padding-left var(--duration-normal) var(--ios-spring),
+      opacity var(--duration-normal) var(--ios-spring),
+      transform var(--duration-normal) var(--ios-spring);
+  }
+
+  .search-bar-row.toggle-paging .artist-ranking-toggle {
+    transition: none;
+  }
+
+  .artist-ranking-toggle.is-open {
+    pointer-events: auto;
   }
 
   .unified-label {
@@ -186,6 +214,7 @@
   @media (min-width: 768px) {
     .artist-ranking-toggle {
       gap: 10px;
+      max-width: calc(var(--toggle-reveal) * 11.5rem);
     }
 
     .unified-label {
@@ -240,10 +269,12 @@
     font-family: var(--font-body);
   }
 
-  .range-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.15);
+  @media (hover: hover) and (pointer: fine) {
+    .range-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.15);
+    }
   }
 
   .range-btn.active {
@@ -368,12 +399,23 @@
     height: 16px;
     color: var(--text-muted);
     pointer-events: none;
+    transition: color var(--duration-fast) var(--ios-spring);
   }
 
   .search-input {
     width: 100%;
     padding-left: 38px;
     background: rgba(0, 0, 0, 0.15);
+  }
+
+  /* Category accent instead of the global pink glass-input focus. */
+  .leaderboard-container .search-input:focus {
+    border-color: var(--search-accent);
+    box-shadow: 0 0 12px var(--search-glow);
+  }
+
+  .search-bar-wrapper:focus-within .search-icon {
+    color: var(--search-accent);
   }
 
   .leaderboard-list-viewport {
@@ -467,8 +509,10 @@
     cursor: pointer;
     transition: color var(--duration-fast) var(--ios-spring);
   }
-  .leaderboard-container :global(.clickable-entity:hover) {
-    color: var(--accent-pink) !important;
+  @media (hover: hover) and (pointer: fine) {
+    .leaderboard-container :global(.clickable-entity:hover) {
+      color: var(--accent-pink) !important;
+    }
   }
 
   @media (max-width: 767px) {
@@ -562,8 +606,10 @@
     const startDateInput = document.getElementById("startDate") as HTMLInputElement;
     const endDateInput = document.getElementById("endDate") as HTMLInputElement;
     const searchInput = document.getElementById("leaderboardSearch") as HTMLInputElement;
+    const searchBarRow = document.querySelector(".search-bar-row") as HTMLElement;
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
+    const ARTISTS_TAB_INDEX = RANKING_TABS.indexOf("artists");
 
     const todayStr = new Date().toISOString().split("T")[0];
     endDateInput.value = todayStr;
@@ -830,6 +876,23 @@
       },
     });
 
+    function setSearchAccent(color: string, glow: string) {
+      searchBarRow.style.setProperty("--search-accent", color);
+      searchBarRow.style.setProperty("--search-glow", glow);
+    }
+
+    /** 0 until Albums→Artists, 1 on Artists — drives Unified toggle + search width. */
+    function artistsReveal(fraction: number): number {
+      return Math.min(1, Math.max(0, fraction - (ARTISTS_TAB_INDEX - 1)));
+    }
+
+    function paintUnifiedToggle(fraction: number, paging: boolean) {
+      const t = artistsReveal(fraction);
+      searchBarRow.classList.toggle("toggle-paging", paging);
+      searchBarRow.style.setProperty("--toggle-reveal", String(Math.round(t * 1000) / 1000));
+      artistRankingToggle.classList.toggle("is-open", t > 0.95);
+    }
+
     /** Drive label + date-pill colours from the same fraction as the pager. */
     function paintTabColors(fraction: number) {
       tabGroup.classList.add("tabs-paging");
@@ -846,8 +909,12 @@
       const i0 = Math.floor(fraction);
       const i1 = Math.min(i0 + 1, tabAccentRgba.length - 1);
       const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], fraction - i0);
-      rangeHighlight.style.setProperty("--range-color", colorToCss(mixed));
-      rangeHighlight.style.setProperty("--range-glow", withAlpha(mixed, 0.4));
+      const mixedCss = colorToCss(mixed);
+      const mixedGlow = withAlpha(mixed, 0.4);
+      rangeHighlight.style.setProperty("--range-color", mixedCss);
+      rangeHighlight.style.setProperty("--range-glow", mixedGlow);
+      setSearchAccent(mixedCss, mixedGlow);
+      paintUnifiedToggle(fraction, true);
     }
 
     function clearTabColorPaint() {
@@ -859,8 +926,8 @@
     }
 
     function syncArtistRankingToggle() {
-      const isArtists = activeTab() === "artists";
-      artistRankingToggle.classList.toggle("hidden", !isArtists);
+      // Settle reveal at 0 (Songs/Albums) or 1 (Artists) with CSS spring.
+      paintUnifiedToggle(activeTab() === "artists" ? ARTISTS_TAB_INDEX : ARTISTS_TAB_INDEX - 1, false);
       const isUnified = artistRankingMode === "canonical";
       artistRankingSwitch.classList.toggle("active", isUnified);
       artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
@@ -872,6 +939,7 @@
         syncHighlight?: boolean;
         animateHighlight?: boolean;
         updateActiveClass?: boolean;
+        syncChrome?: boolean;
       },
     ) {
       activeIndex = index;
@@ -892,7 +960,12 @@
         if (btn) subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
       }
 
-      syncArtistRankingToggle();
+      if (opts?.syncChrome !== false) {
+        const accent = getCategoryAccent(tab);
+        setSearchAccent(accent.color, accent.glow);
+        syncArtistRankingToggle();
+      }
+
       ensurePage(tab);
       if (index > 0) ensurePage(RANKING_TABS[index - 1]);
       if (index < RANKING_TABS.length - 1) ensurePage(RANKING_TABS[index + 1]);
@@ -917,6 +990,7 @@
           syncHighlight: true,
           animateHighlight: false,
           updateActiveClass: true,
+          syncChrome: true,
         });
       },
     });
@@ -926,11 +1000,13 @@
       if (index === -1 || index === activeIndex) return;
       const from = activeIndex;
       // Keep .active / CSS colours off until settle so JS can interpolate them
-      // in lockstep with the pager + pill.
+      // in lockstep with the pager + pill. Chrome (search accent + Unified)
+      // stays on the outgoing tab until onProgress takes over.
       applyActiveTab(index, {
         syncHighlight: !animate,
         animateHighlight: false,
         updateActiveClass: !animate,
+        syncChrome: !animate,
       });
       // Seed paint at the current tab so the first tween frame doesn't flash
       // CSS .active colours before onProgress takes over.
@@ -993,7 +1069,6 @@
       bindEntityClicks(listEl(tab));
     }
 
-    syncArtistRankingToggle();
     applyActiveTab(0, { syncHighlight: false });
     updateLeaderboard();
 

@@ -349,10 +349,12 @@ const pageUrl = Astro.url.href;
 		<script>
 			import { initDataRefreshUI, initServiceWorker } from "../utils/dataRefresh";
 			import { initPwaInstall } from "../utils/pwaInstall";
+			import { initPressFeedback } from "../utils/pressFeedback";
 
 			initDataRefreshUI();
 			initServiceWorker();
 			initPwaInstall();
+			initPressFeedback();
 		</script>
 	</body>
 </html>
@@ -435,9 +437,13 @@ const pageUrl = Astro.url.href;
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
 		--nav-bar-height: 64px;
-		--nav-bar-gap: 8px;
+		/* Distance from the physical bottom — smaller = nav sits a bit lower. */
+		--nav-bar-gap: 4px;
+		/* Extra air between panel content and the top of the nav bar. */
+		--nav-content-gap: 12px;
 		--nav-zone-height: calc(
-			var(--nav-bar-height) + var(--nav-bar-gap) + env(safe-area-inset-bottom) + 4px
+			var(--nav-bar-height) + var(--nav-bar-gap) + env(safe-area-inset-bottom) +
+				var(--nav-content-gap)
 		);
 		--z-dropdown: 150;
 		--z-overlay-backdrop: 199;
@@ -726,35 +732,91 @@ const pageUrl = Astro.url.href;
 		box-shadow: 0 0 10px var(--accent-pink-glow);
 	}
 
+	/* Kill iOS grey flash; press feedback is handled below / via .is-pressed. */
+	button,
+	a,
+	.clickable-entity,
+	.scrobble-row,
+	.tab-btn,
+	.range-btn,
+	.sub-tab-btn,
+	.nav-circle-btn,
+	.dropdown-item,
+	.dropdown-trigger,
+	.checkbox-label,
+	.hover-scale,
+	.overlay-album-card,
+	.years-info-btn {
+		-webkit-tap-highlight-color: transparent;
+	}
+
 	/* Micro-animations */
 	.hover-scale {
 		transition: var(--transition-smooth);
 	}
-	.hover-scale:hover {
-		transform: translateY(-2px) scale(1.02);
+
+	/*
+	 * Hover / mouse :active only on real pointing devices. Touch leaves
+	 * :hover stuck after a tap and "hovers" rows as a list scrolls under
+	 * the finger — classic web quirks that native apps never show.
+	 */
+	@media (hover: hover) and (pointer: fine) {
+		.hover-scale:hover {
+			transform: translateY(-2px) scale(1.02);
+		}
+
+		.scrobble-row:hover {
+			background: rgba(255, 255, 255, 0.05);
+			border-color: rgba(255, 255, 255, 0.08);
+			transform: translateY(-2px);
+		}
+
+		.hover-scale:active,
+		button:active,
+		.tab-btn:active,
+		.range-btn:active,
+		.sub-tab-btn:active,
+		.nav-circle-btn:active,
+		.album-card-thumb:active {
+			transform: scale(0.96) !important;
+			transition-duration: 0.05s !important;
+		}
+
+		.scrobble-row.clickable-entity:active,
+		.carousel-item.clickable-entity:active {
+			transform: none !important;
+			opacity: 0.72;
+			transition: opacity 0.15s var(--ios-spring) !important;
+		}
+
+		body.overlay-open .scrobble-row.clickable-entity:active,
+		body.overlay-open .carousel-item.clickable-entity:active {
+			opacity: 1 !important;
+		}
 	}
 
-	/* Instant tactile feedback for clickable elements (except rows that open the overlay) */
-	.hover-scale:active,
-	button:active,
-	.tab-btn:active,
-	.range-btn:active,
-	.sub-tab-btn:active,
-	.nav-circle-btn:active,
-	.album-card-thumb:active {
+	/* Touch / pen press — cleared on move, scroll, or lift (pressFeedback.ts). */
+	.hover-scale.is-pressed,
+	button.is-pressed,
+	.tab-btn.is-pressed,
+	.range-btn.is-pressed,
+	.sub-tab-btn.is-pressed,
+	.nav-circle-btn.is-pressed,
+	.album-card-thumb.is-pressed,
+	.years-info-btn.is-pressed {
 		transform: scale(0.96) !important;
 		transition-duration: 0.05s !important;
 	}
 
-	.scrobble-row.clickable-entity:active,
-	.carousel-item.clickable-entity:active {
+	.scrobble-row.clickable-entity.is-pressed,
+	.carousel-item.clickable-entity.is-pressed {
 		transform: none !important;
 		opacity: 0.72;
-		transition: opacity 0.15s var(--ios-spring) !important;
+		transition: opacity 0.12s var(--ios-spring) !important;
 	}
 
-	body.overlay-open .scrobble-row.clickable-entity:active,
-	body.overlay-open .carousel-item.clickable-entity:active {
+	body.overlay-open .scrobble-row.clickable-entity.is-pressed,
+	body.overlay-open .carousel-item.clickable-entity.is-pressed {
 		opacity: 1 !important;
 	}
 
@@ -818,14 +880,9 @@ const pageUrl = Astro.url.href;
 		margin-bottom: 0;
 	}
 
-	.scrobble-row:hover {
-		background: rgba(255, 255, 255, 0.05);
-		border-color: rgba(255, 255, 255, 0.08);
-		transform: translateY(-2px);
-	}
-
 	.scrobble-row a,
 	.scrobble-row a:hover,
+	.scrobble-row a:visited,
 	.scrobble-row-title,
 	.scrobble-row-subtitle {
 		text-decoration: none !important;

@@ -70,13 +70,15 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .years-info-btn:hover {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
-  }
+  @media (hover: hover) and (pointer: fine) {
+    .years-info-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.06);
+    }
 
-  .years-info-btn:active {
-    transform: scale(0.94);
+    .years-info-btn:active {
+      transform: scale(0.94);
+    }
   }
 
   .control-group {
@@ -118,7 +120,15 @@
     opacity: 0.6;
   }
 
-  .year-checkbox-group :global(.checkbox-label:hover) {
+  @media (hover: hover) and (pointer: fine) {
+    .year-checkbox-group :global(.checkbox-label:hover) {
+      background: rgba(255, 255, 255, 0.04);
+      opacity: 0.85;
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+  }
+
+  .year-checkbox-group :global(.checkbox-label.is-pressed) {
     background: rgba(255, 255, 255, 0.04);
     opacity: 0.85;
     border-color: rgba(255, 255, 255, 0.15);

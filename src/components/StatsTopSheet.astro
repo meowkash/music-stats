@@ -124,8 +124,10 @@ import BottomSheet from "./BottomSheet.astro";
     white-space: nowrap;
   }
 
-  .dropdown-trigger:hover {
-    background: rgba(255, 255, 255, 0.12);
+  @media (hover: hover) and (pointer: fine) {
+    .dropdown-trigger:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
   }
 
   .dropdown-popover {
@@ -172,7 +174,14 @@ import BottomSheet from "./BottomSheet.astro";
     transition: var(--transition-smooth);
   }
 
-  .dropdown-popover .dropdown-item:hover {
+  @media (hover: hover) and (pointer: fine) {
+    .dropdown-popover .dropdown-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+  }
+
+  .dropdown-popover .dropdown-item.is-pressed {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
   }
@@ -197,7 +206,14 @@ import BottomSheet from "./BottomSheet.astro";
     transition: var(--transition-smooth);
   }
 
-  #yearDropdownPopover :global(.dropdown-item:hover) {
+  @media (hover: hover) and (pointer: fine) {
+    #yearDropdownPopover :global(.dropdown-item:hover) {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+  }
+
+  #yearDropdownPopover :global(.dropdown-item.is-pressed) {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
   }
@@ -221,7 +237,13 @@ import BottomSheet from "./BottomSheet.astro";
     height: 16px;
   }
 
-  .nav-circle-btn:hover {
+  @media (hover: hover) and (pointer: fine) {
+    .nav-circle-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  .nav-circle-btn.is-pressed {
     background: rgba(255, 255, 255, 0.12);
   }
 </style>
