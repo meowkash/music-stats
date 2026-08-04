@@ -38,12 +38,24 @@ export function createSheet(options: SheetOptions): SheetController | null {
   function openSheet(): void {
     if (open) return;
     open = true;
+
+    // Guarantee the off-screen frame is committed before .visible flips the
+    // transform — otherwise Safari can skip the entrance transition entirely,
+    // which reads as a delayed "pop in".
     panel.style.transform = '';
+    backdrop.style.opacity = '';
+    panel.classList.remove('visible');
+    backdrop.classList.remove('visible');
+    void panel.offsetWidth;
+
     panel.classList.add('visible');
     backdrop.classList.add('visible');
-    backdrop.style.opacity = '';
     document.body.classList.add(bodyClass);
-    onOpen?.();
+
+    // Fire content hooks after the slide has started.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => onOpen?.());
+    });
   }
 
   function closeSheet(): void {
@@ -51,10 +63,12 @@ export function createSheet(options: SheetOptions): SheetController | null {
     open = false;
     panel.classList.remove('visible');
     backdrop.classList.remove('visible');
-    backdrop.style.opacity = '';
     document.body.classList.remove(bodyClass);
-    // Let the CSS transition animate from wherever a drag left the panel.
+    // Keep any in-flight drag offset so dismiss continues from the finger.
+    // Clearing after the transition would be nicer, but transform '' while
+    // .visible is gone targets translateY(100%) and CSS animates from here.
     panel.style.transform = '';
+    backdrop.style.opacity = '';
     onClose?.();
   }
 

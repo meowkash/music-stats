@@ -6,7 +6,7 @@ import {
   getCatalogCache,
   loadCatalogCache,
 } from './ui';
-import { bindSwipeDismiss } from './overlayGestures';
+import { bindEdgeSwipeBack, bindSwipeDismiss } from './overlayGestures';
 import {
   populateOverlay,
   bindOverlayClicks,
@@ -20,6 +20,7 @@ import { resetOverlayArtworkLayers } from './overlayArtwork';
 import {
   OVERLAY_CROSSFADE_MS,
   OVERLAY_CONTENT_OUT_MS,
+  OVERLAY_SLIDE_PX,
   type OverlayNavDirection,
   slideTransform,
   dualLayerTransition,
@@ -118,13 +119,9 @@ export function initDetailOverlay(): void {
   let currentEntity: { type: string; id: number; artistCatalog?: ArtistCatalogKey } | null = null;
   const navHistory: { type: string; id: number; artistCatalog?: ArtistCatalogKey }[] = [];
 
-  function closeDetails() {
-    panel.classList.remove('visible');
-    backdrop.classList.remove('visible');
-    document.body.classList.remove('overlay-open');
-    currentEntity = null;
-    navHistory.length = 0;
-    panel.style.transform = '';
+  let closeCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function runCloseCleanup() {
     panel.style.removeProperty('--overlay-bg-bottom');
     overlayScrollContainer.style.removeProperty('--overlay-bg-bottom');
     clearContentTransition(contentRegions);
@@ -139,12 +136,50 @@ export function initDetailOverlay(): void {
     elements.overlayColorWashBack.style.opacity = '0';
   }
 
+  function closeDetails() {
+    if (closeCleanupTimer) {
+      clearTimeout(closeCleanupTimer);
+      closeCleanupTimer = null;
+    }
+
+    panel.classList.remove('visible');
+    backdrop.classList.remove('visible');
+    document.body.classList.remove('overlay-open');
+    currentEntity = null;
+    navHistory.length = 0;
+    panel.style.transform = '';
+
+    // Let the slide-out start on the compositor before tearing down artwork /
+    // lists — that sync work was the main source of the "delayed" dismiss feel.
+    closeCleanupTimer = setTimeout(() => {
+      closeCleanupTimer = null;
+      runCloseCleanup();
+    }, 380);
+  }
+
+  function frames(count: number): Promise<void> {
+    return new Promise((resolve) => {
+      const step = (n: number) => {
+        if (n <= 0) resolve();
+        else requestAnimationFrame(() => step(n - 1));
+      };
+      step(count);
+    });
+  }
+
   async function openDetails(
     type: string,
     id: number,
     isBack = false,
     artistCatalog?: ArtistCatalogKey,
+    opts?: { fromEdgeSwipe?: boolean },
   ) {
+    if (closeCleanupTimer) {
+      clearTimeout(closeCleanupTimer);
+      closeCleanupTimer = null;
+      runCloseCleanup();
+    }
+
     if (!isBack && currentEntity) {
       navHistory.push(currentEntity);
     }
@@ -152,12 +187,20 @@ export function initDetailOverlay(): void {
 
     const isSwitchingEntity = panel.classList.contains('visible');
     const direction: OverlayNavDirection = isBack ? 'back' : 'forward';
+    const fromEdgeSwipe = Boolean(opts?.fromEdgeSwipe && isBack);
 
     document.body.classList.add('overlay-open');
 
     if (!isSwitchingEntity) {
+      // Paint the off-screen state, then add .visible so the CSS transition
+      // actually runs instead of jumping straight to the end state.
+      panel.classList.remove('visible');
+      backdrop.classList.remove('visible');
+      void panel.offsetWidth;
       panel.classList.add('visible');
       backdrop.classList.add('visible');
+      // Yield two frames so the slide is on the compositor before DOM work.
+      await frames(2);
     }
 
     const data = getCachedData() || (await ensureData());
@@ -177,9 +220,10 @@ export function initDetailOverlay(): void {
     if (isSwitchingEntity) {
       overlayScrollContainer.scrollTo({ top: 0, behavior: 'auto' });
 
-      const contentInMs = OVERLAY_CROSSFADE_MS - OVERLAY_CONTENT_OUT_MS;
+      const contentInMs = fromEdgeSwipe
+        ? OVERLAY_CROSSFADE_MS
+        : OVERLAY_CROSSFADE_MS - OVERLAY_CONTENT_OUT_MS;
 
-      slideContentOut(contentRegions, OVERLAY_CONTENT_OUT_MS, direction);
       const visualsPromise = crossfadeOverlayContent(
         payload,
         elements,
@@ -189,7 +233,19 @@ export function initDetailOverlay(): void {
         panel,
       );
 
-      await sleep(OVERLAY_CONTENT_OUT_MS);
+      if (fromEdgeSwipe) {
+        // Edge swipe already drove content to the "back out" end state.
+        contentRegions.forEach((el) => {
+          el.classList.add('is-sliding');
+          el.style.transition = 'none';
+          el.style.opacity = '0';
+          el.style.transform = slideTransform('back', 'out');
+        });
+      } else {
+        slideContentOut(contentRegions, OVERLAY_CONTENT_OUT_MS, direction);
+        await sleep(OVERLAY_CONTENT_OUT_MS);
+      }
+
       applyOverlayContent(payload, elements, artworkCache, overlayScrollContainer, panel);
       slideContentIn(contentRegions, contentInMs, direction);
 
@@ -209,14 +265,16 @@ export function initDetailOverlay(): void {
     }, artistCatalog ?? 'canonicalArtists');
   }
 
-  overlayCloseBtn.addEventListener('click', () => {
+  function goBackOrClose() {
     if (navHistory.length > 0) {
       const prev = navHistory.pop()!;
-      openDetails(prev.type, prev.id, true, prev.artistCatalog);
+      void openDetails(prev.type, prev.id, true, prev.artistCatalog);
     } else {
       closeDetails();
     }
-  });
+  }
+
+  overlayCloseBtn.addEventListener('click', goBackOrClose);
 
   backdrop.addEventListener('click', closeDetails);
 
@@ -231,6 +289,20 @@ export function initDetailOverlay(): void {
     scrollContainer: overlayScrollContainer,
     backdrop,
     onDismiss: closeDetails,
+    // Only steal the left edge while there is something to pop.
+    reserveLeftEdgePx: () => (navHistory.length > 0 ? 22 : 0),
+  });
+
+  bindEdgeSwipeBack({
+    gestureEl: panel,
+    contentEls: contentRegions,
+    canGoBack: () => navHistory.length > 0,
+    slidePx: OVERLAY_SLIDE_PX,
+    onBack: () => {
+      if (navHistory.length === 0) return;
+      const prev = navHistory.pop()!;
+      void openDetails(prev.type, prev.id, true, prev.artistCatalog, { fromEdgeSwipe: true });
+    },
   });
 
   bindOverlayClicks(panel, (type, id, catalog) => openDetails(type, id, false, catalog));

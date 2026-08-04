@@ -15,6 +15,19 @@
         <!-- Injected by client JS -->
       </div>
     </div>
+    <button
+      class="years-info-btn"
+      id="openStatsSheetBtn"
+      type="button"
+      aria-label="View top lists"
+      title="Top lists"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    </button>
   </div>
 
   <!-- Chart Display Canvas -->
@@ -22,29 +35,48 @@
     <div class="chart-canvas-container">
       <canvas id="yearlyCompareChart"></canvas>
     </div>
-    <button class="chart-sheet-btn" id="openStatsSheetBtn" type="button" aria-label="View top lists">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="8" y1="6" x2="21" y2="6"></line>
-        <line x1="8" y1="12" x2="21" y2="12"></line>
-        <line x1="8" y1="18" x2="21" y2="18"></line>
-        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-      </svg>
-      Top Lists
-    </button>
   </div>
 </div>
 
 <style>
   .chart-controls {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 16px;
     background: rgba(0, 0, 0, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.05);
     padding: 16px;
+    padding-bottom: 14px;
     border-radius: 6px;
+  }
+
+  .years-info-btn {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .years-info-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .years-info-btn:active {
+    transform: scale(0.94);
   }
 
   .control-group {
@@ -65,6 +97,8 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    /* Keep year chips clear of the info button in the corner. */
+    padding-right: 36px;
   }
 
   .year-checkbox-group :global(.checkbox-label) {
@@ -137,36 +171,6 @@
   canvas {
     width: 100% !important;
     height: 100% !important;
-  }
-
-  /* Sits inside the plot area, clear of the x-axis tick labels below it. */
-  .chart-sheet-btn {
-    position: absolute;
-    bottom: 44px;
-    right: 14px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 13px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(14, 14, 18, 0.72);
-    backdrop-filter: blur(8px) saturate(140%);
-    -webkit-backdrop-filter: blur(8px) saturate(140%);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 700;
-    font-family: var(--font-body);
-    cursor: pointer;
-    transition: var(--transition-smooth);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 2;
-  }
-
-  .chart-sheet-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
   }
 
   /* Top-lists sheet lives in StatsTopSheet.astro (shared BottomSheet). */

@@ -425,7 +425,11 @@ const pageUrl = Astro.url.href;
 		--radius-lg: 16px;
 		--radius-xl: 20px;
 		--radius-sheet: 20px;
-		--duration-sheet: var(--duration-slow);
+		/* Snappier than --duration-slow: long 500ms sheets feel "delayed"
+		   even with a spring curve because the eye reads the soft landing
+		   as lag at the start of the gesture response. */
+		--duration-sheet: 0.38s;
+		--ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
 		--nav-bar-height: 64px;
@@ -534,12 +538,12 @@ const pageUrl = Astro.url.href;
 		position: fixed;
 		inset: 0;
 		z-index: var(--z-overlay-backdrop);
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(4px);
-		-webkit-backdrop-filter: blur(4px);
+		/* No backdrop-filter here: animating blur+opacity is a common cause of
+		   the sheet feeling a beat behind the finger / tap. Dim alone is enough. */
+		background: rgba(0, 0, 0, 0.55);
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity var(--duration-sheet) var(--ios-spring);
+		transition: opacity var(--duration-sheet) var(--ease-sheet);
 	}
 
 	.app-sheet-backdrop.visible {
@@ -552,7 +556,7 @@ const pageUrl = Astro.url.href;
 		z-index: var(--z-overlay-panel);
 		background: var(--overlay-bg-bottom, var(--surface-elevated));
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-		transition: transform var(--duration-sheet) var(--ios-spring);
+		transition: transform var(--duration-sheet) var(--ease-sheet);
 		overflow: hidden;
 		/* paint only — layout/style containment caused stale widths on iOS rotation */
 		contain: paint;
@@ -564,7 +568,7 @@ const pageUrl = Astro.url.href;
 		transform: none;
 	}
 
-	/* Layer promotion only while the sheet is open or mid-gesture. */
+	/* Promote before/during motion so the first frame of the entrance isn't a hitch. */
 	.app-sheet-panel.visible,
 	.app-sheet-panel.sheet-dragging {
 		will-change: transform;
