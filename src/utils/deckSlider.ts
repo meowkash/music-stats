@@ -4,12 +4,14 @@ interface DeckPanel {
   el: HTMLElement;
   index: number;
   visible: boolean | null;
-  lastX: number;
+  lastOffset: number;
 }
 
 export interface DeckSlider {
   measure: () => void;
-  width: () => number;
+  /** Main-axis page size — width on mobile, height on desktop sidebar layout. */
+  stride: () => number;
+  isVertical: () => boolean;
   /** Takes the panels off their CSS transitions for JS-driven positioning. */
   begin: () => void;
   /** Positions the deck at a fractional tab index. */
@@ -33,16 +35,28 @@ export function createDeckSlider(): DeckSlider | null {
       el,
       index: TAB_ORDER.indexOf(el.id.replace('view-', '') as TabId),
       visible: null,
-      lastX: Number.NaN,
+      lastOffset: Number.NaN,
     }))
     .filter((panel) => panel.index !== -1);
 
   let deckWidth = deck.clientWidth || window.innerWidth;
+  let deckHeight = deck.clientHeight || window.innerHeight;
   let active = false;
   let prepared = false;
 
+  const desktopQuery = window.matchMedia('(min-width: 768px)');
+
+  function isVertical() {
+    return desktopQuery.matches;
+  }
+
+  function stride() {
+    return isVertical() ? deckHeight : deckWidth;
+  }
+
   function measure() {
     deckWidth = deck.clientWidth || window.innerWidth;
+    deckHeight = deck.clientHeight || window.innerHeight;
   }
 
   function show(panel: DeckPanel) {
@@ -59,13 +73,16 @@ export function createDeckSlider(): DeckSlider | null {
     deck.classList.add('tab-dragging');
     for (const panel of panels) {
       panel.visible = null;
-      panel.lastX = Number.NaN;
+      panel.lastOffset = Number.NaN;
       panel.el.style.pointerEvents = 'none';
     }
   }
 
   function setPosition(fraction: number) {
     if (!active) return;
+
+    const vertical = isVertical();
+    const pageSize = stride();
 
     if (!prepared) {
       // Reveal the current panel and its immediate neighbours once. Mid-gesture
@@ -87,11 +104,13 @@ export function createDeckSlider(): DeckSlider | null {
 
     for (const panel of panels) {
       if (panel.visible !== true) continue;
-      const x = (panel.index - fraction) * deckWidth;
+      const offset = (panel.index - fraction) * pageSize;
       // Skip sub-pixel no-ops.
-      if (Math.abs(x - panel.lastX) < 0.1) continue;
-      panel.lastX = x;
-      panel.el.style.transform = `translate3d(${x}px, 0, 0)`;
+      if (Math.abs(offset - panel.lastOffset) < 0.1) continue;
+      panel.lastOffset = offset;
+      panel.el.style.transform = vertical
+        ? `translate3d(0, ${offset}px, 0)`
+        : `translate3d(${offset}px, 0, 0)`;
     }
   }
 
@@ -104,16 +123,18 @@ export function createDeckSlider(): DeckSlider | null {
       panel.el.style.visibility = '';
       panel.el.style.pointerEvents = '';
       panel.visible = null;
-      panel.lastX = Number.NaN;
+      panel.lastOffset = Number.NaN;
     }
     deck.classList.remove('tab-dragging');
   }
 
   window.addEventListener('resize', measure);
+  desktopQuery.addEventListener('change', measure);
 
   return {
     measure,
-    width: () => deckWidth,
+    stride,
+    isVertical,
     begin,
     setPosition,
     end,

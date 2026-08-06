@@ -1,4 +1,4 @@
-export const TAB_ORDER = ['dashboard', 'rankings', 'recents', 'statistics'] as const;
+export const TAB_ORDER = ['dashboard', 'recaps', 'rankings', 'recents', 'statistics'] as const;
 export type TabId = (typeof TAB_ORDER)[number];
 
 export function applyPanelStates(tab: string): void {

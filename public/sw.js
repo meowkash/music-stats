@@ -1,6 +1,6 @@
-const SHELL_CACHE = 'music-stats-shell-1785822723';
+const SHELL_CACHE = 'music-stats-shell-1785973663';
 const DATA_CACHE = 'music-stats-data-v1';
-const CACHE_VERSION = '1785822723';
+const CACHE_VERSION = '1785973663';
 
 const STATIC_ASSETS = [
   '/',

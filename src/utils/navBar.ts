@@ -232,30 +232,33 @@ export function initNavBar(): void {
     track.render(index);
   });
 
-  // ── Free-form pill drag ─────────────────────────────────────────────────
+  // ── Free-form pill drag + desktop wheel ─────────────────────────────────
   let dragging = false;
   let engaged = false;
   let startX = 0;
   let startY = 0;
-  let lastX = 0;
+  let lastPos = 0;
   let lastTime = 0;
   let velocity = 0;
   let grabOffset = 0;
   let barOrigin = 0;
-  let pendingX: number | null = null;
+  let pendingPos: number | null = null;
   let dragRafId: number | null = null;
 
-  // Cache the media query — constructing it on every touchstart is wasteful.
-  const rowLayoutQuery = window.matchMedia('(max-width: 767px)');
+  const desktopLayoutQuery = window.matchMedia('(min-width: 768px)');
+
+  function isVerticalNav() {
+    return desktopLayoutQuery.matches;
+  }
 
   function flushDrag() {
     dragRafId = null;
-    if (pendingX === null) return;
+    if (pendingPos === null) return;
 
-    const dx = pendingX - startX;
-    const decay = Math.max(0, 1 - Math.abs(dx) / GRAB_DECAY_DISTANCE);
-    render(track.fractionAt(pendingX - barOrigin + grabOffset * decay), DRAG_SCALE);
-    pendingX = null;
+    const delta = pendingPos - (isVerticalNav() ? startY : startX);
+    const decay = Math.max(0, 1 - Math.abs(delta) / GRAB_DECAY_DISTANCE);
+    render(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), DRAG_SCALE);
+    pendingPos = null;
   }
 
   function cancelPendingDrag(flush = false) {
@@ -263,19 +266,19 @@ export function initNavBar(): void {
       cancelAnimationFrame(dragRafId);
       dragRafId = null;
     }
-    if (flush && pendingX !== null) flushDrag();
-    else pendingX = null;
+    if (flush && pendingPos !== null) flushDrag();
+    else pendingPos = null;
   }
 
   function onTouchStart(e: TouchEvent) {
-    if (!rowLayoutQuery.matches || isOverlayOpen() || e.touches.length !== 1) return;
+    if (isOverlayOpen() || e.touches.length !== 1) return;
 
     dragging = true;
     engaged = false;
     velocity = 0;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    lastX = startX;
+    lastPos = isVerticalNav() ? startY : startX;
     lastTime = performance.now();
   }
 
@@ -283,12 +286,14 @@ export function initNavBar(): void {
     if (!dragging) return;
 
     const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
     const dx = clientX - startX;
-    const dy = e.touches[0].clientY - startY;
+    const dy = clientY - startY;
+    const vertical = isVerticalNav();
 
     if (!engaged) {
       if (Math.abs(dx) < DRAG_START_THRESHOLD && Math.abs(dy) < DRAG_START_THRESHOLD) return;
-      if (Math.abs(dy) > Math.abs(dx)) {
+      if (vertical ? Math.abs(dx) > Math.abs(dy) : Math.abs(dy) > Math.abs(dx)) {
         dragging = false;
         return;
       }
@@ -302,29 +307,34 @@ export function initNavBar(): void {
       beginBackgroundPaint();
       deck?.begin();
 
-      // Measured once per gesture; drag frames never read layout.
-      barOrigin = bar.getBoundingClientRect().left + bar.clientLeft;
-      grabOffset = track.centerAt(fraction) - (startX - barOrigin);
+      const rect = bar.getBoundingClientRect();
+      if (vertical) {
+        barOrigin = rect.top + bar.clientTop;
+        grabOffset = track.centerAt(fraction) - (startY - barOrigin);
+      } else {
+        barOrigin = rect.left + bar.clientLeft;
+        grabOffset = track.centerAt(fraction) - (startX - barOrigin);
+      }
     }
 
     e.preventDefault();
 
+    const clientPos = vertical ? clientY : clientX;
     const now = performance.now();
     const dt = now - lastTime;
     if (dt > 0) {
-      velocity = velocity * 0.2 + ((clientX - lastX) / dt) * 0.8;
-      lastX = clientX;
+      velocity = velocity * 0.2 + ((clientPos - lastPos) / dt) * 0.8;
+      lastPos = clientPos;
       lastTime = now;
     }
 
-    pendingX = clientX;
+    pendingPos = clientPos;
     if (dragRafId === null) dragRafId = requestAnimationFrame(flushDrag);
   }
 
   function onTouchEnd() {
     if (!dragging) return;
     dragging = false;
-    // Apply the last finger sample before picking a settle target.
     cancelPendingDrag(true);
     if (!engaged) return;
     engaged = false;
@@ -349,8 +359,32 @@ export function initNavBar(): void {
     animateTo(target, duration);
   }
 
+  // Touchpad / mouse wheel on desktop sidebar — scroll through tabs vertically.
+  let wheelAccum = 0;
+  let wheelResetTimer: ReturnType<typeof setTimeout> | null = null;
+  const WHEEL_THRESHOLD = 55;
+
+  function onWheel(e: WheelEvent) {
+    if (!desktopLayoutQuery.matches || isOverlayOpen()) return;
+
+    e.preventDefault();
+
+    wheelAccum += e.deltaY;
+    if (wheelResetTimer) clearTimeout(wheelResetTimer);
+    wheelResetTimer = setTimeout(() => {
+      wheelAccum = 0;
+    }, 180);
+
+    if (Math.abs(wheelAccum) < WHEEL_THRESHOLD) return;
+
+    const direction = wheelAccum > 0 ? 1 : -1;
+    wheelAccum = 0;
+    selectTab(Math.min(Math.max(activeIndex + direction, 0), buttons.length - 1));
+  }
+
   navZone.addEventListener('touchstart', onTouchStart, { passive: true });
   navZone.addEventListener('touchmove', onTouchMove, { passive: false });
   navZone.addEventListener('touchend', onTouchEnd, { passive: true });
   navZone.addEventListener('touchcancel', onTouchEnd, { passive: true });
+  navZone.addEventListener('wheel', onWheel, { passive: false });
 }

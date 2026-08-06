@@ -293,6 +293,7 @@ const pageUrl = Astro.url.href;
 	>
 		<div id="app-bg-gradient" aria-hidden="true">
 			<div class="bg-layer" data-tab="dashboard"></div>
+			<div class="bg-layer" data-tab="recaps"></div>
 			<div class="bg-layer" data-tab="rankings"></div>
 			<div class="bg-layer" data-tab="recents"></div>
 			<div class="bg-layer" data-tab="statistics"></div>
@@ -481,6 +482,49 @@ const pageUrl = Astro.url.href;
 		overflow-x: hidden;
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior-y: contain;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+	}
+
+	/* Themed scrollbars — subtle glass thumb, no heavy native chrome */
+	.panel-scroll::-webkit-scrollbar,
+	.dashboard-list-page::-webkit-scrollbar,
+	.leaderboard-list-page::-webkit-scrollbar,
+	.overlay-scroll-container::-webkit-scrollbar,
+	.recent-list::-webkit-scrollbar,
+	.stats-list::-webkit-scrollbar {
+		width: 5px;
+		height: 5px;
+	}
+
+	.panel-scroll::-webkit-scrollbar-track,
+	.dashboard-list-page::-webkit-scrollbar-track,
+	.leaderboard-list-page::-webkit-scrollbar-track,
+	.overlay-scroll-container::-webkit-scrollbar-track,
+	.recent-list::-webkit-scrollbar-track,
+	.stats-list::-webkit-scrollbar-track {
+		background: transparent;
+		margin: 6px 0;
+	}
+
+	.panel-scroll::-webkit-scrollbar-thumb,
+	.dashboard-list-page::-webkit-scrollbar-thumb,
+	.leaderboard-list-page::-webkit-scrollbar-thumb,
+	.overlay-scroll-container::-webkit-scrollbar-thumb,
+	.recent-list::-webkit-scrollbar-thumb,
+	.stats-list::-webkit-scrollbar-thumb {
+		background: color-mix(in srgb, var(--panel-bg) 55%, rgba(255, 255, 255, 0.14));
+		border-radius: 999px;
+		border: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	.panel-scroll::-webkit-scrollbar-thumb:hover,
+	.dashboard-list-page::-webkit-scrollbar-thumb:hover,
+	.leaderboard-list-page::-webkit-scrollbar-thumb:hover,
+	.overlay-scroll-container::-webkit-scrollbar-thumb:hover,
+	.recent-list::-webkit-scrollbar-thumb:hover,
+	.stats-list::-webkit-scrollbar-thumb:hover {
+		background: color-mix(in srgb, var(--panel-bg) 40%, rgba(255, 255, 255, 0.22));
 	}
 
 	.shrink-0 {
@@ -524,6 +568,11 @@ const pageUrl = Astro.url.href;
 		--layer-mid: rgba(255, 45, 85, 0.03);
 		--layer-bottom: rgba(255, 45, 85, 0.1);
 	}
+	#app-bg-gradient .bg-layer[data-tab="recaps"] {
+		--layer-top: rgba(234, 179, 8, 0.14);
+		--layer-mid: rgba(249, 115, 22, 0.03);
+		--layer-bottom: rgba(255, 45, 85, 0.1);
+	}
 	#app-bg-gradient .bg-layer[data-tab="rankings"] {
 		--layer-top: rgba(0, 240, 255, 0.1);
 		--layer-mid: rgba(37, 99, 235, 0.025);
@@ -542,6 +591,7 @@ const pageUrl = Astro.url.href;
 
 	/* Selector must include the id to outrank the `opacity: 0` default above. */
 	body[data-active-tab="dashboard"] #app-bg-gradient .bg-layer[data-tab="dashboard"],
+	body[data-active-tab="recaps"] #app-bg-gradient .bg-layer[data-tab="recaps"],
 	body[data-active-tab="rankings"] #app-bg-gradient .bg-layer[data-tab="rankings"],
 	body[data-active-tab="recents"] #app-bg-gradient .bg-layer[data-tab="recents"],
 	body[data-active-tab="statistics"] #app-bg-gradient .bg-layer[data-tab="statistics"] {
@@ -684,20 +734,13 @@ const pageUrl = Astro.url.href;
 		-moz-osx-font-smoothing: grayscale;
 	}
 
-	/* Scrollbar Styling */
-	::-webkit-scrollbar {
-		width: 6px;
-		height: 6px;
+	/* Hide document-level scrollbars — lists use themed scrollbars above */
+	html {
+		scrollbar-width: none;
 	}
-	::-webkit-scrollbar-track {
-		background: transparent;
-	}
-	::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.08);
-		border-radius: 3px;
-	}
-	::-webkit-scrollbar-thumb:hover {
-		background: rgba(255, 255, 255, 0.15);
+
+	html::-webkit-scrollbar {
+		display: none;
 	}
 
 	/* Subtle glass card — saturation lets the ambient gradient tint the surface */

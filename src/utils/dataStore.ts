@@ -19,6 +19,7 @@ export const CRITICAL_DATA_PATHS = [
   '/data/yearly-totals.json',
   '/data/yearly-stats.json',
   '/data/colors.json',
+  '/data/recap-meta.json',
 ] as const;
 
 const REVALIDATE_CONCURRENCY = 3;

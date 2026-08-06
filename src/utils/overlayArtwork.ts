@@ -89,6 +89,27 @@ function isSameArtworkVisible(active: HTMLImageElement, contentHash: string): bo
   );
 }
 
+function showOverlayShimmer(wrapper: HTMLElement | null): void {
+  if (!wrapper) return;
+  wrapper.classList.add('artwork-loading');
+  if (!wrapper.querySelector('.artwork-shimmer')) {
+    const shimmer = document.createElement('div');
+    shimmer.className = 'artwork-shimmer';
+    shimmer.setAttribute('aria-hidden', 'true');
+    wrapper.insertBefore(shimmer, wrapper.firstChild);
+  }
+}
+
+function hideOverlayShimmer(wrapper: HTMLElement | null): void {
+  if (!wrapper) return;
+  wrapper.classList.remove('artwork-loading');
+  const shimmer = wrapper.querySelector('.artwork-shimmer');
+  if (shimmer) {
+    shimmer.classList.add('artwork-shimmer-hide');
+    setTimeout(() => shimmer.remove(), 120);
+  }
+}
+
 export async function crossfadeOverlayArtwork(
   els: OverlayArtworkElements,
   url: string | null,
@@ -106,7 +127,7 @@ export async function crossfadeOverlayArtwork(
   if (!url) {
     if (!active.classList.contains('is-visible') || !active.src) {
       fallback.classList.remove('hidden');
-      wrapper?.classList.remove('artwork-loading');
+      hideOverlayShimmer(wrapper);
       return;
     }
 
@@ -128,15 +149,15 @@ export async function crossfadeOverlayArtwork(
 
     await new Promise<void>((resolve) => setTimeout(resolve, durationMs));
     fallback.classList.remove('hidden');
-    wrapper?.classList.remove('artwork-loading');
+    hideOverlayShimmer(wrapper);
     return;
   }
 
-  if (!preloadedUrl) wrapper?.classList.add('artwork-loading');
+  if (!preloadedUrl) showOverlayShimmer(wrapper);
   const loadedUrl = preloadedUrl ?? (await loadBestArtworkSource(url));
 
   if (!loadedUrl) {
-    wrapper?.classList.remove('artwork-loading');
+    hideOverlayShimmer(wrapper);
     fallback.classList.remove('hidden');
     return;
   }
@@ -144,7 +165,7 @@ export async function crossfadeOverlayArtwork(
   const contentHash = artworkContentHash(loadedUrl);
 
   if (isSameArtworkVisible(active, contentHash)) {
-    wrapper?.classList.remove('artwork-loading');
+    hideOverlayShimmer(wrapper);
     return;
   }
 
@@ -156,7 +177,7 @@ export async function crossfadeOverlayArtwork(
   const hasVisibleArtwork = active.classList.contains('is-visible') && active.src;
 
   if (hasVisibleArtwork && active.dataset.artworkHash === contentHash) {
-    wrapper?.classList.remove('artwork-loading');
+    hideOverlayShimmer(wrapper);
     return;
   }
 
@@ -193,7 +214,7 @@ export async function crossfadeOverlayArtwork(
     activeLayerIsFront = incoming === front;
   }
 
-  wrapper?.classList.remove('artwork-loading');
+  hideOverlayShimmer(wrapper);
 }
 
 export function resetOverlayArtworkLayers(els: OverlayArtworkElements): void {

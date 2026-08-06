@@ -85,14 +85,38 @@
       <span>Aggregating scrobbles...</span>
     </div>
     <div class="leaderboard-list-track" id="leaderboardListTrack">
-      <div class="leaderboard-list-page panel-scroll panel-scroll-active" data-tab="songs" id="leaderboardPageSongs">
-        <div class="leaderboard-list" id="leaderboardListSongs"></div>
+      <div class="leaderboard-list-column" data-tab="songs">
+        <div class="leaderboard-column-header">Songs</div>
+        <div class="leaderboard-list-page panel-scroll panel-scroll-active" data-tab="songs" id="leaderboardPageSongs">
+          <div class="leaderboard-list" id="leaderboardListSongs"></div>
+        </div>
       </div>
-      <div class="leaderboard-list-page panel-scroll" data-tab="albums" id="leaderboardPageAlbums">
-        <div class="leaderboard-list" id="leaderboardListAlbums"></div>
+      <div class="leaderboard-list-column" data-tab="albums">
+        <div class="leaderboard-column-header">Albums</div>
+        <div class="leaderboard-list-page panel-scroll" data-tab="albums" id="leaderboardPageAlbums">
+          <div class="leaderboard-list" id="leaderboardListAlbums"></div>
+        </div>
       </div>
-      <div class="leaderboard-list-page panel-scroll" data-tab="artists" id="leaderboardPageArtists">
-        <div class="leaderboard-list" id="leaderboardListArtists"></div>
+      <div class="leaderboard-list-column" data-tab="artists">
+        <div class="leaderboard-column-header">
+          <span>Artists</span>
+          <div class="artist-ranking-toggle desktop-artist-toggle" id="desktopArtistRankingToggle">
+            <span class="unified-label">Unified</span>
+            <button
+              type="button"
+              class="toggle-switch active"
+              id="desktopArtistRankingSwitch"
+              role="switch"
+              aria-checked="true"
+              aria-label="Unified artist rankings"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+          </div>
+        </div>
+        <div class="leaderboard-list-page panel-scroll" data-tab="artists" id="leaderboardPageArtists">
+          <div class="leaderboard-list" id="leaderboardListArtists"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -431,6 +455,19 @@
     backface-visibility: hidden;
   }
 
+  .leaderboard-list-column {
+    display: contents;
+  }
+
+  .leaderboard-column-header {
+    display: none;
+  }
+
+    .desktop-artist-toggle {
+      display: none;
+      pointer-events: auto;
+    }
+
   .leaderboard-list-track.pager-moving {
     will-change: transform;
   }
@@ -448,6 +485,79 @@
 
   .leaderboard-list-page.panel-scroll {
     flex: 0 0 100%;
+  }
+
+  @media (min-width: 768px) {
+    .leaderboard-tabs {
+      display: none;
+    }
+
+    .search-bar-row .artist-ranking-toggle {
+      display: none;
+    }
+
+    .leaderboard-list-track {
+      gap: 12px;
+      transform: none !important;
+    }
+
+    .leaderboard-list-column {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      gap: 8px;
+    }
+
+    .leaderboard-column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    .leaderboard-list-column[data-tab="songs"] .leaderboard-column-header {
+      color: var(--accent-cat-songs);
+    }
+    .leaderboard-list-column[data-tab="albums"] .leaderboard-column-header {
+      color: var(--accent-cat-albums);
+    }
+    .leaderboard-list-column[data-tab="artists"] .leaderboard-column-header {
+      color: var(--accent-cat-artists);
+    }
+
+    .desktop-artist-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: none;
+      padding-left: 0;
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .leaderboard-list-page {
+      flex: 1 1 auto;
+      width: auto;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .leaderboard-list-page.panel-scroll {
+      flex: 1 1 auto;
+    }
   }
 
   /* Invisible trigger element used for infinite-scroll chunk loading */
@@ -582,6 +692,9 @@
   };
 
   document.addEventListener("DOMContentLoaded", () => {
+    const desktopQuery = window.matchMedia("(min-width: 768px)");
+    const isDesktopLayout = () => desktopQuery.matches;
+
     let meta: MetaData | null = null;
     let availableYears: number[] = [];
     let artworkCache: Record<string, string> = {};
@@ -609,6 +722,9 @@
     const searchBarRow = document.querySelector(".search-bar-row") as HTMLElement;
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
+    const desktopArtistRankingSwitch = document.getElementById(
+      "desktopArtistRankingSwitch",
+    ) as HTMLButtonElement | null;
     const ARTISTS_TAB_INDEX = RANKING_TABS.indexOf("artists");
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -832,6 +948,11 @@
 
       loader.classList.add("hidden");
 
+      if (isDesktopLayout()) {
+        for (const tab of RANKING_TABS) paintPage(tab, itemsByTab[tab] || []);
+        return;
+      }
+
       // Active page + neighbours so a swipe never lands on an empty pane.
       const tabsToPaint = new Set<RankingTab>([activeTab()]);
       if (activeIndex > 0) tabsToPaint.add(RANKING_TABS[activeIndex - 1]);
@@ -926,11 +1047,17 @@
     }
 
     function syncArtistRankingToggle() {
-      // Settle reveal at 0 (Songs/Albums) or 1 (Artists) with CSS spring.
-      paintUnifiedToggle(activeTab() === "artists" ? ARTISTS_TAB_INDEX : ARTISTS_TAB_INDEX - 1, false);
+      if (!isDesktopLayout()) {
+        // Settle reveal at 0 (Songs/Albums) or 1 (Artists) with CSS spring.
+        paintUnifiedToggle(activeTab() === "artists" ? ARTISTS_TAB_INDEX : ARTISTS_TAB_INDEX - 1, false);
+      }
       const isUnified = artistRankingMode === "canonical";
       artistRankingSwitch.classList.toggle("active", isUnified);
       artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
+      if (desktopArtistRankingSwitch) {
+        desktopArtistRankingSwitch.classList.toggle("active", isUnified);
+        desktopArtistRankingSwitch.setAttribute("aria-checked", String(isUnified));
+      }
     }
 
     function applyActiveTab(
@@ -952,12 +1079,17 @@
       }
 
       for (const t of RANKING_TABS) {
-        pageEl(t).classList.toggle("panel-scroll-active", t === tab);
+        pageEl(t).classList.toggle(
+          "panel-scroll-active",
+          isDesktopLayout() || t === tab,
+        );
       }
 
-      if (opts?.syncHighlight !== false) {
-        const btn = subTabButtons.find((b) => b.getAttribute("data-tab") === tab);
-        if (btn) subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
+      if (!isDesktopLayout()) {
+        if (opts?.syncHighlight !== false) {
+          const btn = subTabButtons.find((b) => b.getAttribute("data-tab") === tab);
+          if (btn) subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
+        }
       }
 
       if (opts?.syncChrome !== false) {
@@ -966,33 +1098,55 @@
         syncArtistRankingToggle();
       }
 
+      if (isDesktopLayout()) {
+        for (const t of RANKING_TABS) ensurePage(t);
+        return;
+      }
+
       ensurePage(tab);
       if (index > 0) ensurePage(RANKING_TABS[index - 1]);
       if (index < RANKING_TABS.length - 1) ensurePage(RANKING_TABS[index + 1]);
     }
 
-    const pager = bindPagerSwipe({
-      gestureEl: viewportEl,
-      trackEl,
-      viewportEl,
-      pageCount: RANKING_TABS.length,
-      onProgress: (fraction) => {
-        const lo = Math.floor(fraction);
-        const hi = Math.ceil(fraction);
-        if (lo >= 0 && lo < RANKING_TABS.length) ensurePage(RANKING_TABS[lo]);
-        if (hi >= 0 && hi < RANKING_TABS.length) ensurePage(RANKING_TABS[hi]);
-        subTabHighlightCtrl.scrub(fraction);
-        paintTabColors(fraction);
-      },
-      onSettled: (index) => {
+    let pager: ReturnType<typeof bindPagerSwipe> | null = null;
+
+    if (!isDesktopLayout()) {
+      pager = bindPagerSwipe({
+        gestureEl: viewportEl,
+        trackEl,
+        viewportEl,
+        pageCount: RANKING_TABS.length,
+        onProgress: (fraction) => {
+          const lo = Math.floor(fraction);
+          const hi = Math.ceil(fraction);
+          if (lo >= 0 && lo < RANKING_TABS.length) ensurePage(RANKING_TABS[lo]);
+          if (hi >= 0 && hi < RANKING_TABS.length) ensurePage(RANKING_TABS[hi]);
+          subTabHighlightCtrl.scrub(fraction);
+          paintTabColors(fraction);
+        },
+        onSettled: (index) => {
+          clearTabColorPaint();
+          applyActiveTab(index, {
+            syncHighlight: true,
+            animateHighlight: false,
+            updateActiveClass: true,
+            syncChrome: true,
+          });
+        },
+      });
+    }
+
+    desktopQuery.addEventListener("change", () => {
+      if (isDesktopLayout()) {
+        trackEl.style.transform = "";
+        trackEl.classList.remove("pager-moving");
         clearTabColorPaint();
-        applyActiveTab(index, {
-          syncHighlight: true,
-          animateHighlight: false,
-          updateActiveClass: true,
-          syncChrome: true,
-        });
-      },
+        syncArtistRankingToggle();
+        for (const t of RANKING_TABS) {
+          pageEl(t).classList.add("panel-scroll-active");
+        }
+        void updateLeaderboard();
+      }
     });
 
     function selectRankingTab(tab: string, animate = true) {
@@ -1011,7 +1165,7 @@
       // Seed paint at the current tab so the first tween frame doesn't flash
       // CSS .active colours before onProgress takes over.
       if (animate) paintTabColors(from);
-      pager.goTo(index, animate);
+      pager?.goTo(index, animate);
     }
 
     document.querySelectorAll(".range-btn").forEach((btn) => {
@@ -1044,10 +1198,16 @@
       artistRankingMode = mode;
       localStorage.setItem(ARTIST_MODE_KEY, mode);
       syncArtistRankingToggle();
-      if (activeTab() === "artists") updateLeaderboard();
+      // Desktop shows all three columns — artists list must refresh even when
+      // activeIndex is still on Songs (mobile pager sets activeTab to artists).
+      if (isDesktopLayout() || activeTab() === "artists") updateLeaderboard();
     }
 
     artistRankingSwitch.addEventListener("click", () => {
+      setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
+    });
+
+    desktopArtistRankingSwitch?.addEventListener("click", () => {
       setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
     });
 
@@ -1070,6 +1230,11 @@
     }
 
     applyActiveTab(0, { syncHighlight: false });
+    if (isDesktopLayout()) {
+      for (const t of RANKING_TABS) {
+        pageEl(t).classList.add("panel-scroll-active");
+      }
+    }
     updateLeaderboard();
 
     onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {
@@ -1094,8 +1259,8 @@
       if (e.detail?.tab === "rankings") {
         requestAnimationFrame(() => {
           placeHighlights(false);
-          pager.measure();
-          pager.goTo(activeIndex, false);
+          pager?.measure();
+          pager?.goTo(activeIndex, false);
         });
       }
     }) as EventListener);

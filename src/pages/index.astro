@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Dashboard from "../components/Dashboard.astro";
+import Recaps from "../components/Recaps.astro";
 import Leaderboards from "../components/Leaderboards.astro";
 import Recents from "../components/Recents.astro";
 import Statistics from "../components/Statistics.astro";
@@ -15,6 +16,10 @@ import { TAB_ORDER } from "../utils/tabs";
     <main class="view-deck">
       <section class="panel-section active" id="view-dashboard">
         <Dashboard />
+      </section>
+
+      <section class="panel-section inactive-right" id="view-recaps">
+        <Recaps />
       </section>
 
       <section class="panel-section inactive-right" id="view-rankings">
@@ -135,14 +140,27 @@ import { TAB_ORDER } from "../utils/tabs";
       scroll-padding-bottom: var(--nav-zone-height);
     }
   }
+  /* Desktop sidebar nav — no bottom nav zone; use full viewport height */
+  @media (min-width: 768px) {
+    .panel-section.inactive-left {
+      transform: translate3d(0, -100%, 0);
+    }
+
+    .panel-section.inactive-right {
+      transform: translate3d(0, 100%, 0);
+    }
+  }
+
   @media (min-width: 768px) and (max-width: 1023px) {
     .panel-section {
-      padding: calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 100px) 20px;
+      padding: calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+        calc(24px + env(safe-area-inset-bottom)) 20px;
     }
   }
   @media (min-width: 1024px) {
     .panel-section {
-      padding: calc(32px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 110px) 20px;
+      padding: calc(32px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+        calc(32px + env(safe-area-inset-bottom)) 20px;
     }
   }
 

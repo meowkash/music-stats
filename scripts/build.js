@@ -17,6 +17,9 @@ run('Bootstrap artist overrides', 'node', ['scripts/bootstrap-artist-overrides.j
 run('Process scrobbles → JSON', 'node', ['scripts/process-data.js']);
 
 const hasLastfm = process.env.LASTFM_API_KEY && process.env.LASTFM_USERNAME;
+if (hasLastfm) {
+  run('Enrich recap meta (durations + genres)', 'node', ['scripts/enrich-recap-meta.js']);
+}
 if (hasLastfm && refresh) {
   run('Refresh all artwork', 'node', ['scripts/backfill-artwork.js', '--refresh']);
 } else if (hasLastfm) {

@@ -95,14 +95,23 @@
     </div>
     <div class="dashboard-list-viewport">
       <div class="dashboard-list-track" id="dashboardListTrack">
-        <div class="dashboard-list-page panel-scroll" id="dashboardListTracks">
-          <div class="no-data-message">Loading...</div>
+        <div class="dashboard-list-column">
+          <div class="dashboard-column-header">Top Tracks</div>
+          <div class="dashboard-list-page panel-scroll" id="dashboardListTracks">
+            <div class="no-data-message">Loading...</div>
+          </div>
         </div>
-        <div class="dashboard-list-page panel-scroll" id="dashboardListAlbums">
-          <div class="no-data-message">Loading...</div>
+        <div class="dashboard-list-column">
+          <div class="dashboard-column-header">Top Albums</div>
+          <div class="dashboard-list-page panel-scroll" id="dashboardListAlbums">
+            <div class="no-data-message">Loading...</div>
+          </div>
         </div>
-        <div class="dashboard-list-page panel-scroll" id="dashboardListArtists">
-          <div class="no-data-message">Loading...</div>
+        <div class="dashboard-list-column">
+          <div class="dashboard-column-header">Top Artists</div>
+          <div class="dashboard-list-page panel-scroll" id="dashboardListArtists">
+            <div class="no-data-message">Loading...</div>
+          </div>
         </div>
       </div>
     </div>
@@ -226,6 +235,14 @@
     backface-visibility: hidden;
   }
 
+  .dashboard-list-column {
+    display: contents;
+  }
+
+  .dashboard-column-header {
+    display: none;
+  }
+
   /* Layer promotion only while paging — a permanently promoted three-page
      track keeps all of it rasterised for nothing. */
   .dashboard-list-track.pager-moving {
@@ -245,6 +262,59 @@
 
   .dashboard-list-page.panel-scroll {
     flex: 0 0 100%;
+  }
+
+  @media (min-width: 768px) {
+    .highlights-section .category-pill {
+      display: none;
+    }
+
+    .dashboard-list-track {
+      gap: 12px;
+      transform: none !important;
+    }
+
+    .dashboard-list-column {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      gap: 8px;
+    }
+
+    .dashboard-column-header {
+      display: block;
+      flex-shrink: 0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    .dashboard-list-column:nth-child(1) .dashboard-column-header {
+      color: var(--accent-cat-songs);
+    }
+    .dashboard-list-column:nth-child(2) .dashboard-column-header {
+      color: var(--accent-cat-albums);
+    }
+    .dashboard-list-column:nth-child(3) .dashboard-column-header {
+      color: var(--accent-cat-artists);
+    }
+
+    .dashboard-list-page {
+      flex: 1 1 auto;
+      width: auto;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .dashboard-list-page.panel-scroll {
+      flex: 1 1 auto;
+    }
   }
 
   .section-header {
@@ -363,6 +433,9 @@
   };
 
   document.addEventListener("DOMContentLoaded", () => {
+    const desktopQuery = window.matchMedia("(min-width: 768px)");
+    const isDesktopLayout = () => desktopQuery.matches;
+
     let activeIndex = 0;
     let pillLabelIndex = 0;
     let topArtists: ReturnType<typeof rollupDashboardCounts>["artists"] = [];
@@ -531,6 +604,15 @@
         pageEl(cat).replaceChildren();
         delete scrollControllers[cat];
       }
+
+      if (isDesktopLayout()) {
+        for (const cat of CATEGORIES) {
+          renderCategoryPage(cat);
+          pageEl(cat).classList.add("panel-scroll-active");
+        }
+        return;
+      }
+
       // Active page immediately so the viewport is never blank; neighbours warm
       // on idle so the first swipe does not pay a mid-gesture HTML parse cost.
       renderCategoryPage(CATEGORIES[activeIndex]);
@@ -538,32 +620,44 @@
       scheduleNeighborWarmup(activeIndex);
     }
 
-    const pager = bindPagerSwipe({
-      gestureEl: sectionEl,
-      trackEl,
-      viewportEl,
-      pageCount: CATEGORIES.length,
-      onProgress: (fraction) => {
-        // Safety net if idle warmup has not finished before the finger moves.
-        const lo = Math.floor(fraction);
-        const hi = Math.ceil(fraction);
-        if (!renderedPages.has(CATEGORIES[lo])) renderCategoryPage(CATEGORIES[lo]);
-        if (!renderedPages.has(CATEGORIES[hi])) renderCategoryPage(CATEGORIES[hi]);
-        renderCategoryPill(fraction);
-      },
-      onSettled: (index) => {
-        activeIndex = index;
-        scheduleNeighborWarmup(index);
-        for (const cat of CATEGORIES) {
-          pageEl(cat).classList.toggle("panel-scroll-active", CATEGORIES.indexOf(cat) === index);
-        }
-        updateCategoryUI();
-      },
-    });
+    let pager: ReturnType<typeof bindPagerSwipe> | null = null;
+
+    if (!isDesktopLayout()) {
+      pager = bindPagerSwipe({
+        gestureEl: sectionEl,
+        trackEl,
+        viewportEl,
+        pageCount: CATEGORIES.length,
+        onProgress: (fraction) => {
+          // Safety net if idle warmup has not finished before the finger moves.
+          const lo = Math.floor(fraction);
+          const hi = Math.ceil(fraction);
+          if (!renderedPages.has(CATEGORIES[lo])) renderCategoryPage(CATEGORIES[lo]);
+          if (!renderedPages.has(CATEGORIES[hi])) renderCategoryPage(CATEGORIES[hi]);
+          renderCategoryPill(fraction);
+        },
+        onSettled: (index) => {
+          activeIndex = index;
+          scheduleNeighborWarmup(index);
+          for (const cat of CATEGORIES) {
+            pageEl(cat).classList.toggle("panel-scroll-active", CATEGORIES.indexOf(cat) === index);
+          }
+          updateCategoryUI();
+        },
+      });
+    }
 
     function setActiveIndex(index: number) {
-      pager.goTo(index, false);
+      pager?.goTo(index, false);
     }
+
+    desktopQuery.addEventListener("change", () => {
+      if (isDesktopLayout()) {
+        trackEl.style.transform = "";
+        trackEl.classList.remove("pager-moving");
+        renderAllLists();
+      }
+    });
 
     for (const cat of CATEGORIES) {
       bindEntityClicks(pageEl(cat));
@@ -641,7 +735,7 @@
       }
     }
 
-    pager.measure();
+    pager?.measure();
 
     loadDashboardStats();
     loadTopLists();
