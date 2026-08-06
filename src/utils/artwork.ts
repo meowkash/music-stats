@@ -25,6 +25,13 @@ export function normalizeStaticArtworkUrl(url: string): string | null {
   return url;
 }
 
+/** Highest-resolution static URL for full-bleed hero and ambient backgrounds. */
+export function getHighResArtworkUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const sources = getStaticArtworkSources(url);
+  return sources[0] ?? normalizeStaticArtworkUrl(url) ?? url;
+}
+
 /** Ordered static sources: highest resolution first. */
 export function getStaticArtworkSources(url: string): string[] {
   const normalized = normalizeStaticArtworkUrl(url);

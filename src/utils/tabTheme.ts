@@ -8,7 +8,7 @@ export interface TabAccent {
 
 export const TAB_ACCENTS: Record<TabId, TabAccent> = {
   dashboard: { color: '#ff2d55', glowAlpha: 0.4 },
-  recaps: { color: '#eab308', glowAlpha: 0.4 },
+
   rankings: { color: '#00f0ff', glowAlpha: 0.4 },
   recents: { color: '#8b5cf6', glowAlpha: 0.4 },
   statistics: { color: '#22c55e', glowAlpha: 0.4 },
