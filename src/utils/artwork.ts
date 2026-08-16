@@ -167,7 +167,13 @@ export function resolveArtistArtworkFromCandidates(
  */
 interface ArtworkFallbackIndex {
   byArtist: Map<string, string>;
+  /** Keyed by normalized `album|artist` — never album alone (see resolveAlbumArtwork). */
   byAlbumName: Map<string, string>;
+}
+
+/** Case/punctuation-insensitive form, so "Short n' Sweet" matches "Short N Sweet". */
+function looseKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 const fallbackIndexes = new WeakMap<Record<string, string>, ArtworkFallbackIndex>();
@@ -196,7 +202,10 @@ function getFallbackIndex(cache: Record<string, string>): ArtworkFallbackIndex {
 
     // First write wins, matching the original "first match in key order" scans.
     if (artistName && !byArtist.has(artistName)) byArtist.set(artistName, url);
-    if (albumName && !byAlbumName.has(albumName)) byAlbumName.set(albumName, url);
+    if (albumName && artistName) {
+      const key = `${looseKey(albumName)}|${looseKey(artistName)}`;
+      if (!byAlbumName.has(key)) byAlbumName.set(key, url);
+    }
   }
 
   const index = { byArtist, byAlbumName };
@@ -215,7 +224,14 @@ export function resolveArtistArtwork(
   return getFallbackIndex(cache).byArtist.get(name) ?? null;
 }
 
-/** Album artwork: exact artist match, then any cached artist for this album name. */
+/**
+ * Album artwork: exact key, then a case/punctuation-tolerant match on the same
+ * album *and* artist.
+ *
+ * This used to fall back to any cached album sharing the title, regardless of
+ * artist — so a generically-named release ("Greatest Hits", "Legacy") could
+ * take a completely unrelated artist's cover.
+ */
 export function resolveAlbumArtwork(
   albumName: string,
   artistName: string,
@@ -224,7 +240,9 @@ export function resolveAlbumArtwork(
   const direct = resolveArtworkFromCache('album', albumName, artistName, cache);
   if (direct) return direct;
 
-  return getFallbackIndex(cache).byAlbumName.get(albumName) ?? null;
+  if (!artistName) return null;
+  const key = `${looseKey(albumName)}|${looseKey(artistName)}`;
+  return getFallbackIndex(cache).byAlbumName.get(key) ?? null;
 }
 
 /** Track artwork: exact track → album → artist (broad fallback last). */

@@ -1,4 +1,8 @@
-import { refreshAppData, revalidateCriticalData } from './dataStore';
+import {
+  refreshAppData,
+  revalidateCriticalData,
+  type GenerationSwappedDetail,
+} from './dataStore';
 import { isStandalonePwa } from './pwaInstall';
 
 let initialized = false;
@@ -51,8 +55,14 @@ export function pulseRefreshAnimation(): void {
   shell.classList.add('data-refresh-pulse');
 }
 
-function handleDataUpdated(): void {
+/**
+ * Fires once per generation swap rather than once per file, so an update that
+ * touches six files still reads as a single "data updated" beat.
+ */
+function handleGenerationSwapped(event: Event): void {
   if (suppressUpdateToasts) return;
+  const detail = (event as CustomEvent<GenerationSwappedDetail>).detail;
+  if (!detail?.changedPaths.length) return;
   showUpdateToast();
   pulseRefreshAnimation();
 }
@@ -239,7 +249,7 @@ export function initDataRefreshUI(): void {
   if (initialized) return;
   initialized = true;
 
-  window.addEventListener('data-updated', handleDataUpdated);
+  window.addEventListener('data-generation-swapped', handleGenerationSwapped);
   document.addEventListener('visibilitychange', handleResume);
   window.addEventListener('offline', hideSplashScreen);
   initPullToRefresh();

@@ -10,6 +10,7 @@ import {
   getStaticArtworkSources,
   normalizeStaticArtworkUrl,
 } from './artwork';
+import { upgradeHeroArtwork } from './artworkPrefetch';
 
 function preloadImage(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -24,7 +25,11 @@ function preloadImage(url: string): Promise<string> {
 export async function loadBestArtworkSource(url: string): Promise<string | null> {
   for (const src of getStaticArtworkSources(url)) {
     try {
-      return await preloadImage(src);
+      const loaded = await preloadImage(src);
+      // Fetches the original upload and re-caches this hero at 768 for next
+      // time. Deliberately not awaited: the current open shouldn't wait on it.
+      void upgradeHeroArtwork(loaded);
+      return loaded;
     } catch {
       /* try next source */
     }
@@ -46,6 +51,8 @@ export interface OverlayColorPair {
 }
 
 let activeLayerIsFront = true;
+let currentLoadId = 0;
+let currentWashId = 0;
 
 function getActiveLayer(els: OverlayArtworkElements): HTMLImageElement {
   return activeLayerIsFront ? els.front : els.back;
@@ -117,6 +124,7 @@ export async function crossfadeOverlayArtwork(
   direction: OverlayNavDirection = 'forward',
   preloadedUrl?: string | null,
 ): Promise<void> {
+  const loadId = ++currentLoadId;
   const { front, back, fallback, bgBlur, wrapper } = els;
   const active = getActiveLayer(els);
   const incoming = activeLayerIsFront ? back : front;
@@ -143,18 +151,41 @@ export async function crossfadeOverlayArtwork(
     bgBlur.style.opacity = '0';
     front.dataset.artworkHash = '';
     back.dataset.artworkHash = '';
-    front.src = '';
-    back.src = '';
     activeLayerIsFront = true;
+    
+    // clear sources after transition
+    setTimeout(() => {
+      if (loadId === currentLoadId) {
+        front.src = '';
+        back.src = '';
+      }
+    }, durationMs);
 
     await new Promise<void>((resolve) => setTimeout(resolve, durationMs));
+    if (loadId !== currentLoadId) return;
+    
     fallback.classList.remove('hidden');
     hideOverlayShimmer(wrapper);
     return;
   }
 
-  if (!preloadedUrl) showOverlayShimmer(wrapper);
+  if (!preloadedUrl) {
+    showOverlayShimmer(wrapper);
+    if (active.classList.contains('is-visible')) {
+      active.classList.remove('is-visible');
+      active.style.transition = 'opacity 150ms ease';
+      active.style.opacity = '0';
+      active.dataset.artworkHash = '';
+      setTimeout(() => {
+        if (loadId === currentLoadId) active.src = '';
+      }, 150);
+      bgBlur.style.opacity = '0';
+    }
+  }
+
   const loadedUrl = preloadedUrl ?? (await loadBestArtworkSource(url));
+
+  if (loadId !== currentLoadId) return;
 
   if (!loadedUrl) {
     hideOverlayShimmer(wrapper);
@@ -187,6 +218,8 @@ export async function crossfadeOverlayArtwork(
       bgBlur.style.opacity = '0.45';
     });
 
+    if (loadId !== currentLoadId) return;
+
     active.classList.remove('is-visible');
     active.style.opacity = '0';
     active.style.transform = '';
@@ -210,6 +243,8 @@ export async function crossfadeOverlayArtwork(
       });
       setTimeout(resolve, durationMs);
     });
+
+    if (loadId !== currentLoadId) return;
 
     activeLayerIsFront = incoming === front;
   }
@@ -258,6 +293,7 @@ export async function crossfadeColorWash(
   colors: OverlayColorPair,
   durationMs = OVERLAY_CROSSFADE_MS,
 ): Promise<void> {
+  const washId = ++currentWashId;
   const transition = `opacity ${durationMs}ms ${OVERLAY_EASE}`;
   front.style.transition = transition;
   back.style.transition = transition;
@@ -274,6 +310,8 @@ export async function crossfadeColorWash(
     });
     setTimeout(resolve, durationMs);
   });
+
+  if (washId !== currentWashId) return;
 
   front.style.background = washGradient(colors);
   front.style.opacity = '1';

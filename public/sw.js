@@ -1,6 +1,10 @@
-const SHELL_CACHE = 'music-stats-shell-1785999900';
+const SHELL_CACHE = 'music-stats-shell-1786919085';
 const DATA_CACHE = 'music-stats-data-v1';
-const CACHE_VERSION = '1785999900';
+const IMAGE_CACHE = 'music-stats-images-v1';
+const CACHE_VERSION = '1786919085';
+
+/** Cache wins after this long so a captive or crawling network can't hang the app. */
+const DATA_NETWORK_TIMEOUT_MS = 3000;
 
 const STATIC_ASSETS = [
   '/',
@@ -18,7 +22,9 @@ const STATIC_ASSETS = [
 
 const SHELL_FALLBACK_URLS = ['/', '/index.html'];
 
-const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
+// cdn-images.dzcdn.net is here because the resolver falls back to Deezer for
+// artist images, which iTunes' musicArtist entity almost never returns.
+const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'cdn-images.dzcdn.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
 
 function isArtworkRequest(url) {
   return ARTWORK_HOSTS.some(host => url.host.includes(host));
@@ -35,27 +41,78 @@ function cacheKeyForPath(pathname) {
   return new Request(pathname, { mode: 'same-origin' });
 }
 
-async function respondWithDataJson(event, dataPath) {
+function jsonUnavailable() {
+  return new Response('{}', {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * Network-first with a deadline. The network write always completes via
+ * waitUntil even when the cached copy is what got served, so a slow response
+ * still refreshes the store for next launch.
+ */
+function respondWithDataJson(event, dataPath) {
   const cacheKey = cacheKeyForPath(dataPath);
 
-  try {
-    const response = await fetch(event.request);
+  const network = fetch(event.request).then(async (response) => {
     if (response.ok) {
-      const clone = response.clone();
-      event.waitUntil(
-        caches.open(DATA_CACHE).then((cache) => cache.put(cacheKey, clone))
-      );
+      const cache = await caches.open(DATA_CACHE);
+      await cache.put(cacheKey, response.clone());
     }
     return response;
-  } catch {
+  });
+
+  event.waitUntil(network.catch(() => {}));
+
+  return (async () => {
+    let timer;
+    const deadline = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), DATA_NETWORK_TIMEOUT_MS);
+    });
+
+    let winner = null;
+    try {
+      winner = await Promise.race([network.catch(() => null), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (winner && winner.ok) return winner;
+
     const cache = await caches.open(DATA_CACHE);
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
-    return new Response('{}', {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' },
-    });
+
+    // Nothing cached to fall back on, so waiting out the network beats failing.
+    const late = await network.catch(() => null);
+    return late || jsonUnavailable();
+  })();
+}
+
+/**
+ * Cache-first, in a cache that deploys never clear. Builds before the
+ * data/image split wrote artwork into DATA_CACHE, so a legacy hit is promoted
+ * into IMAGE_CACHE rather than re-downloaded.
+ */
+async function respondWithArtwork(event) {
+  const cache = await caches.open(IMAGE_CACHE);
+  const cached = await cache.match(event.request);
+  if (cached) return cached;
+
+  const dataCacheStore = await caches.open(DATA_CACHE);
+  const legacy = await dataCacheStore.match(event.request);
+  if (legacy) {
+    event.waitUntil(cache.put(event.request, legacy.clone()));
+    return legacy;
   }
+
+  // Deliberately does NOT write to the cache. src/utils/artworkPrefetch.ts owns
+  // IMAGE_CACHE: it refetches with CORS, downscales to the size actually
+  // rendered, and stores a non-opaque entry (~3.6 KB instead of a ~20 KB
+  // original, or a ~32 MB padded opaque one). Caching here would race that and
+  // win, leaving full-size originals in the cache instead.
+  return fetch(event.request);
 }
 
 async function matchShellCache(cache, request) {
@@ -112,7 +169,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys => {
       return Promise.all(
         keys.map(key => {
-          if (key === DATA_CACHE || key === SHELL_CACHE) return;
+          if (key === DATA_CACHE || key === SHELL_CACHE || key === IMAGE_CACHE) return;
           if (key.startsWith('music-stats-shell-') || key.startsWith('aakashmusic-cache-')) {
             console.log('[SW] Clearing old cache:', key);
             return caches.delete(key);
@@ -138,18 +195,7 @@ self.addEventListener('fetch', event => {
   }
 
   if (isArtworkRequest(requestUrl)) {
-    event.respondWith(
-      caches.match(event.request).then(cached => {
-        if (cached) return cached;
-        return fetch(event.request).then(response => {
-          if (response.status === 200 || response.status === 0) {
-            const clone = response.clone();
-            caches.open(DATA_CACHE).then(cache => cache.put(event.request, clone));
-          }
-          return response;
-        });
-      })
-    );
+    event.respondWith(respondWithArtwork(event));
     return;
   }
 

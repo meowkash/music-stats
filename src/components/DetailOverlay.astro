@@ -172,34 +172,7 @@
     flex-shrink: 0;
   }
 
-  .nav-circle-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .nav-circle-btn:hover {
-      background: rgba(255, 255, 255, 0.16);
-      transform: scale(1.05);
-    }
-  }
-
-  .nav-circle-btn.is-pressed {
-    background: rgba(255, 255, 255, 0.16);
-  }
-
+  /* .nav-circle-btn is the shared sheet control defined in Layout.astro. */
   .nav-circle-btn svg {
     width: 18px;
     height: 18px;

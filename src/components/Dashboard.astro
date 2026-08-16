@@ -1,4 +1,5 @@
 ---
+import SwipeableDeck from "./SwipeableDeck.astro";
 ---
 
 <div class="dashboard-container panel-fill">
@@ -93,28 +94,11 @@
       <h4>Over the last month</h4>
       <span class="category-pill" id="dashboardCategoryPill">Top Tracks</span>
     </div>
-    <div class="dashboard-list-viewport">
-      <div class="dashboard-list-track" id="dashboardListTrack">
-        <div class="dashboard-list-column">
-          <div class="dashboard-column-header">Top Tracks</div>
-          <div class="dashboard-list-page panel-scroll" id="dashboardListTracks">
-            <div class="no-data-message">Loading...</div>
-          </div>
-        </div>
-        <div class="dashboard-list-column">
-          <div class="dashboard-column-header">Top Albums</div>
-          <div class="dashboard-list-page panel-scroll" id="dashboardListAlbums">
-            <div class="no-data-message">Loading...</div>
-          </div>
-        </div>
-        <div class="dashboard-list-column">
-          <div class="dashboard-column-header">Top Artists</div>
-          <div class="dashboard-list-page panel-scroll" id="dashboardListArtists">
-            <div class="no-data-message">Loading...</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <SwipeableDeck tabs={['Tracks', 'Albums', 'Artists']} idPrefix="dashboard">
+      <Fragment slot="header-tracks">Top Tracks</Fragment>
+      <Fragment slot="header-albums">Top Albums</Fragment>
+      <Fragment slot="header-artists">Top Artists</Fragment>
+    </SwipeableDeck>
   </div>
 </div>
 
@@ -222,98 +206,19 @@
     min-height: 0;
   }
 
-  .dashboard-list-viewport {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .dashboard-list-track {
-    display: flex;
-    height: 100%;
-    backface-visibility: hidden;
-  }
-
-  .dashboard-list-column {
-    display: contents;
-  }
-
-  .dashboard-column-header {
-    display: none;
-  }
-
-  /* Layer promotion only while paging — a permanently promoted three-page
-     track keeps all of it rasterised for nothing. */
-  .dashboard-list-track.pager-moving {
-    will-change: transform;
-  }
-
-  .dashboard-list-page {
-    flex: 0 0 100%;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-  }
-
-  .dashboard-list-page.panel-scroll {
-    flex: 0 0 100%;
-  }
-
   @media (min-width: 768px) {
     .highlights-section .category-pill {
       display: none;
     }
 
-    .dashboard-list-track {
-      gap: 12px;
-      transform: none !important;
-    }
-
-    .dashboard-list-column {
-      display: flex;
-      flex: 1 1 0;
-      flex-direction: column;
-      min-width: 0;
-      min-height: 0;
-      gap: 8px;
-    }
-
-    .dashboard-column-header {
-      display: block;
-      flex-shrink: 0;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      padding: 0 2px;
-    }
-
-    .dashboard-list-column:nth-child(1) .dashboard-column-header {
+    .highlights-section :global(.swipeable-list-column:nth-child(1) .swipeable-column-header) {
       color: var(--accent-cat-songs);
     }
-    .dashboard-list-column:nth-child(2) .dashboard-column-header {
+    .highlights-section :global(.swipeable-list-column:nth-child(2) .swipeable-column-header) {
       color: var(--accent-cat-albums);
     }
-    .dashboard-list-column:nth-child(3) .dashboard-column-header {
+    .highlights-section :global(.swipeable-list-column:nth-child(3) .swipeable-column-header) {
       color: var(--accent-cat-artists);
-    }
-
-    .dashboard-list-page {
-      flex: 1 1 auto;
-      width: auto;
-      border-radius: 10px;
-      background: rgba(0, 0, 0, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.04);
-    }
-
-    .dashboard-list-page.panel-scroll {
-      flex: 1 1 auto;
     }
   }
 
@@ -345,10 +250,7 @@
     transition: var(--transition-smooth);
   }
 
-  .dashboard-list-page :global(.dashboard-scroll-sentinel) {
-    height: 1px;
-    width: 100%;
-  }
+
 
   @media (max-width: 767px) {
     .stats-grid {
@@ -427,6 +329,12 @@
   );
 
   const PAGE_IDS: Record<DashboardCategory, string> = {
+    tracks: "dashboardPageTracks",
+    albums: "dashboardPageAlbums",
+    artists: "dashboardPageArtists",
+  };
+
+  const LIST_IDS: Record<DashboardCategory, string> = {
     tracks: "dashboardListTracks",
     albums: "dashboardListAlbums",
     artists: "dashboardListArtists",
@@ -446,7 +354,7 @@
     const scrollControllers: Partial<Record<DashboardCategory, InfiniteScrollController>> = {};
 
     const trackEl = document.getElementById("dashboardListTrack") as HTMLDivElement;
-    const viewportEl = document.querySelector(".dashboard-list-viewport") as HTMLDivElement;
+    const viewportEl = document.getElementById("dashboardViewport") as HTMLDivElement;
     const pillEl = document.getElementById("dashboardCategoryPill") as HTMLSpanElement;
     const sectionEl = document.getElementById("dashboardTopSection") as HTMLDivElement;
     const pillPaint = createCssPaintCache();
@@ -467,6 +375,10 @@
 
     function pageEl(cat: DashboardCategory): HTMLDivElement {
       return document.getElementById(PAGE_IDS[cat]) as HTMLDivElement;
+    }
+
+    function listEl(cat: DashboardCategory): HTMLDivElement {
+      return document.getElementById(LIST_IDS[cat]) as HTMLDivElement;
     }
 
     function renderRow(
@@ -558,7 +470,8 @@
       if (renderedPages.has(cat)) return;
       renderedPages.add(cat);
 
-      const container = pageEl(cat);
+      const container = listEl(cat);
+      const root = pageEl(cat);
       const items = getItemsForCategory(cat);
 
       if (!items.length) {
@@ -572,9 +485,9 @@
         items,
         chunkSize: 25,
         renderItem: (item, idx) => renderRow(cat, item, idx),
-        root: container,
+        root: root,
         rootMargin: "600px 0px",
-        sentinelClass: "dashboard-scroll-sentinel",
+        sentinelClass: "swipeable-scroll-sentinel",
         onChunkRendered: () => {
           initArtworkImages(container);
           applyCountGlows(container);
@@ -601,7 +514,7 @@
     function renderAllLists() {
       renderedPages.clear();
       for (const cat of CATEGORIES) {
-        pageEl(cat).replaceChildren();
+        listEl(cat).replaceChildren();
         delete scrollControllers[cat];
       }
 
@@ -703,7 +616,7 @@
         ]);
         if (!metaResult) {
           for (const cat of CATEGORIES) {
-            pageEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
+            listEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
           }
           return;
         }
@@ -730,7 +643,7 @@
       } catch (err) {
         console.error("Failed to load top lists:", err);
         for (const cat of CATEGORIES) {
-          pageEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
+          listEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
         }
       }
     }

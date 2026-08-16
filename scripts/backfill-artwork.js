@@ -13,6 +13,7 @@ import {
   resolveLegacyArtworkKey,
   storeArtworkInCache,
 } from './artwork-keys.js';
+import { resolveArtwork } from './resolve-artwork/index.js';
 
 const envPath = path.resolve('.env');
 if (fs.existsSync(envPath)) {
@@ -35,6 +36,11 @@ const API_KEY = process.env.LASTFM_API_KEY;
 const USERNAME = process.env.LASTFM_USERNAME;
 const refresh = process.argv.includes('--refresh');
 
+const trackLimitArg = process.argv.find((arg) => arg.startsWith('--tracks='));
+const TRACK_LIMIT = trackLimitArg ? Number(trackLimitArg.split('=')[1]) : Infinity;
+const pruneDead = process.argv.includes('--prune-dead');
+const PRUNE_CONCURRENCY = 12;
+
 if (!API_KEY || !USERNAME) {
   console.error('Error: LASTFM_API_KEY and LASTFM_USERNAME environment variables must be set.');
   process.exit(1);
@@ -42,10 +48,14 @@ if (!API_KEY || !USERNAME) {
 
 const DATA_DIR = path.resolve('src/data');
 const ARTWORK_PATH = path.join(DATA_DIR, 'artwork.json');
+const OVERRIDES_PATH = path.join(DATA_DIR, 'artwork-overrides.json');
+const UNRESOLVED_PATH = path.join(DATA_DIR, 'artwork-unresolved.json');
 const CATALOG_PATH = path.resolve('public/data/catalog.json');
 const META_PATH = path.resolve('public/data/meta.json');
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+/** One cache for the whole run, so every episode of a series costs one lookup. */
+const seriesCache = new Map();
+const unresolved = [];
 
 function cacheArtworkUrl(artworkCache, type, name, artistName, rawUrl) {
   const normalized = normalizeStaticArtworkUrl(rawUrl);
@@ -61,78 +71,118 @@ function hasCached(artworkCache, type, name, artistName = '') {
   return false;
 }
 
-function getImage(images) {
-  if (!images || !Array.isArray(images)) return null;
-  const img = images.find(i => i.size === 'extralarge') || images.find(i => i.size === 'large');
-  return img ? img['#text'] : null;
+function loadJson(file, fallback) {
+  if (!fs.existsSync(file)) return fallback;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return fallback;
+  }
 }
 
-async function fetchItunesArtwork(type, { name, artistName }) {
-  let entity = 'album';
-  let term = `${artistName} ${name}`;
+/**
+ * Manual overrides win over every source, always — the escape hatch for the
+ * handful of releases no catalog indexes correctly.
+ * Keyed exactly like the artwork cache: "album:Name|Artist", "artist:Name".
+ */
+function applyOverrides(artworkCache) {
+  const overrides = loadJson(OVERRIDES_PATH, {});
+  let applied = 0;
 
-  if (type === 'artist') {
-    entity = 'musicArtist';
-    term = name;
-  } else if (type === 'track') {
-    entity = 'song';
-    term = `${artistName} ${name}`;
+  for (const [key, url] of Object.entries(overrides)) {
+    if (typeof url !== 'string' || !url.startsWith('http')) continue;
+    const match = /^(album|artist|track):(.*)$/.exec(key);
+    if (!match) continue;
+
+    const [, type, body] = match;
+    const split = body.lastIndexOf('|');
+    const name = split === -1 ? body : body.slice(0, split);
+    const artistName = split === -1 ? '' : body.slice(split + 1);
+
+    if (cacheArtworkUrl(artworkCache, type, name, artistName, url)) applied++;
   }
 
-  const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=1`;
-  const res = await fetch(itunesUrl);
-  if (!res.ok) return null;
-
-  const data = await res.json();
-  const artworkUrl100 = data.results?.[0]?.artworkUrl100;
-  if (!artworkUrl100) return null;
-
-  return artworkUrl100
-    .replace(/\/\d+x\d+bb\.jpg$/, '/1000x1000bb.jpg')
-    .replace(/\/\d+x\d+\.jpg$/, '/1000x1000bb.jpg');
+  if (applied) console.log(`Applied ${applied} manual artwork override(s).`);
+  return applied;
 }
 
-async function fetchLastfmArtwork(type, { name, artistName, albumName }) {
-  let url;
-  if (type === 'album') {
-    url = `http://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artistName)}&album=${encodeURIComponent(name)}&format=json`;
-  } else if (type === 'artist') {
-    url = `http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(name)}&format=json`;
-  } else {
-    url = `http://ws.audioscrobbler.com/2.0/?method=track.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(name)}&format=json`;
+/**
+ * Drop cache entries whose URL no longer resolves.
+ *
+ * CDN images do disappear — a cached URL is not proof of a working image, and a
+ * dead entry otherwise looks "covered" forever because hasCached() only checks
+ * that a key exists. Pruning turns them back into ordinary gaps that the normal
+ * backfill pass below re-resolves.
+ */
+async function pruneDeadUrls(artworkCache) {
+  const urls = [...new Set(Object.values(artworkCache).filter((u) => typeof u === 'string' && u.startsWith('http')))];
+  console.log(`\n=== Checking ${urls.length} cached artwork URLs ===`);
+
+  const dead = new Set();
+  for (let i = 0; i < urls.length; i += PRUNE_CONCURRENCY) {
+    await Promise.all(
+      urls.slice(i, i + PRUNE_CONCURRENCY).map(async (url) => {
+        try {
+          const res = await fetch(url, { method: 'HEAD' });
+          if (!res.ok) dead.add(url);
+        } catch {
+          dead.add(url);
+        }
+      }),
+    );
   }
 
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-
-  if (type === 'album') return getImage(data.album?.image);
-  if (type === 'artist') {
-    const img = getImage(data.artist?.image);
-    if (img && img.includes('2a96cbd8b46e442fc41c2b86b821562f')) return null;
-    return img;
+  if (!dead.size) {
+    console.log('All cached artwork URLs resolve.');
+    return 0;
   }
-  return getImage(data.track?.album?.image) || getImage(data.track?.image);
+
+  let removed = 0;
+  for (const [key, url] of Object.entries(artworkCache)) {
+    if (dead.has(url)) {
+      delete artworkCache[key];
+      removed++;
+    }
+  }
+
+  console.log(`Pruned ${removed} cache entries across ${dead.size} dead URL(s).`);
+  return removed;
 }
 
+/** Resolve one entity through the scored ladder, then validate the bytes. */
 async function fetchEntityArtwork(type, entity) {
-  let imgUrl = null;
+  const attempts = [];
 
-  try {
-    imgUrl = await fetchItunesArtwork(type, entity);
-    if (imgUrl) return imgUrl;
-  } catch (err) {
-    console.warn('   -> iTunes API error:', err.message);
+  const result = await resolveArtwork(
+    { type, name: entity.name, artistName: entity.artistName || '' },
+    { lastfmKey: API_KEY, seriesCache, onAttempt: (a) => attempts.push(a) },
+  );
+
+  if (!result) {
+    unresolved.push({
+      type,
+      name: entity.name,
+      artistName: entity.artistName || '',
+      attempts: attempts.map((a) => `${a.label}:${a.candidates ?? 0}`),
+    });
+    return null;
   }
 
-  try {
-    imgUrl = await fetchLastfmArtwork(type, entity);
-    if (imgUrl && isStaticArtworkUrl(imgUrl)) return imgUrl;
-  } catch (err) {
-    console.warn('   -> Last.FM API error:', err.message);
-  }
+  return result;
+}
 
-  return null;
+async function cacheResolved(artworkCache, type, item, resolved) {
+  const validated = await fetchValidatedStaticArtwork(resolved.url);
+  if (validated && cacheArtworkUrl(artworkCache, type, item.name, item.artistName || '', validated)) {
+    console.log(`   -> Cached via ${resolved.via} (${resolved.source}, ${resolved.score.toFixed(2)})`);
+    return true;
+  }
+  console.log('   -> Rejected (animated or validation failed)');
+  return false;
+}
+
+function save(artworkCache) {
+  fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
 }
 
 async function backfillType(artworkCache, type, items, label) {
@@ -149,26 +199,20 @@ async function backfillType(artworkCache, type, items, label) {
 
     console.log(`[${i + 1}/${items.length}] ${type}: "${item.name}"${item.artistName ? ` by "${item.artistName}"` : ''}...`);
 
-    const imgUrl = await fetchEntityArtwork(type, item);
-    if (imgUrl) {
-      const validated = await fetchValidatedStaticArtwork(imgUrl);
-      if (validated && cacheArtworkUrl(artworkCache, type, item.name, item.artistName || '', validated)) {
+    const resolved = await fetchEntityArtwork(type, item);
+    if (resolved) {
+      if (await cacheResolved(artworkCache, type, item, resolved)) {
         fetchedCount++;
         saveInterval++;
-        console.log('   -> Cached artwork');
-      } else {
-        console.log('   -> Rejected (animated or validation failed)');
       }
     } else {
-      console.log('   -> No artwork found (will use placeholder in UI)');
+      console.log('   -> No confident match (will use placeholder in UI)');
     }
 
     if (saveInterval >= 10) {
-      fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+      save(artworkCache);
       saveInterval = 0;
     }
-
-    await delay(150);
   }
 
   return fetchedCount;
@@ -199,7 +243,7 @@ async function backfillCanonicalArtists(artworkCache, catalog, meta) {
       saveInterval++;
       console.log(`[${i + 1}/${items.length}] canonical: "${name}" -> promoted from cache`);
       if (saveInterval >= 10) {
-        fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+        save(artworkCache);
         saveInterval = 0;
       }
       continue;
@@ -207,34 +251,28 @@ async function backfillCanonicalArtists(artworkCache, catalog, meta) {
 
     console.log(`[${i + 1}/${items.length}] canonical artist: "${name}"...`);
 
-    let imgUrl = await fetchEntityArtwork('artist', { name, artistName: '' });
-    if (!imgUrl) {
+    let resolved = await fetchEntityArtwork('artist', { name, artistName: '' });
+    if (!resolved) {
       for (const fallback of fallbacks) {
         if (fallback === name) continue;
-        imgUrl = await fetchEntityArtwork('artist', { name: fallback, artistName: '' });
-        if (imgUrl) break;
+        resolved = await fetchEntityArtwork('artist', { name: fallback, artistName: '' });
+        if (resolved) break;
       }
     }
 
-    if (imgUrl) {
-      const validated = await fetchValidatedStaticArtwork(imgUrl);
-      if (validated && cacheArtworkUrl(artworkCache, 'artist', name, '', validated)) {
+    if (resolved) {
+      if (await cacheResolved(artworkCache, 'artist', { name, artistName: '' }, resolved)) {
         fetchedCount++;
         saveInterval++;
-        console.log('   -> Cached artwork');
-      } else {
-        console.log('   -> Rejected (animated or validation failed)');
       }
     } else {
-      console.log('   -> No artwork found (will use placeholder in UI)');
+      console.log('   -> No confident match (will use placeholder in UI)');
     }
 
     if (saveInterval >= 10) {
-      fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+      save(artworkCache);
       saveInterval = 0;
     }
-
-    await delay(150);
   }
 
   return fetchedCount;
@@ -247,16 +285,16 @@ async function main() {
 
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  let artworkCache = {};
-  if (fs.existsSync(ARTWORK_PATH)) {
-    artworkCache = JSON.parse(fs.readFileSync(ARTWORK_PATH, 'utf-8'));
-  }
+  const artworkCache = loadJson(ARTWORK_PATH, {});
   console.log(`Loaded ${Object.keys(artworkCache).length} existing artwork entries.`);
 
   if (!fs.existsSync(CATALOG_PATH) || !fs.existsSync(META_PATH)) {
     console.error('Error: catalog.json and meta.json required. Run "npm run build" first.');
     process.exit(1);
   }
+
+  if (pruneDead) await pruneDeadUrls(artworkCache);
+  applyOverrides(artworkCache);
 
   const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'));
   const meta = JSON.parse(fs.readFileSync(META_PATH, 'utf-8'));
@@ -269,28 +307,37 @@ async function main() {
     .sort((a, b) => b.scrobbles - a.scrobbles)
     .map(a => ({ name: a.name, artistName: '' }));
 
+  let total = 0;
+  total += await backfillType(artworkCache, 'album', albums, 'albums');
+  total += await backfillType(artworkCache, 'artist', artists, 'artists');
+  total += await backfillCanonicalArtists(artworkCache, catalog, meta);
+
+  // Tracks come last and skip anything the UI would already cover via album or
+  // artist fallback — that's what keeps a full run bounded now the old
+  // top-200 cap is gone.
   const tracks = Object.entries(catalog.tracks || {})
     .map(([id, count]) => {
       const trackMeta = meta.tracks[parseInt(id, 10)];
       if (!trackMeta) return null;
       const [name, artistId] = trackMeta;
-      return {
-        name,
-        artistName: meta.artists[artistId] || '',
-        count,
-      };
+      const artistName = meta.artists[artistId] || '';
+      return { name, artistName, count };
     })
     .filter(Boolean)
+    .filter((track) => !resolveArtistArtworkFromCache(track.artistName, artworkCache))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 200);
+    .slice(0, TRACK_LIMIT);
 
-  let total = 0;
-  total += await backfillType(artworkCache, 'album', albums, 'albums');
-  total += await backfillType(artworkCache, 'artist', artists, 'artists');
-  total += await backfillCanonicalArtists(artworkCache, catalog, meta);
-  total += await backfillType(artworkCache, 'track', tracks, 'top tracks');
+  total += await backfillType(artworkCache, 'track', tracks, 'tracks without artist artwork');
 
-  fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
+  save(artworkCache);
+
+  if (unresolved.length) {
+    fs.writeFileSync(UNRESOLVED_PATH, JSON.stringify(unresolved, null, 2), 'utf-8');
+    console.log(`\n${unresolved.length} entities had no confident match — see ${path.relative(process.cwd(), UNRESOLVED_PATH)}`);
+    console.log('Add a manual URL to src/data/artwork-overrides.json to force any of them.');
+  }
+
   console.log(`\nCompleted! Fetched ${total} new entries. Total cache size: ${Object.keys(artworkCache).length}`);
 }
 

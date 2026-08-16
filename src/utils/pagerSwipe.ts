@@ -51,6 +51,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   let pendingOffset: number | null = null;
   let dragRafId: number | null = null;
   let lastPaintX = Number.NaN;
+  let dragStartOffset = 0;
 
   function measure() {
     width = viewportEl.clientWidth || window.innerWidth;
@@ -90,8 +91,18 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   }
 
   function clampOffset(value: number): number {
-    if (index === 0 && value > 0) return value * EDGE_RESISTANCE;
-    if (index === pageCount - 1 && value < 0) return value * EDGE_RESISTANCE;
+    const absX = restingX(index) + value;
+    const minX = restingX(pageCount - 1);
+    const maxX = 0;
+
+    if (absX > maxX) {
+      const over = absX - maxX;
+      return (maxX + over * EDGE_RESISTANCE) - restingX(index);
+    }
+    if (absX < minX) {
+      const over = absX - minX;
+      return (minX + over * EDGE_RESISTANCE) - restingX(index);
+    }
     return value;
   }
 
@@ -109,7 +120,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     }
 
     setMoving(true);
-    const from = restingX() + offset;
+    const from = Number.isNaN(lastPaintX) ? restingX() + offset : lastPaintX;
     cancelTween = rafTween(from, restingX(clamped), SETTLE_MS, paint, () => {
       cancelTween = null;
       offset = 0;
@@ -127,7 +138,9 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     cancelPendingDrag();
     dragging = true;
     didDrag = false;
-    offset = 0;
+    
+    dragStartOffset = !Number.isNaN(lastPaintX) ? lastPaintX - restingX(index) : 0;
+    offset = dragStartOffset;
     velocity = 0;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -165,7 +178,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
       lastTime = now;
     }
 
-    pendingOffset = clampOffset(dx);
+    pendingOffset = clampOffset(dragStartOffset + dx);
     if (dragRafId === null) dragRafId = requestAnimationFrame(flushDrag);
   };
 
@@ -173,12 +186,28 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     if (!dragging) return;
     dragging = false;
     cancelPendingDrag(true);
-    if (!didDrag) return;
 
-    const progress = -offset / (width || 1);
-    let target = index;
-    if (progress > COMMIT_FRACTION || velocity < -VELOCITY_COMMIT) target = index + 1;
-    else if (progress < -COMMIT_FRACTION || velocity > VELOCITY_COMMIT) target = index - 1;
+    const absX = restingX(index) + offset;
+    const exactPage = -absX / (width || 1);
+    
+    let target = Math.round(exactPage);
+
+    if (didDrag) {
+      if (velocity < -VELOCITY_COMMIT) {
+        target = Math.ceil(exactPage);
+      } else if (velocity > VELOCITY_COMMIT) {
+        target = Math.floor(exactPage);
+      } else {
+        let posFraction = exactPage % 1;
+        if (posFraction < 0) posFraction += 1;
+        
+        if (posFraction > COMMIT_FRACTION && posFraction <= 0.5) {
+          target = Math.ceil(exactPage);
+        } else if (posFraction < (1 - COMMIT_FRACTION) && posFraction > 0.5) {
+          target = Math.floor(exactPage);
+        }
+      }
+    }
 
     goTo(target);
   };

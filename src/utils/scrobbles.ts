@@ -21,8 +21,11 @@ export async function loadYearsData(years: string[]): Promise<void> {
 }
 
 export function getYearsInRange(startStr: string, endStr: string): string[] {
+  if (!startStr || !endStr) return [];
   const startYear = parseInt(startStr.split('-')[0], 10);
   const endYear = parseInt(endStr.split('-')[0], 10);
+  if (isNaN(startYear) || isNaN(endYear)) return [];
+
   const years: string[] = [];
   for (let y = startYear; y <= endYear; y++) {
     years.push(String(y));

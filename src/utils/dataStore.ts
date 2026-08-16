@@ -1,16 +1,30 @@
+import {
+  MANIFEST_PATH,
+  collectGarbage,
+  hashText,
+  loadActiveManifest,
+  readBootHint,
+  readStoredFile,
+  saveActiveManifest,
+  writeBootHint,
+  writeStoredFiles,
+  type Manifest,
+} from './persist/generations';
+
 declare const __CACHE_VERSION__: string | undefined;
 
 export const CACHE_VERSION =
   typeof __CACHE_VERSION__ !== 'undefined' ? __CACHE_VERSION__ : 'dev';
 
-const DB_NAME = 'music-stats';
-const DB_VERSION = 1;
-const STORE_NAME = 'json';
-const NETWORK_TIMEOUT_MS = 12_000;
+const NETWORK_TIMEOUT_MS = 10000;
+const DOWNLOAD_CONCURRENCY = 4;
 
+/** Parsed data for the active generation, keyed by data path. */
 const memory = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
-const revalidating = new Set<string>();
+
+let activeManifest: Manifest | null = null;
+let staging = false;
 
 export const CRITICAL_DATA_PATHS = [
   '/data/meta.json',
@@ -22,12 +36,14 @@ export const CRITICAL_DATA_PATHS = [
   '/data/recap-meta.json',
 ] as const;
 
-const REVALIDATE_CONCURRENCY = 3;
-const CACHE_VERSION_STORAGE_KEY = 'music-stats-cache-version';
-
 export interface DataUpdatedDetail {
   path: string;
   data: unknown;
+}
+
+export interface GenerationSwappedDetail {
+  generation: string;
+  changedPaths: string[];
 }
 
 export function dataUrl(path: string): string {
@@ -39,163 +55,92 @@ export function normalizeDataPath(path: string): string {
   return path.split('?')[0];
 }
 
-async function clearIDB(): Promise<void> {
-  try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    /* ignore */
-  }
+export function getActiveManifest(): Manifest | null {
+  return activeManifest;
 }
 
-/** Drop persisted JSON when a new deploy ships so we don't serve stale scrobbles. */
-export async function ensureCacheVersion(): Promise<void> {
-  try {
-    const stored = localStorage.getItem(CACHE_VERSION_STORAGE_KEY);
-    if (stored === CACHE_VERSION) return;
-    localStorage.setItem(CACHE_VERSION_STORAGE_KEY, CACHE_VERSION);
-  } catch {
-    /* ignore */
-  }
-
-  memory.clear();
-  await clearIDB();
+/** True when a complete generation is already on disk, readable before first paint. */
+export function hasStoredData(): boolean {
+  return readBootHint()?.complete === true;
 }
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME, { keyPath: 'path' });
-    };
-  });
-}
-
-async function readIDB(path: string): Promise<unknown | null> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).get(path);
-      req.onsuccess = () => resolve(req.result?.data ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function writeIDB(path: string, data: unknown): Promise<void> {
-  try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put({ path, data, updatedAt: Date.now() });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    /* quota / private mode — memory cache still works this session */
-  }
-}
-
-async function fetchNetwork<T>(url: string): Promise<T> {
-  if (!navigator.onLine) {
-    throw new Error('Offline');
-  }
+async function fetchText(url: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
   try {
     const res = await fetch(url, { signal: controller.signal, cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as T;
+    return await res.text();
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function dataChanged(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) !== JSON.stringify(b);
+async function fetchNetwork<T>(url: string): Promise<T> {
+  return JSON.parse(await fetchText(url)) as T;
 }
 
-function dispatchUpdate(path: string, data: unknown): void {
-  window.dispatchEvent(
-    new CustomEvent<DataUpdatedDetail>('data-updated', { detail: { path, data } }),
+function dispatch<T>(name: string, detail: T): void {
+  window.dispatchEvent(new CustomEvent<T>(name, { detail }));
+}
+
+function manifestEntry(path: string): ManifestEntryLookup {
+  const normalized = normalizeDataPath(path);
+  const entry = activeManifest?.files.find((f) => f.path === normalized);
+  return { normalized, hash: entry?.hash };
+}
+
+interface ManifestEntryLookup {
+  normalized: string;
+  hash: string | undefined;
+}
+
+/**
+ * Phase 1 of boot: populate memory from IndexedDB with no network access at
+ * all. Only the critical set is awaited — everything else resolves from the
+ * same store on demand via fetchAppJson, so first paint stays light.
+ */
+export async function hydrateFromStore(): Promise<boolean> {
+  activeManifest = (await loadActiveManifest()) ?? null;
+  if (!activeManifest) return false;
+
+  const critical = new Set<string>(CRITICAL_DATA_PATHS);
+  const entries = activeManifest.files.filter((f) => critical.has(f.path));
+
+  await Promise.all(
+    entries.map(async (file) => {
+      const data = await readStoredFile<unknown>(file.hash);
+      if (data !== undefined) memory.set(file.path, data);
+    }),
   );
+
+  return memory.size > 0;
 }
 
-async function revalidatePath(path: string): Promise<void> {
-  if (!navigator.onLine) return;
-  if (revalidating.has(path)) return;
-  revalidating.add(path);
-  try {
-    const fresh = await fetchNetwork<unknown>(dataUrl(path));
-    const prev = memory.get(path);
-    memory.set(path, fresh);
-    await writeIDB(path, fresh);
-    if (prev !== undefined && dataChanged(prev, fresh)) {
-      dispatchUpdate(path, fresh);
-    }
-  } catch {
-    /* offline or slow — keep serving stale data */
-  } finally {
-    revalidating.delete(path);
-  }
-}
-
-export function scheduleRevalidate(path: string): void {
-  const normalized = normalizeDataPath(path);
-  queueMicrotask(() => {
-    void revalidatePath(normalized);
-  });
-}
-
-/** Revalidate the files every view needs — fast enough to run on startup and resume. */
-export async function revalidateCriticalData(): Promise<void> {
-  if (!navigator.onLine) return;
-
-  const paths = new Set<string>(CRITICAL_DATA_PATHS);
-  for (const path of memory.keys()) {
-    if (/^\/data\/year-\d+\.json$/.test(path)) paths.add(path);
-  }
-
-  await revalidatePaths([...paths]);
-}
-
-/** Stale-while-revalidate JSON fetch backed by IndexedDB. */
+/**
+ * Read a data file. Memory, then the active generation in IndexedDB, then the
+ * network as a genuine last resort (first ever run, or a path the manifest
+ * doesn't know about).
+ */
 export async function fetchAppJson<T>(path: string): Promise<T> {
-  const normalized = normalizeDataPath(path);
+  const { normalized, hash } = manifestEntry(path);
 
-  if (memory.has(normalized)) {
-    scheduleRevalidate(normalized);
-    return memory.get(normalized) as T;
-  }
+  if (memory.has(normalized)) return memory.get(normalized) as T;
 
   const pending = inflight.get(normalized);
   if (pending) return pending as Promise<T>;
 
   const promise = (async (): Promise<T> => {
-    const cached = await readIDB(normalized);
-    if (cached !== null) {
-      memory.set(normalized, cached);
-      scheduleRevalidate(normalized);
-      return cached as T;
+    if (hash) {
+      const stored = await readStoredFile<T>(hash);
+      if (stored !== undefined) {
+        memory.set(normalized, stored);
+        return stored;
+      }
     }
 
-    if (!navigator.onLine) {
-      throw new Error(`Offline with no cached data for ${normalized}`);
-    }
-
-    const data = await fetchNetwork<T>(dataUrl(path));
+    const data = await fetchNetwork<T>(dataUrl(normalized));
     memory.set(normalized, data);
-    await writeIDB(normalized, data);
     return data;
   })();
 
@@ -207,87 +152,193 @@ export async function fetchAppJson<T>(path: string): Promise<T> {
   }
 }
 
-/** Hydrate memory from IndexedDB before first paint. */
-export async function warmDataCache(paths: string[]): Promise<boolean> {
-  const timeoutMs = 1500;
+export function getCachedJson<T>(path: string): T | null {
+  const value = memory.get(normalizeDataPath(path));
+  return value !== undefined ? (value as T) : null;
+}
 
-  const work = (async () => {
-    let hasAny = false;
-    await Promise.all(
-      paths.map(async (path) => {
-        const normalized = normalizeDataPath(path);
-        if (memory.has(normalized)) {
-          hasAny = true;
-          return;
-        }
-        const cached = await readIDB(normalized);
-        if (cached !== null) {
-          memory.set(normalized, cached);
-          hasAny = true;
-        }
-      }),
+async function downloadFile(
+  file: { path: string; hash: string },
+): Promise<[string, unknown] | null> {
+  const text = await fetchText(dataUrl(file.path));
+
+  // The service worker is network-first with a 3s deadline, so a slow network
+  // can hand back the *previous* body. Verifying against the manifest hash
+  // stops stale bytes being filed under the new hash.
+  const actual = await hashText(text);
+  if (actual !== null && actual !== file.hash) return null;
+
+  try {
+    return [file.hash, JSON.parse(text)];
+  } catch {
+    return null;
+  }
+}
+
+async function downloadAll(
+  files: Array<{ path: string; hash: string }>,
+): Promise<Array<[string, unknown]> | null> {
+  const results: Array<[string, unknown]> = [];
+
+  for (let i = 0; i < files.length; i += DOWNLOAD_CONCURRENCY) {
+    const batch = files.slice(i, i + DOWNLOAD_CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map((file) => downloadFile(file).catch(() => null)),
     );
-    return hasAny;
-  })();
+    // Partial generations are worse than no update: bail and keep serving the
+    // generation already on disk.
+    if (settled.some((entry) => entry === null)) return null;
+    results.push(...(settled as Array<[string, unknown]>));
+  }
 
-  const timedOut = new Promise<boolean>((resolve) => {
-    setTimeout(() => resolve(false), timeoutMs);
+  return results;
+}
+
+/**
+ * Phase 2 of boot: reconcile against the server.
+ *
+ * Downloads land in the content-addressed file store but stay invisible until
+ * every one of them has arrived; only then does the manifest pointer move. An
+ * interrupted update therefore leaves the previous generation fully intact
+ * rather than a half-updated mix.
+ *
+ * @returns the number of data files that changed.
+ */
+export async function stageUpdate(): Promise<number> {
+  if (staging || !navigator.onLine) return 0;
+  staging = true;
+
+  try {
+    const remote = await fetchNetwork<Manifest>(dataUrl(MANIFEST_PATH));
+    if (!remote?.files?.length) return 0;
+
+    if (activeManifest && activeManifest.generation === remote.generation) {
+      // Same generation, but a previous run may have been interrupted before
+      // the artwork sweep finished.
+      dispatch<Manifest>('data-manifest-ready', remote);
+      return 0;
+    }
+
+    const activeByPath = new Map(activeManifest?.files.map((f) => [f.path, f.hash]) ?? []);
+    const changed = remote.files.filter((f) => activeByPath.get(f.path) !== f.hash);
+
+    const needed: Array<{ path: string; hash: string }> = [];
+    for (const file of changed) {
+      const stored = await readStoredFile<unknown>(file.hash);
+      if (stored === undefined) needed.push(file);
+    }
+
+    const downloaded = await downloadAll(needed);
+    if (downloaded === null) return 0;
+
+    await writeStoredFiles(downloaded);
+    await commitGeneration(remote, changed.map((f) => f.path));
+    dispatch<Manifest>('data-manifest-ready', remote);
+
+    return changed.length;
+  } catch {
+    // Offline or the manifest is unreachable — the stored generation stands.
+    return 0;
+  } finally {
+    staging = false;
+  }
+}
+
+/** Flip the pointer, refresh memory, and announce the swap exactly once. */
+async function commitGeneration(manifest: Manifest, changedPaths: string[]): Promise<void> {
+  await saveActiveManifest(manifest);
+  activeManifest = manifest;
+
+  const byPath = new Map(manifest.files.map((f) => [f.path, f.hash]));
+  const refreshed: string[] = [];
+
+  for (const path of changedPaths) {
+    // Only refresh what the app has actually read; anything else will pick up
+    // the new hash on its next fetchAppJson.
+    if (!memory.has(path)) continue;
+    const hash = byPath.get(path);
+    if (!hash) continue;
+    const data = await readStoredFile<unknown>(hash);
+    if (data === undefined) continue;
+    memory.set(path, data);
+    refreshed.push(path);
+  }
+
+  writeBootHint({
+    generation: manifest.generation,
+    complete: true,
+    artworkCached: readBootHint()?.artworkCached ?? 0,
   });
 
-  return Promise.race([work, timedOut]);
-}
+  dispatch<GenerationSwappedDetail>('data-generation-swapped', {
+    generation: manifest.generation,
+    changedPaths: refreshed,
+  });
 
-function collectRefreshPaths(): string[] {
-  const paths = new Set<string>(CRITICAL_DATA_PATHS);
-
-  for (const path of memory.keys()) {
-    paths.add(path);
+  // Existing per-path subscribers keep working; they now all fire within one
+  // swap rather than trickling in file by file.
+  for (const path of refreshed) {
+    dispatch<DataUpdatedDetail>('data-updated', { path, data: memory.get(path) });
   }
 
-  const totals = memory.get('/data/yearly-totals.json') as Record<string, unknown> | undefined;
-  if (totals) {
-    for (const year of Object.keys(totals)) {
-      paths.add(`/data/year-${year}.json`);
+  void collectGarbage(manifest);
+}
+
+/** First successful run has no stored generation, so seed one from the network. */
+export async function ensureInitialGeneration(): Promise<void> {
+  if (activeManifest || !navigator.onLine) return;
+
+  try {
+    const remote = await fetchNetwork<Manifest>(dataUrl(MANIFEST_PATH));
+    if (!remote?.files?.length) return;
+
+    const critical = new Set<string>(CRITICAL_DATA_PATHS);
+    const files = remote.files.filter((f) => critical.has(f.path));
+    const downloaded = await downloadAll(files);
+    if (downloaded === null) return;
+
+    await writeStoredFiles(downloaded);
+
+    const byHash = new Map(downloaded);
+    for (const file of files) {
+      const data = byHash.get(file.hash);
+      if (data !== undefined) memory.set(file.path, data);
     }
-  }
 
-  return [...paths];
+    // The manifest is recorded in full even though only the critical files were
+    // downloaded; the rest resolve lazily and are backfilled by the next sweep.
+    await saveActiveManifest(remote);
+    activeManifest = remote;
+    writeBootHint({ generation: remote.generation, complete: true, artworkCached: 0 });
+    dispatch<Manifest>('data-manifest-ready', remote);
+  } catch {
+    /* stays cold; the app falls back to direct network reads */
+  }
 }
 
-async function revalidatePaths(paths: string[]): Promise<number> {
-  let changed = 0;
-  const unique = [...new Set(paths.map(normalizeDataPath))];
+/** Backfill any manifest file not yet in the store, so offline covers every view. */
+export async function backfillStoredFiles(): Promise<void> {
+  if (!activeManifest || !navigator.onLine) return;
 
-  for (let i = 0; i < unique.length; i += REVALIDATE_CONCURRENCY) {
-    const batch = unique.slice(i, i + REVALIDATE_CONCURRENCY);
-    const results = await Promise.all(
-      batch.map(async (path) => {
-        const prev = memory.get(path);
-        await revalidatePath(path);
-        const next = memory.get(path);
-        return prev !== undefined && next !== undefined && dataChanged(prev, next);
-      }),
-    );
-    changed += results.filter(Boolean).length;
+  const missing: Array<{ path: string; hash: string }> = [];
+  for (const file of activeManifest.files) {
+    const stored = await readStoredFile<unknown>(file.hash);
+    if (stored === undefined) missing.push(file);
   }
+  if (!missing.length) return;
 
-  return changed;
+  const downloaded = await downloadAll(missing);
+  if (downloaded) await writeStoredFiles(downloaded);
 }
 
-/** Manual refresh — revalidates critical paths plus anything loaded this session. */
+export async function revalidateCriticalData(): Promise<void> {
+  await stageUpdate();
+}
+
+/** Manual refresh (pull-to-refresh). Returns the number of changed files. */
 export async function refreshAppData(): Promise<number> {
   if (!navigator.onLine) return 0;
-  return revalidatePaths(collectRefreshPaths());
-}
-
-export async function revalidateAllCached(): Promise<void> {
-  await revalidatePaths(collectRefreshPaths());
-}
-
-export function getCachedJson<T>(path: string): T | null {
-  const normalized = normalizeDataPath(path);
-  const value = memory.get(normalized);
-  return value !== undefined ? (value as T) : null;
+  return stageUpdate();
 }
 
 export function onPathsUpdated(
@@ -300,5 +351,19 @@ export function onPathsUpdated(
       typeof m === 'string' ? m === detail.path : m.test(detail.path),
     );
     if (matched) callback(detail);
+  });
+}
+
+export function onGenerationSwapped(
+  callback: (detail: GenerationSwappedDetail) => void,
+): void {
+  window.addEventListener('data-generation-swapped', (e) => {
+    callback((e as CustomEvent<GenerationSwappedDetail>).detail);
+  });
+}
+
+export function onManifestReady(callback: (manifest: Manifest) => void): void {
+  window.addEventListener('data-manifest-ready', (e) => {
+    callback((e as CustomEvent<Manifest>).detail);
   });
 }

@@ -218,32 +218,5 @@ import BottomSheet from "./BottomSheet.astro";
     color: #fff;
   }
 
-  .nav-circle-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: 1px solid var(--panel-border-hover);
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-  }
-
-  .nav-circle-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .nav-circle-btn:hover {
-      background: rgba(255, 255, 255, 0.12);
-    }
-  }
-
-  .nav-circle-btn.is-pressed {
-    background: rgba(255, 255, 255, 0.12);
-  }
+  /* .nav-circle-btn is the shared sheet control defined in Layout.astro. */
 </style>

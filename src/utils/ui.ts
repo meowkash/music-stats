@@ -254,9 +254,19 @@ function loadArtworkWithRetry(
     };
 
     if (img.src !== src) img.src = src;
-    else if (img.complete && img.naturalWidth > 0) {
+    else if (img.complete) {
       cleanup();
-      callbacks.onSuccess(src, idx === 0 ? 'high' : 'low');
+      if (img.naturalWidth > 0) {
+        callbacks.onSuccess(src, idx === 0 ? 'high' : 'low');
+      } else {
+        // Image already failed
+        attempt++;
+        if (attempt < sources.length * ARTWORK_MAX_RETRIES) {
+          setTimeout(tryLoad, 300);
+        } else {
+          callbacks.onFailure();
+        }
+      }
     }
   };
 
@@ -306,9 +316,21 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
     img.style.opacity = '';
   };
 
-  if (img.complete && img.naturalWidth > 0) {
-    markLoaded();
-    return;
+  if (img.complete) {
+    if (img.naturalWidth > 0) {
+      markLoaded();
+      return;
+    } else {
+      // Already failed before binding
+      const fallbackSrc = img.dataset.fallbackSrc;
+      if (fallbackSrc && img.src !== fallbackSrc && img.src !== window.location.href) {
+        img.onerror = () => showArtworkFallback(thumb);
+        img.src = fallbackSrc;
+        return;
+      }
+      showArtworkFallback(thumb);
+      return;
+    }
   }
 
   img.onload = () => markLoaded();
@@ -483,6 +505,9 @@ export async function loadColorsCache() {
       .catch((e) => { console.error('Failed to load colors.json', e); colorsCache = {}; });
   }
   await colorsPromise;
+  // Components render in parallel with this load, so anything that painted
+  // during the race is sitting on the fallback glow and needs a second pass.
+  repaintPendingGlows();
 }
 
 onPathsUpdated(['/data/artwork.json'], ({ data }) => {
@@ -499,6 +524,7 @@ onPathsUpdated(['/data/catalog.json'], ({ data }) => {
 
 onPathsUpdated(['/data/colors.json'], ({ data }) => {
   colorsCache = data as Record<string, ColorEntry>;
+  repaintPendingGlows();
 });
 
 function urlVariants(url: string): string[] {
@@ -539,39 +565,62 @@ function resolveColorFromCache(url: string): { r: number; g: number; b: number }
   return entry ? { r: entry.r, g: entry.g, b: entry.b } : null;
 }
 
-export function getDominantColor(imgEl: HTMLImageElement, callback: (rgb: { r: number; g: number; b: number }) => void) {
+/** `resolved` is false when the cache missed and `rgb` is the white fallback. */
+export function getDominantColor(
+  imgEl: HTMLImageElement,
+  callback: (rgb: { r: number; g: number; b: number }, resolved: boolean) => void,
+) {
   const fallback = { r: 255, g: 255, b: 255 };
   if (!imgEl.src || imgEl.src.includes('undefined')) {
-    callback(fallback);
+    callback(fallback, false);
     return;
   }
 
   const color = resolveColorFromCache(imgEl.src);
-  callback(color || fallback);
+  callback(color || fallback, color !== null);
+}
+
+const ROW_THUMB_SELECTOR = '.scrobble-row-thumb img.artwork-img, .scrobble-row-thumb img';
+
+/**
+ * Only a real cache hit latches. A row painted before colors.json resolved gets
+ * the white fallback and stays `pending`, so `repaintPendingGlows` can finish it
+ * once the cache lands — previously it latched on the fallback and stayed white
+ * for the rest of the session.
+ */
+function paintRowGlow(row: Element): void {
+  const imgEl = row.querySelector(ROW_THUMB_SELECTOR) as HTMLImageElement | null;
+  const countEl = row.querySelector('.scrobble-count-val');
+  if (!imgEl || !countEl) return;
+
+  if (countEl.getAttribute('data-color-state') === 'resolved') return;
+
+  const apply = () => {
+    getDominantColor(imgEl, (rgb, resolved) => {
+      countEl.setAttribute('style', getGlowStyle(rgb, { blur: 8, alpha: 0.5 }));
+      countEl.setAttribute('data-color-state', resolved ? 'resolved' : 'pending');
+    });
+  };
+
+  if (imgEl.complete && imgEl.naturalWidth > 0) {
+    apply();
+  } else {
+    imgEl.addEventListener('load', apply, { once: true });
+  }
 }
 
 export function applyCountGlows(container: HTMLElement) {
-  const rows = container.querySelectorAll('.scrobble-row');
-  rows.forEach(row => {
-    const imgEl = row.querySelector('.scrobble-row-thumb img.artwork-img, .scrobble-row-thumb img') as HTMLImageElement;
-    const countEl = row.querySelector('.scrobble-count-val');
-    if (!imgEl || !countEl) return;
+  container.querySelectorAll('.scrobble-row').forEach(paintRowGlow);
+}
 
-    if (countEl.getAttribute('data-colored')) return;
-
-    const apply = () => {
-      getDominantColor(imgEl, (rgb) => {
-        countEl.setAttribute('style', getGlowStyle(rgb, { blur: 8, alpha: 0.5 }));
-        countEl.setAttribute('data-colored', 'true');
-      });
-    };
-
-    if (imgEl.complete && imgEl.naturalWidth > 0) {
-      apply();
-    } else {
-      imgEl.addEventListener('load', apply, { once: true });
-    }
-  });
+/** Re-resolve rows still showing the fallback glow, after colors data arrives. */
+export function repaintPendingGlows(root: ParentNode = document): void {
+  root
+    .querySelectorAll('.scrobble-count-val[data-color-state="pending"]')
+    .forEach((countEl) => {
+      const row = countEl.closest('.scrobble-row');
+      if (row) paintRowGlow(row);
+    });
 }
 
 export function getColorForUrl(url: string | null): { r: number; g: number; b: number } | null {

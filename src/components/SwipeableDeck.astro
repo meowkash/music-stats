@@ -1,0 +1,117 @@
+---
+export interface Props {
+  tabs: string[];
+  idPrefix: string;
+}
+
+const { tabs, idPrefix } = Astro.props;
+---
+
+<div class="swipeable-list-viewport" id={`${idPrefix}Viewport`}>
+  <div class="swipeable-list-track" id={`${idPrefix}ListTrack`}>
+    {tabs.map((tab) => (
+      <div class="swipeable-list-column" data-tab={tab.toLowerCase()}>
+        <div class="swipeable-column-header">
+          <slot name={`header-${tab.toLowerCase()}`}>
+            <span>{tab}</span>
+          </slot>
+        </div>
+        <div class="swipeable-list-page panel-scroll" data-tab={tab.toLowerCase()} id={`${idPrefix}Page${tab}`}>
+          <div class="swipeable-list" id={`${idPrefix}List${tab}`}></div>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
+<style>
+  .swipeable-list-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    /* Prevent iOS Safari swipe-to-go-back from hijacking the gesture mid-flight */
+    touch-action: pan-y;
+  }
+
+  .swipeable-list-track {
+    display: flex;
+    height: 100%;
+    backface-visibility: hidden;
+  }
+
+  .swipeable-list-column {
+    display: contents;
+  }
+
+  .swipeable-column-header {
+    display: none;
+  }
+
+  .swipeable-list-track.pager-moving {
+    will-change: transform;
+  }
+
+  .swipeable-list-page {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  .swipeable-list-page.panel-scroll {
+    flex: 0 0 100%;
+  }
+
+  @media (min-width: 768px) {
+    .swipeable-list-track {
+      gap: 12px;
+      transform: none !important;
+    }
+
+    .swipeable-list-column {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      gap: 8px;
+    }
+
+    .swipeable-column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    .swipeable-list-page {
+      flex: 1 1 auto;
+      width: auto;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .swipeable-list-page.panel-scroll {
+      flex: 1 1 auto;
+    }
+  }
+
+  /* Invisible trigger element used for infinite-scroll chunk loading */
+  .swipeable-list :global(.swipeable-scroll-sentinel) {
+    height: 1px;
+    width: 100%;
+  }
+</style>

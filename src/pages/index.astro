@@ -171,11 +171,13 @@ import { TAB_ORDER } from "../utils/tabs";
 <script>
   import { loadColorsCache, preloadAppData } from "../utils/ui";
   import {
-    warmDataCache,
-    ensureCacheVersion,
-    revalidateCriticalData,
-    CRITICAL_DATA_PATHS,
+    hydrateFromStore,
+    ensureInitialGeneration,
+    stageUpdate,
+    backfillStoredFiles,
+    getActiveManifest,
   } from "../utils/dataStore";
+  import { prefetchArtwork } from "../utils/artworkPrefetch";
   import { hideSplashScreen } from "../utils/dataRefresh";
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -183,12 +185,24 @@ import { TAB_ORDER } from "../utils/tabs";
 
     void (async () => {
       try {
-        await ensureCacheVersion();
-        await warmDataCache([...CRITICAL_DATA_PATHS]);
-        void revalidateCriticalData();
+        // Phase 1 — render from whatever is already on disk. No network on
+        // this path, so a cold offline launch paints the same as a warm one.
+        const hydrated = await hydrateFromStore();
+        if (!hydrated) await ensureInitialGeneration();
         await Promise.all([loadColorsCache(), preloadAppData()]);
       } catch (err) {
-        console.warn("Background data hydration failed:", err);
+        console.warn("Data hydration failed:", err);
+      }
+
+      // Phase 2 — reconcile with the server, fill in any files the store is
+      // missing, then warm artwork. Deliberately not awaited by first paint.
+      try {
+        await stageUpdate();
+        await backfillStoredFiles();
+        const manifest = getActiveManifest();
+        if (manifest) void prefetchArtwork(manifest);
+      } catch (err) {
+        console.warn("Background data update failed:", err);
       }
     })();
   });

@@ -33,6 +33,9 @@ run(
   'npx',
   ['tsx', 'scripts/extract-colors.js', ...(refresh ? ['--refresh'] : [])],
 );
+// Last writer into public/data wins, so the manifest has to hash the files
+// after every step that can still modify them.
+run('Generate data manifest', 'node', ['scripts/generate-manifest.js']);
 run('Astro build', 'npx', ['astro', 'build']);
 
 console.log('\n✓ Build complete');

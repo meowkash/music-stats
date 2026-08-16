@@ -105,7 +105,7 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
     if (!tracking) return;
 
     const y = e.touches[0].clientY;
-    const dy = y - startY;
+    let dy = y - startY;
     const dx = e.touches[0].clientX - startX;
 
     if (!engaged) {
@@ -117,6 +117,9 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
       if (dy < ENGAGE_DISTANCE) return;
 
       engaged = true;
+      startY = y - ENGAGE_DISTANCE;
+      dy = ENGAGE_DISTANCE;
+
       panel.classList.add('sheet-dragging');
       panel.style.transition = 'none';
       if (backdrop) backdrop.style.transition = 'none';
@@ -131,7 +134,10 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
 
     const now = performance.now();
     const dt = now - lastTime;
-    if (dt > 0) velocityY = (y - lastY) / dt;
+    if (dt > 0) {
+      const v = (y - lastY) / dt;
+      velocityY = velocityY === 0 ? v : velocityY * 0.2 + v * 0.8;
+    }
     lastY = y;
     lastTime = now;
     currentY = y;

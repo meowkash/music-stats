@@ -79,7 +79,7 @@ const pageUrl = Astro.url.href;
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.6s;
+				transition: opacity 0.6s var(--ios-spring), visibility 0.6s;
 			}
 			#pwa-splash-screen.hidden {
 				opacity: 0;
@@ -89,7 +89,7 @@ const pageUrl = Astro.url.href;
 			.splash-logo {
 				opacity: 0;
 				will-change: opacity, transform;
-				animation: splash-logo-fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+				animation: splash-logo-fade-in 0.5s var(--ios-spring) 0.1s both;
 			}
 			@keyframes splash-logo-fade-in {
 				from { opacity: 0; transform: scale(0.9) translateY(15px); }
@@ -482,49 +482,18 @@ const pageUrl = Astro.url.href;
 		overflow-x: hidden;
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior-y: contain;
-		scrollbar-width: thin;
-		scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+		scrollbar-width: none;
 	}
 
-	/* Themed scrollbars — subtle glass thumb, no heavy native chrome */
+	/* Hide scrollbars for all scroll containers */
 	.panel-scroll::-webkit-scrollbar,
 	.dashboard-list-page::-webkit-scrollbar,
 	.leaderboard-list-page::-webkit-scrollbar,
 	.overlay-scroll-container::-webkit-scrollbar,
 	.recent-list::-webkit-scrollbar,
-	.stats-list::-webkit-scrollbar {
-		width: 5px;
-		height: 5px;
-	}
-
-	.panel-scroll::-webkit-scrollbar-track,
-	.dashboard-list-page::-webkit-scrollbar-track,
-	.leaderboard-list-page::-webkit-scrollbar-track,
-	.overlay-scroll-container::-webkit-scrollbar-track,
-	.recent-list::-webkit-scrollbar-track,
-	.stats-list::-webkit-scrollbar-track {
-		background: transparent;
-		margin: 6px 0;
-	}
-
-	.panel-scroll::-webkit-scrollbar-thumb,
-	.dashboard-list-page::-webkit-scrollbar-thumb,
-	.leaderboard-list-page::-webkit-scrollbar-thumb,
-	.overlay-scroll-container::-webkit-scrollbar-thumb,
-	.recent-list::-webkit-scrollbar-thumb,
-	.stats-list::-webkit-scrollbar-thumb {
-		background: color-mix(in srgb, var(--panel-bg) 55%, rgba(255, 255, 255, 0.14));
-		border-radius: 999px;
-		border: 1px solid rgba(255, 255, 255, 0.06);
-	}
-
-	.panel-scroll::-webkit-scrollbar-thumb:hover,
-	.dashboard-list-page::-webkit-scrollbar-thumb:hover,
-	.leaderboard-list-page::-webkit-scrollbar-thumb:hover,
-	.overlay-scroll-container::-webkit-scrollbar-thumb:hover,
-	.recent-list::-webkit-scrollbar-thumb:hover,
-	.stats-list::-webkit-scrollbar-thumb:hover {
-		background: color-mix(in srgb, var(--panel-bg) 40%, rgba(255, 255, 255, 0.22));
+	.stats-list::-webkit-scrollbar,
+	.swipeable-list-page::-webkit-scrollbar {
+		display: none;
 	}
 
 	.shrink-0 {
@@ -606,6 +575,43 @@ const pageUrl = Astro.url.href;
 
 	/* ── Shared bottom sheet / side panel ────────────────────────────────
 	   Used by the entity detail overlay and the statistics top-lists sheet. */
+
+	/* Canonical sheet control (back / close). Previously declared separately in
+	   DetailOverlay.astro and StatsTopSheet.astro with different sizes and
+	   fills, so the two sheets read as different surfaces. */
+	.nav-circle-btn {
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		background: rgba(0, 0, 0, 0.35);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		color: var(--text-primary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: var(--transition-smooth);
+	}
+
+	.nav-circle-btn svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.nav-circle-btn:hover {
+			background: rgba(255, 255, 255, 0.16);
+			transform: scale(1.05);
+		}
+	}
+
+	.nav-circle-btn.is-pressed {
+		background: rgba(255, 255, 255, 0.16);
+	}
+
 	.app-sheet-backdrop {
 		position: fixed;
 		inset: 0;

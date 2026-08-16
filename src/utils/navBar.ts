@@ -18,8 +18,8 @@ const DRAG_START_THRESHOLD = 6;
 const GRAB_DECAY_DISTANCE = 140;
 const MIN_SETTLE_MS = 200;
 const MAX_SETTLE_MS = 420;
-const TAP_BASE_MS = 260;
-const TAP_PER_TAB_MS = 70;
+const TAP_BASE_MS = 300;
+const TAP_PER_TAB_MS = 50;
 const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
 function isOverlayOpen(): boolean {

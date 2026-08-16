@@ -35,3 +35,5 @@ AGENTS.md
 # generated at build time by scripts/generate-sw.js
 /public/sw.js
 /public/cache-version.json
+
+.claude/*
