@@ -1,92 +1,12 @@
 ---
+import MonthlyTopLists from "./MonthlyTopLists.astro";
 ---
 
-<div class="recents-container glass-card panel-container panel-fill">
-  <div class="view-header shrink-0">
+{/* The recents view is a single card: the Recents header sits above the
+    month's top lists, which own the whole body. */}
+<MonthlyTopLists>
+  <div class="view-header shrink-0" slot="intro">
     <h2>Recents</h2>
     <p class="subtitle">Recently, I have been jamming to...</p>
   </div>
-  <div class="recent-list scrobble-row-compact panel-scroll" id="recentPlaysList"></div>
-</div>
-
-<style>
-  .recent-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-</style>
-
-<script>
-  import {
-    generateScrobbleRowHTML,
-    applyCountGlows,
-    getArtworkUrl,
-    loadArtworkCache,
-    initArtworkImages,
-  } from "../utils/ui";
-  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
-  import type { RecentScrobble } from "../types/music";
-  import { bindEntityClicks } from "../utils/events";
-
-  document.addEventListener("DOMContentLoaded", () => {
-    function formatRelativeTime(uts: number): string {
-      const diff = Math.floor(Date.now() / 1000) - uts;
-      if (diff < 60) return "Just now";
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      return `${Math.floor(diff / 86400)}d ago`;
-    }
-
-    async function loadRecentPlays() {
-      const container = document.getElementById("recentPlaysList");
-      if (!container) return;
-
-      try {
-        const [list, artworkCache] = await Promise.all([
-          fetchAppJson<RecentScrobble[]>("/data/recent.json"),
-          loadArtworkCache(),
-        ]);
-
-        if (!list || list.length === 0) {
-          container.innerHTML =
-            '<div class="no-data-message">No recent activity</div>';
-          return;
-        }
-
-        container.innerHTML = list
-          .map((item) => {
-            const imgUrl = getArtworkUrl(
-              "track",
-              item.track,
-              item.artist,
-              item.album,
-              artworkCache,
-            );
-
-            return generateScrobbleRowHTML(
-              {
-                type: "track",
-                id: item.trackId,
-                name: item.track,
-                subtitle: `${item.album} • ${item.artist}`,
-                imgUrl: imgUrl || null,
-                count: formatRelativeTime(item.uts),
-              },
-              false,
-            );
-          })
-          .join("");
-
-        initArtworkImages(container);
-        applyCountGlows(container);
-        bindEntityClicks(container);
-      } catch (err) {
-        console.error("Failed to load recent scrobbles:", err);
-      }
-    }
-
-    loadRecentPlays();
-    onPathsUpdated(["/data/recent.json"], () => loadRecentPlays());
-  });
-</script>
+</MonthlyTopLists>

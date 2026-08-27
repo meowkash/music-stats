@@ -1,4 +1,10 @@
 import { spawnSync } from 'child_process';
+import { loadEnv } from './lastfm-client.js';
+
+// Without this the Last.fm steps were silently skipped on local builds: the
+// credentials live in .env, but the gate below reads process.env, which only CI
+// populates.
+loadEnv();
 
 const refresh = process.argv.includes('--refresh');
 
@@ -25,6 +31,10 @@ if (hasLastfm && refresh) {
 } else if (hasLastfm) {
   run('Backfill missing artwork', 'node', ['scripts/backfill-artwork.js']);
 }
+
+// Runs unconditionally: without enrichment it still produces every recap story
+// except the genre ones, rather than leaving the tab empty.
+run('Generate yearly recaps', 'node', ['scripts/generate-recaps.js']);
 
 run('Generate PWA icons', 'node', ['scripts/generate-pwa-icons.js']);
 run('Generate service worker', 'node', ['scripts/generate-sw.js']);

@@ -1,0 +1,1078 @@
+---
+---
+
+<div class="story-viewer" id="storyViewer" hidden aria-modal="true" role="dialog" aria-label="Year recap">
+  <div class="story-stage" id="storyStage">
+    <div class="story-progress" id="storyProgress" aria-hidden="true"></div>
+
+    <header class="story-chrome">
+      <span class="story-chrome-year" id="storyChromeYear"></span>
+      <button class="nav-circle-btn story-close" id="storyClose" aria-label="Close recap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </header>
+
+    <div class="story-slides" id="storySlides"></div>
+  </div>
+</div>
+
+<style is:global>
+  /* Global rather than scoped: slides and progress segments are built at
+     runtime via innerHTML, so they never carry the component's scoping
+     attribute. Every class here is prefixed `story-` to keep that safe. */
+  /* ── Story viewer ──────────────────────────────────────────────────── */
+  .story-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-story);
+    background: #05050a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .story-viewer[hidden] {
+    display: none;
+  }
+
+  /* Palette fallbacks. The real values are written onto the stage per year by
+     applyRecapTheme() — see utils/recapTheme.ts. */
+  .story-viewer {
+    --year-hue: 45;
+    --year-base: hsl(45 88% 52%);
+    --year-accent: hsl(77 92% 58%);
+    --year-deep: hsl(45 62% 11%);
+    --year-glow: hsl(45 90% 52% / 0.45);
+  }
+
+  .story-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-width: 520px;
+    max-height: 100lvh;
+    overflow: hidden;
+    background: #08080f;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity var(--duration-fast) linear;
+  }
+
+  @media (min-width: 768px) {
+    .story-stage {
+      max-height: min(100lvh - 48px, 940px);
+      border-radius: 22px;
+      border: 1px solid var(--panel-border-hover);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  /* Segmented progress, Instagram-style. */
+  .story-progress {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 10px);
+    left: 12px;
+    right: 12px;
+    z-index: 3;
+    display: flex;
+    gap: 4px;
+  }
+
+  .story-segment {
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    overflow: hidden;
+  }
+
+  .story-segment-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--year-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+
+  /* Already-watched segments read as full without needing an animation. */
+  .story-segment.is-seen .story-segment-fill {
+    transform: scaleX(1);
+  }
+
+  @keyframes story-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  .story-chrome {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 22px);
+    left: 12px;
+    right: 12px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+
+  .story-chrome-year {
+    font-family: var(--font-header);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .story-close {
+    pointer-events: auto;
+    width: 32px;
+    height: 32px;
+  }
+
+  .story-close svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Dim the whole stage while held, so pause is legible without a badge. */
+  .story-stage.is-paused .story-slide.is-active {
+    opacity: 0.72;
+  }
+
+  .story-slides {
+    position: absolute;
+    inset: 0;
+  }
+
+  .story-slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(10px, 1.7vh, 20px);
+    padding: calc(env(safe-area-inset-top) + 76px) 24px calc(env(safe-area-inset-bottom) + 44px);
+    text-align: center;
+    overflow: hidden;
+    transition: opacity var(--duration-fast) linear;
+  }
+
+  .story-slide.is-active {
+    display: flex;
+  }
+
+  /* Content sits above the blurred backdrop layer. */
+  .story-slide > *:not(.story-backdrop) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Re-asserted after the rule above, which would otherwise take the hint out
+     of its pinned position and drop it into the content flow. */
+  .story-slide > .story-hint {
+    position: absolute;
+  }
+
+  /* Per-story palette, all of it derived from the year's own hue so a recap is
+     recognisable by colour alone (see utils/recapTheme.ts). Each tone only
+     picks its own offset around that hue — never an absolute colour — which is
+     what keeps thirteen slides varied without leaving the year's family.
+     Painted on the slide itself rather than a z-index:-1 pseudo-element, which
+     would fall behind the stage's own background. */
+  .story-slide {
+    --tone-a: hsl(calc(var(--year-hue) + var(--shift-a, 0)) 88% var(--lit-a, 54%) / var(--alpha-a, 0.34));
+    --tone-b: hsl(calc(var(--year-hue) + var(--shift-b, 34)) 85% var(--lit-b, 50%) / var(--alpha-b, 0.24));
+    background:
+      radial-gradient(circle at 50% 12%, var(--tone-a) 0%, transparent 62%),
+      radial-gradient(circle at 18% 92%, var(--tone-b) 0%, transparent 58%),
+      linear-gradient(180deg, color-mix(in srgb, var(--year-deep) 70%, #0a0a12) 0%, #05050a 100%);
+  }
+
+  .story-slide[data-tone='intro'] { --shift-a: 0; --shift-b: 34; --alpha-a: 0.44; --alpha-b: 0.3; }
+  .story-slide[data-tone='minutes'] { --shift-a: 28; --shift-b: -26; }
+  .story-slide[data-tone='artist'] { --shift-a: -22; --shift-b: 18; }
+  .story-slide[data-tone='album'] { --shift-a: 40; --shift-b: 8; }
+  .story-slide[data-tone='track'] { --shift-a: 16; --shift-b: 52; }
+  .story-slide[data-tone='genre'] { --shift-a: 58; --shift-b: -18; }
+  .story-slide[data-tone='clock'] { --shift-a: -34; --shift-b: 30; --alpha-a: 0.3; }
+  .story-slide[data-tone='week'] { --shift-a: 46; --shift-b: -10; --alpha-a: 0.3; }
+  .story-slide[data-tone='month'] { --shift-a: 12; --shift-b: 44; }
+  .story-slide[data-tone='season'] { --shift-a: -46; --shift-b: 46; --alpha-a: 0.28; }
+  .story-slide[data-tone='milestone'] { --shift-a: 24; --shift-b: -30; }
+  .story-slide[data-tone='style'] { --shift-a: -14; --shift-b: 62; }
+  .story-slide[data-tone='finale'] { --shift-a: 0; --shift-b: 40; --alpha-a: 0.46; --alpha-b: 0.32; }
+
+  /* ── Artwork backdrop ──────────────────────────────────────────────────
+     Slides that name a record show its cover behind them, blurred past
+     recognition. The scrim is load-bearing, not decoration: it is what holds
+     text contrast over an arbitrary cover, so it is painted by the container
+     and survives the image failing to load. */
+  .story-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .story-backdrop img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Scaled up so the blur has pixels to work with at the edges. */
+    transform: scale(1.4);
+    filter: blur(44px) saturate(150%) brightness(0.6);
+  }
+
+  /* Scrim plus the year's own wash. The wash has to be re-applied here rather
+     than left on the slide underneath: the scrim needed to hold text contrast
+     over a cover is opaque enough to bury it otherwise, which made every
+     artwork slide read as plain black. */
+  .story-backdrop::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 12%, var(--tone-a) 0%, transparent 62%),
+      radial-gradient(circle at 18% 92%, var(--tone-b) 0%, transparent 58%),
+      radial-gradient(circle at 50% 34%, rgba(5, 5, 10, 0.24) 0%, rgba(5, 5, 10, 0.66) 72%),
+      linear-gradient(180deg, rgba(5, 5, 10, 0.52) 0%, rgba(5, 5, 10, 0.8) 100%);
+  }
+
+  .story-slide.is-active .story-backdrop {
+    animation: story-backdrop-in 1.1s var(--ios-spring) both;
+  }
+
+  @keyframes story-backdrop-in {
+    from { opacity: 0; transform: scale(1.08); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Typography ────────────────────────────────────────────────────── */
+  .story-eyebrow {
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .story-year {
+    font-family: var(--font-header);
+    font-size: clamp(84px, 28vw, 150px);
+    font-weight: 800;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: #fff;
+    text-shadow: 0 0 60px var(--year-glow);
+  }
+
+  .story-stat {
+    font-family: var(--font-header);
+    font-size: clamp(56px, 19vw, 104px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: #fff;
+  }
+
+  /* Full minute counts run to seven characters; at the headline size they would
+     otherwise wrap mid-number on a phone. */
+  .story-stat.is-long {
+    font-size: clamp(40px, 13.5vw, 78px);
+    letter-spacing: -0.04em;
+  }
+
+  .story-title {
+    font-family: var(--font-header);
+    font-size: clamp(32px, 9vw, 50px);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: #fff;
+    text-wrap: balance;
+  }
+
+  .story-title-sm {
+    font-family: var(--font-header);
+    font-size: clamp(23px, 6.4vw, 31px);
+    font-weight: 700;
+    color: #fff;
+    text-wrap: balance;
+  }
+
+  .story-subtitle {
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .story-lede {
+    font-size: 18px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+    max-width: 26ch;
+    text-wrap: balance;
+  }
+
+  .story-footnote {
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.68);
+    max-width: 32ch;
+  }
+
+  .story-hint {
+    position: absolute;
+    bottom: calc(env(safe-area-inset-bottom) + 22px);
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+    animation: story-hint-pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes story-hint-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.8; }
+  }
+
+  /* ── Entry animations ──────────────────────────────────────────────
+     Driven off .is-active so replaying a slide re-runs them. Everything
+     animates transform/opacity only. */
+  .story-slide.is-active > *:not(.story-backdrop) {
+    animation: story-rise 0.62s var(--ios-spring) both;
+  }
+  /* Runs to 7 because a backdrop, where present, is the slide's first child and
+     pushes the content down one position. */
+  .story-slide.is-active > *:nth-child(2) { animation-delay: 0.07s; }
+  .story-slide.is-active > *:nth-child(3) { animation-delay: 0.14s; }
+  .story-slide.is-active > *:nth-child(4) { animation-delay: 0.21s; }
+  .story-slide.is-active > *:nth-child(5) { animation-delay: 0.28s; }
+  .story-slide.is-active > *:nth-child(6) { animation-delay: 0.35s; }
+  .story-slide.is-active > *:nth-child(7) { animation-delay: 0.42s; }
+
+  @keyframes story-rise {
+    from { opacity: 0; transform: translate3d(0, 22px, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+
+  .story-hero-art {
+    position: relative;
+    /* Grows with the viewport's height as well as its width, so a tall phone
+       does not leave a band of empty gradient under the cover. */
+    width: min(74vw, 42vh, 340px);
+    aspect-ratio: 1;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  }
+
+  .story-hero-art .artwork-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .story-slide.is-active .story-hero-art {
+    animation: story-art-in 0.8s var(--ios-spring) both;
+  }
+
+  @keyframes story-art-in {
+    from { opacity: 0; transform: scale(0.82) translate3d(0, 18px, 0); }
+    to { opacity: 1; transform: scale(1) translate3d(0, 0, 0); }
+  }
+
+  /* ── Runner-up lists ───────────────────────────────────────────────── */
+  /* flex:1 + space-evenly is the pattern every list and chart on these slides
+     uses to claim the leftover height rather than huddling in the middle. */
+  .story-runners {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: space-evenly;
+    gap: 8px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 62vh;
+    min-height: 0;
+    list-style: none;
+    margin: 4px 0;
+    padding: 0;
+  }
+
+  .story-runners li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px 10px 10px;
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: left;
+  }
+
+  .story-slide.is-active .story-runners li {
+    animation: story-rise 0.5s var(--ios-spring) both;
+    animation-delay: calc(0.16s + var(--row-index) * 0.075s);
+  }
+
+  .story-runner-rank {
+    width: 18px;
+    font-family: var(--font-header);
+    font-size: 15px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+    flex-shrink: 0;
+  }
+
+  .story-runner-art {
+    position: relative;
+    width: 46px;
+    height: 46px;
+    border-radius: 11px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .story-runner-art .artwork-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .story-runner-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .story-runner-text strong {
+    font-size: 16.5px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .story-runner-text em {
+    font-size: 13.5px;
+    font-style: normal;
+    color: rgba(255, 255, 255, 0.68);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .story-runner-plays {
+    font-family: var(--font-header);
+    font-size: 15.5px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    flex-shrink: 0;
+  }
+
+  /* ── Genre bars ────────────────────────────────────────────────────── */
+  .story-genre-bars {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: space-evenly;
+    gap: 9px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 60vh;
+    min-height: 0;
+    margin-top: 6px;
+  }
+
+  .story-genre-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr) auto;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .story-genre-name {
+    font-size: 15.5px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .story-genre-track {
+    height: 13px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+
+  /* `--fill` is the share rescaled against the top genre, not against 100% —
+     see buildStories(). The printed percentage stays the true share. */
+  .story-genre-track i {
+    display: block;
+    height: 100%;
+    width: var(--fill);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--year-base), var(--year-accent));
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+
+  .story-slide.is-active .story-genre-track i {
+    animation: story-grow-x 0.7s var(--ios-spring) both;
+    animation-delay: calc(0.2s + var(--row-index) * 0.09s);
+  }
+
+  @keyframes story-grow-x {
+    to { transform: scaleX(1); }
+  }
+
+  .story-genre-share {
+    font-family: var(--font-header);
+    font-size: 14.5px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    min-width: 44px;
+    text-align: left;
+  }
+
+  /* ── Bar chart (weekday / month) ───────────────────────────────────── */
+  .story-bars {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    max-width: 400px;
+    min-height: 140px;
+    max-height: 52vh;
+    margin: 8px 0 2px;
+  }
+
+  .story-bar {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .story-bar i {
+    display: block;
+    width: 100%;
+    height: var(--bar-height);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.22);
+    transform: scaleY(0);
+    transform-origin: bottom center;
+  }
+
+  .story-bar.is-peak i {
+    background: linear-gradient(180deg, #fff 0%, var(--year-accent) 100%);
+    box-shadow: 0 0 22px var(--year-glow);
+  }
+
+  .story-bar span {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .story-bar.is-peak span {
+    color: #fff;
+  }
+
+  .story-slide.is-active .story-bar i {
+    animation: story-grow-y 0.6s var(--ios-spring) both;
+    animation-delay: calc(0.18s + var(--bar-index) * 0.035s);
+  }
+
+  @keyframes story-grow-y {
+    to { transform: scaleY(1); }
+  }
+
+  /* ── Clock dial ────────────────────────────────────────────────────── */
+  .story-clock {
+    width: min(74vw, 44vh, 330px);
+    height: auto;
+    margin: 2px 0;
+  }
+
+  .story-clock-core {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.14);
+    stroke-width: 1;
+  }
+
+  .story-ray {
+    stroke: rgba(255, 255, 255, 0.45);
+    stroke-width: 5;
+    stroke-linecap: round;
+    transform-origin: 100px 100px;
+  }
+
+  .story-ray.is-peak {
+    stroke: var(--year-accent);
+    filter: drop-shadow(0 0 8px var(--year-glow));
+  }
+
+  .story-slide.is-active .story-ray {
+    animation: story-ray-in 0.5s var(--ios-spring) both;
+    animation-delay: calc(0.2s + var(--ray-index) * 0.022s);
+  }
+
+  @keyframes story-ray-in {
+    from { opacity: 0; transform: scale(0.3); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Genre stream ──────────────────────────────────────────────────── */
+  .story-stream-wrap {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    width: 100%;
+    max-width: 400px;
+    max-height: 60vh;
+    min-height: 0;
+    margin-top: 6px;
+  }
+
+  .story-stream {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 150px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Categorical, so the five layers must stay distinguishable — but they are
+     spaced around the year's own hue rather than fixed brand colours, so the
+     chart belongs to the same palette as everything else in the recap. */
+  .story-stream-layer {
+    --layer-color: var(--year-base);
+    fill: var(--layer-color);
+    opacity: 0.88;
+  }
+
+  .story-stream-layer[style*='--layer-index:0'] { --layer-color: hsl(var(--year-hue) 88% 58%); }
+  .story-stream-layer[style*='--layer-index:1'] { --layer-color: hsl(calc(var(--year-hue) + 62) 82% 54%); }
+  .story-stream-layer[style*='--layer-index:2'] { --layer-color: hsl(calc(var(--year-hue) + 138) 78% 52%); }
+  .story-stream-layer[style*='--layer-index:3'] { --layer-color: hsl(calc(var(--year-hue) + 202) 80% 60%); }
+  .story-stream-layer[style*='--layer-index:4'] { --layer-color: hsl(calc(var(--year-hue) + 288) 76% 62%); }
+
+  .story-slide.is-active .story-stream {
+    animation: story-wipe 0.9s var(--ios-spring) both;
+    animation-delay: 0.16s;
+  }
+
+  @keyframes story-wipe {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+
+  .story-stream-axis {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 2px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .story-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px 14px;
+    margin-top: 12px;
+  }
+
+  .story-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .story-legend-item i {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    background: var(--year-base);
+  }
+
+  .story-legend-item[style*='--layer-index:0'] i { background: hsl(var(--year-hue) 88% 58%); }
+  .story-legend-item[style*='--layer-index:1'] i { background: hsl(calc(var(--year-hue) + 62) 82% 54%); }
+  .story-legend-item[style*='--layer-index:2'] i { background: hsl(calc(var(--year-hue) + 138) 78% 52%); }
+  .story-legend-item[style*='--layer-index:3'] i { background: hsl(calc(var(--year-hue) + 202) 80% 60%); }
+  .story-legend-item[style*='--layer-index:4'] i { background: hsl(calc(var(--year-hue) + 288) 76% 62%); }
+
+  /* ── Seasons ───────────────────────────────────────────────────────── */
+  .story-seasons {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 12px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 64vh;
+    min-height: 0;
+    margin-top: 8px;
+  }
+
+  .story-season {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 10px;
+    border-radius: 16px;
+    overflow: hidden;
+    background:
+      linear-gradient(155deg, color-mix(in srgb, var(--ring-color) 22%, transparent) 0%, rgba(255, 255, 255, 0.04) 70%);
+    border: 1px solid color-mix(in srgb, var(--ring-color) 26%, rgba(255, 255, 255, 0.08));
+  }
+
+  /* Each season carries its own mark, sunk into the corner of the card so it
+     reads as texture rather than competing with the share dial. */
+  .story-season-glyph {
+    position: absolute;
+    right: -14px;
+    bottom: -16px;
+    width: 84px;
+    height: 84px;
+    color: var(--ring-color);
+    opacity: 0.28;
+    pointer-events: none;
+  }
+
+  .story-slide.is-active .story-season-glyph {
+    animation: story-glyph-in 0.9s var(--ios-spring) both;
+    animation-delay: calc(0.24s + var(--row-index) * 0.08s);
+  }
+
+  @keyframes story-glyph-in {
+    from { opacity: 0; transform: rotate(-18deg) scale(0.7); }
+    to { opacity: 0.28; transform: rotate(0) scale(1); }
+  }
+
+  .story-slide.is-active .story-season {
+    animation: story-rise 0.55s var(--ios-spring) both;
+    animation-delay: calc(0.16s + var(--row-index) * 0.08s);
+  }
+
+  .story-season-name {
+    position: relative;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  /* Conic ring reads as a share dial without needing an SVG per season. */
+  .story-season-ring {
+    position: relative;
+    width: clamp(62px, 11vh, 82px);
+    height: clamp(62px, 11vh, 82px);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(var(--ring-color) calc(var(--share) * 1%), rgba(255, 255, 255, 0.1) 0);
+  }
+
+  .story-season-ring::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    /* Tinted rather than flat black so the dial's centre reads as part of the
+       season card instead of a hole punched through it. */
+    background: color-mix(in srgb, var(--ring-color) 12%, #0b0b13);
+  }
+
+  .story-season-ring b {
+    position: relative;
+    z-index: 1;
+    font-family: var(--font-header);
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .story-season[data-season='winter'] { --ring-color: #00f0ff; }
+  .story-season[data-season='spring'] { --ring-color: #22c55e; }
+  .story-season[data-season='summer'] { --ring-color: #eab308; }
+  .story-season[data-season='autumn'] { --ring-color: #f97316; }
+
+  .story-season-artist {
+    position: relative;
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.85);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* ── Milestone facts ───────────────────────────────────────────────── */
+  .story-facts {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: space-evenly;
+    gap: 10px;
+    width: 100%;
+    max-width: 380px;
+    max-height: 58vh;
+    min-height: 0;
+    margin-top: 8px;
+  }
+
+  .story-fact {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 15px 18px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: left;
+  }
+
+  .story-slide.is-active .story-fact {
+    animation: story-rise 0.55s var(--ios-spring) both;
+    animation-delay: calc(0.16s + var(--row-index) * 0.09s);
+  }
+
+  .story-fact-value {
+    font-family: var(--font-header);
+    font-size: 34px;
+    font-weight: 800;
+    /* Lightened off the year's base so it clears contrast on the darker hues. */
+    color: hsl(var(--year-hue) 95% 72%);
+    min-width: 82px;
+    text-shadow: 0 0 20px var(--year-glow);
+  }
+
+  .story-fact-label {
+    font-size: 14px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  /* ── Finale ────────────────────────────────────────────────────────── */
+  .story-finale-summary {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .story-finale-summary span {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 9px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.62);
+  }
+
+  .story-finale-summary b {
+    font-family: var(--font-header);
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .story-slide.is-active > *,
+    .story-slide.is-active .story-runners li,
+    .story-slide.is-active .story-season,
+    .story-slide.is-active .story-fact,
+    .story-slide.is-active .story-hero-art,
+    .story-slide.is-active .story-ray,
+    .story-slide.is-active .story-stream,
+    .story-slide.is-active .story-backdrop {
+      animation: none;
+    }
+
+    /* Keeps the glyph at its resting opacity — `animation: none` on a `both`
+       fill would otherwise snap it back to fully opaque. */
+    .story-slide.is-active .story-season-glyph {
+      animation: none;
+      opacity: 0.28;
+    }
+
+    .story-slide.is-active .story-bar i,
+    .story-slide.is-active .story-genre-track i {
+      animation: none;
+      transform: none;
+    }
+
+    .story-hint {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import { onReady } from "../utils/dom";
+  import { fetchAppJson } from "../utils/dataStore";
+  import { initArtworkImages, loadArtworkCache } from "../utils/ui";
+  import { rafTween } from "../utils/motion";
+  import { createStoryPlayer, type StoryPlayer } from "../utils/storyPlayer";
+  import { applyRecapTheme } from "../utils/recapTheme";
+  import { RECAP_OPEN_EVENT, buildStories, type Recap } from "../utils/recapStories";
+
+  const STORY_DURATION_MS = 20_000;
+  const COUNT_UP_MS = 1100;
+
+  onReady(() => {
+    const viewer = document.getElementById("storyViewer") as HTMLDivElement;
+    const stage = document.getElementById("storyStage") as HTMLDivElement;
+    const progress = document.getElementById("storyProgress") as HTMLDivElement;
+    const slidesHost = document.getElementById("storySlides") as HTMLDivElement;
+    const chromeYear = document.getElementById("storyChromeYear") as HTMLSpanElement;
+    const closeBtn = document.getElementById("storyClose") as HTMLButtonElement;
+
+    let player: StoryPlayer | null = null;
+    let cancelCounters: Array<() => void> = [];
+    const recapCache = new Map<number, Recap>();
+
+    /** Count-ups start with the slide, so the number lands with the reveal. */
+    function runCounters(slide: HTMLElement) {
+      for (const cancel of cancelCounters) cancel();
+      cancelCounters = [];
+
+      for (const el of slide.querySelectorAll<HTMLElement>(".story-counter")) {
+        const target = Number(el.dataset.countTo ?? "0");
+        const finalText = el.dataset.countText ?? String(target);
+        if (!Number.isFinite(target) || target <= 0) {
+          el.textContent = finalText;
+          continue;
+        }
+        cancelCounters.push(
+          rafTween(
+            0,
+            target,
+            COUNT_UP_MS,
+            (value) => {
+              el.textContent = Math.round(value).toLocaleString();
+            },
+            () => {
+              el.textContent = finalText;
+            },
+          ),
+        );
+      }
+    }
+
+    function closeViewer() {
+      for (const cancel of cancelCounters) cancel();
+      cancelCounters = [];
+      player?.stop();
+      player?.destroy();
+      player = null;
+      viewer.hidden = true;
+      stage.style.transform = "";
+      stage.style.opacity = "";
+    }
+
+    async function openYear(year: number) {
+      let recap = recapCache.get(year);
+      if (!recap) {
+        // Artwork has to be warm before slides are built: the story HTML
+        // resolves cover URLs synchronously.
+        const [payload] = await Promise.all([
+          fetchAppJson<Recap>(`/data/recap-${year}.json`),
+          loadArtworkCache(),
+        ]);
+        recap = payload;
+        recapCache.set(year, recap);
+      }
+
+      slidesHost.replaceChildren();
+      const slides = buildStories(recap).map((story) => {
+        const slide = document.createElement("div");
+        slide.className = "story-slide";
+        slide.dataset.tone = story.tone;
+        slide.innerHTML = story.html;
+        slidesHost.append(slide);
+        return slide;
+      });
+
+      initArtworkImages(slidesHost);
+      chromeYear.textContent = String(year);
+      // Every slide's gradients, chart colours and accents read off these.
+      applyRecapTheme(viewer, year);
+      viewer.hidden = false;
+
+      player?.destroy();
+      player = createStoryPlayer({
+        root: stage,
+        progressBar: progress,
+        slides,
+        durationMs: STORY_DURATION_MS,
+        onEnter: (_, slide) => runCounters(slide),
+        onExit: closeViewer,
+        onComplete: closeViewer,
+      });
+      player.start(0);
+    }
+
+    window.addEventListener(RECAP_OPEN_EVENT, (event) => {
+      const year = (event as CustomEvent<{ year: number }>).detail?.year;
+      if (year) void openYear(year);
+    });
+
+    // Stops the tap from also reaching the stage and advancing the story.
+    closeBtn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    closeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeViewer();
+    });
+  });
+</script>

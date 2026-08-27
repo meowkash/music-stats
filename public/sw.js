@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1786919085';
+const SHELL_CACHE = 'music-stats-shell-1787780806';
 const DATA_CACHE = 'music-stats-data-v1';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1786919085';
+const CACHE_VERSION = '1787780806';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -11,6 +11,7 @@ const STATIC_ASSETS = [
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/favicon.ico',
   '/logo-mark.svg',
   '/og-image.png',
   '/icons/icon-32.png',

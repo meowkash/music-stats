@@ -1,5 +1,6 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
 import { promoteCanonicalArtworkCache } from './artwork-keys.js';
+import { parseCSVLine } from './scrobble-source.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -8,43 +9,16 @@ const PUBLIC_DATA_DIR = path.resolve('public/data');
 const CSV_PATH = path.join(DATA_DIR, 'scrobbles.csv');
 const ARTWORK_PATH = path.join(DATA_DIR, 'artwork.json');
 
-// Helper to check if a year is a leap year
 function isLeapYear(year) {
   return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
 }
 
-// Helper to get day of the year (0-indexed)
 function getDayOfYearIndex(dateStr, year) {
   const date = new Date(dateStr + 'T00:00:00Z');
   const start = new Date(Date.UTC(year, 0, 1));
   const diff = date - start;
   const oneDay = 1000 * 60 * 60 * 24;
   return Math.floor(diff / oneDay);
-}
-
-// Custom CSV row parser to handle commas and double quotes correctly
-function parseCSVLine(line) {
-  const parts = [];
-  let current = '';
-  let inQuotes = false;
-  for (let j = 0; j < line.length; j++) {
-    const char = line[j];
-    if (char === '"') {
-      if (inQuotes && line[j+1] === '"') {
-        current += '"';
-        j++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      parts.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  parts.push(current);
-  return parts;
 }
 
 function main() {
@@ -79,7 +53,6 @@ function main() {
   const trackCounts = [];
   let totalScrobbles = 0;
 
-  // Parse lines (skip header)
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -94,7 +67,6 @@ function main() {
 
     if (isNaN(uts)) continue;
 
-    // Get or create Artist ID
     let artistId = artistMap.get(artistName);
     if (artistId === undefined) {
       artistId = artists.length;
@@ -102,7 +74,6 @@ function main() {
       artistMap.set(artistName, artistId);
     }
 
-    // Get or create Album ID
     let albumId = albumMap.get(albumName);
     if (albumId === undefined) {
       albumId = albums.length;
@@ -110,7 +81,6 @@ function main() {
       albumMap.set(albumName, albumId);
     }
 
-    // Get or create Track ID
     const trackKey = `${trackName}|${artistId}|${albumId}`;
     let trackId = trackMap.get(trackKey);
     if (trackId === undefined) {
@@ -119,7 +89,6 @@ function main() {
       trackMap.set(trackKey, trackId);
     }
 
-    // Determine UTC Date string YYYY-MM-DD
     const dateStr = new Date(uts * 1000).toISOString().split('T')[0];
 
     if (!dailyRecords[dateStr]) {
@@ -128,7 +97,6 @@ function main() {
 
     dailyRecords[dateStr][trackId] = (dailyRecords[dateStr][trackId] || 0) + 1;
     
-    // Global stats
     artistCounts[artistId] = (artistCounts[artistId] || 0) + 1;
     trackCounts[trackId] = (trackCounts[trackId] || 0) + 1;
     totalScrobbles++;
@@ -147,17 +115,14 @@ function main() {
     addTrackCanonicalCredits(canonicalArtistCounts, trackId, artistId, count, trackToCanonical, rawToCanonical);
   }
 
-  // Write meta.json
   const metaPath = path.join(PUBLIC_DATA_DIR, 'meta.json');
   fs.writeFileSync(metaPath, JSON.stringify({ artists, albums, tracks, canonicalArtists, rawToCanonical, trackToCanonical }), 'utf-8');
   console.log(`Wrote dictionary metadata to ${metaPath}`);
 
-  // Group daily records by year
   const yearlyFiles = {}; // year -> { dateStr: [[trackId, count]] }
   const yearlyTotals = {}; // year -> array of daily counts
   const yearlyStats = {}; // year -> { artists: {}, albums: {}, tracks: {} }
 
-  // Sort dates to process chronologically
   const sortedDates = Object.keys(dailyRecords).sort();
 
   for (const dateStr of sortedDates) {
@@ -177,7 +142,6 @@ function main() {
         const trackId = parseInt(tId, 10);
         const [trackName, artistId, albumId] = tracks[trackId];
         
-        // Aggregate yearly stats
         yearlyStats[yearStr].tracks[trackId] = (yearlyStats[yearStr].tracks[trackId] || 0) + count;
         for (const cId of trackToCanonical[trackId] ?? rawToCanonical[artistId] ?? [artistId]) {
           yearlyStats[yearStr].artists[cId] = (yearlyStats[yearStr].artists[cId] || 0) + count;
@@ -208,27 +172,22 @@ function main() {
     }
   }
 
-  // Trim future dates for the current year in yearlyTotals
   const currentYearStr = new Date().toISOString().split('-')[0];
   if (yearlyTotals[currentYearStr]) {
     const todayIndex = getDayOfYearIndex(new Date().toISOString().split('T')[0], parseInt(currentYearStr, 10));
-    // Keep elements only up to today's index (inclusive)
     yearlyTotals[currentYearStr] = yearlyTotals[currentYearStr].slice(0, todayIndex + 1);
   }
 
-  // Write yearly detailed files
   for (const [yearStr, daysData] of Object.entries(yearlyFiles)) {
     const yearFilePath = path.join(PUBLIC_DATA_DIR, `year-${yearStr}.json`);
     fs.writeFileSync(yearFilePath, JSON.stringify(daysData), 'utf-8');
   }
   console.log(`Wrote yearly details files to ${PUBLIC_DATA_DIR}/year-[YYYY].json`);
 
-  // Write yearly-totals.json
   const totalsPath = path.join(PUBLIC_DATA_DIR, 'yearly-totals.json');
   fs.writeFileSync(totalsPath, JSON.stringify(yearlyTotals), 'utf-8');
   console.log(`Wrote yearly-totals to ${totalsPath}`);
 
-  // Write yearly-stats.json
   const finalYearlyStats = {};
   for (const [yearStr, stats] of Object.entries(yearlyStats)) {
     finalYearlyStats[yearStr] = {
@@ -278,7 +237,6 @@ function main() {
   fs.writeFileSync(recentPath, JSON.stringify(recentScrobbles), 'utf-8');
   console.log(`Wrote recent scrobbles to ${recentPath}`);
 
-  // Calculate Highlights
   let bestArtistId = -1, bestArtistCount = 0;
   for (let i = 0; i < canonicalArtistCounts.length; i++) {
     if ((canonicalArtistCounts[i] || 0) > bestArtistCount) {
@@ -431,7 +389,6 @@ function main() {
     };
   }
 
-  // Populate tracks dictionary in catalog
   for (let tId = 0; tId < tracks.length; tId++) {
     const count = trackCounts[tId] || 0;
     if (count > 0) {

@@ -1,5 +1,7 @@
 ---
 import appleSplashTags from "./splash-tags.html?raw";
+import { TAB_ORDER } from "../utils/tabs";
+import { TAB_SURFACES, TAB_THEME_COLORS, cssWash } from "../utils/tabTheme";
 
 interface Props {
 	title: string;
@@ -13,6 +15,20 @@ const {
 
 const ogImageUrl = new URL("/og-image.png", Astro.url).href;
 const pageUrl = Astro.url.href;
+
+// Generated from the same record that derives theme-color, so the browser
+// chrome can never drift from the wash it is supposed to blend into.
+const washStyles = [
+	...TAB_ORDER.map((tab) => {
+		const { top, mid, bottom } = TAB_SURFACES[tab];
+		return `#app-bg-gradient .bg-layer[data-tab="${tab}"]{--layer-top:${cssWash(top)};--layer-mid:${cssWash(mid)};--layer-bottom:${cssWash(bottom)}}`;
+	}),
+	// Selector includes the id so it outranks the `opacity: 0` default.
+	`${TAB_ORDER.map(
+		(tab) =>
+			`body[data-active-tab="${tab}"] #app-bg-gradient .bg-layer[data-tab="${tab}"]`,
+	).join(",")}{opacity:1}`,
+].join("");
 ---
 
 <!doctype html>
@@ -25,6 +41,7 @@ const pageUrl = Astro.url.href;
 		/>
 		<meta name="color-scheme" content="dark" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href="/favicon.ico" />
 		<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
 		<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 		<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
@@ -36,8 +53,9 @@ const pageUrl = Astro.url.href;
 			content="black-translucent"
 		/>
 		<meta name="apple-mobile-web-app-title" content="My Music Stats" />
-		<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-		<meta name="theme-color" content="#000000" />
+		<!-- Repainted per tab by applyThemeColor() in src/utils/tabs.ts. -->
+		<meta name="theme-color" content={TAB_THEME_COLORS.dashboard} />
+		<style is:inline set:html={washStyles}></style>
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
 		<title>{title}</title>
@@ -292,11 +310,7 @@ const pageUrl = Astro.url.href;
 		data-active-tab="dashboard"
 	>
 		<div id="app-bg-gradient" aria-hidden="true">
-			<div class="bg-layer" data-tab="dashboard"></div>
-			<div class="bg-layer" data-tab="recaps"></div>
-			<div class="bg-layer" data-tab="rankings"></div>
-			<div class="bg-layer" data-tab="recents"></div>
-			<div class="bg-layer" data-tab="statistics"></div>
+			{TAB_ORDER.map((tab) => <div class="bg-layer" data-tab={tab}></div>)}
 		</div>
 
 		<!-- Inline dismiss: must not depend on JS bundles (offline reload may block module load) -->
@@ -455,6 +469,8 @@ const pageUrl = Astro.url.href;
 		--z-dropdown: 150;
 		--z-overlay-backdrop: 199;
 		--z-overlay-panel: 200;
+		/* Recap stories are fullscreen and take over from every other surface. */
+		--z-story: 250;
 		--spacing-section: 16px;
 		--spacing-section-lg: 24px;
 		--duration-overlay: var(--duration-normal);
@@ -532,40 +548,8 @@ const pageUrl = Astro.url.href;
 		will-change: opacity;
 	}
 
-	#app-bg-gradient .bg-layer[data-tab="dashboard"] {
-		--layer-top: rgba(255, 45, 85, 0.12);
-		--layer-mid: rgba(255, 45, 85, 0.03);
-		--layer-bottom: rgba(255, 45, 85, 0.1);
-	}
-	#app-bg-gradient .bg-layer[data-tab="recaps"] {
-		--layer-top: rgba(234, 179, 8, 0.14);
-		--layer-mid: rgba(249, 115, 22, 0.03);
-		--layer-bottom: rgba(255, 45, 85, 0.1);
-	}
-	#app-bg-gradient .bg-layer[data-tab="rankings"] {
-		--layer-top: rgba(0, 240, 255, 0.1);
-		--layer-mid: rgba(37, 99, 235, 0.025);
-		--layer-bottom: rgba(37, 99, 235, 0.09);
-	}
-	#app-bg-gradient .bg-layer[data-tab="recents"] {
-		--layer-top: rgba(139, 92, 246, 0.12);
-		--layer-mid: rgba(139, 92, 246, 0.03);
-		--layer-bottom: rgba(217, 70, 239, 0.1);
-	}
-	#app-bg-gradient .bg-layer[data-tab="statistics"] {
-		--layer-top: rgba(34, 197, 94, 0.11);
-		--layer-mid: rgba(13, 148, 136, 0.025);
-		--layer-bottom: rgba(13, 148, 136, 0.09);
-	}
-
-	/* Selector must include the id to outrank the `opacity: 0` default above. */
-	body[data-active-tab="dashboard"] #app-bg-gradient .bg-layer[data-tab="dashboard"],
-	body[data-active-tab="recaps"] #app-bg-gradient .bg-layer[data-tab="recaps"],
-	body[data-active-tab="rankings"] #app-bg-gradient .bg-layer[data-tab="rankings"],
-	body[data-active-tab="recents"] #app-bg-gradient .bg-layer[data-tab="recents"],
-	body[data-active-tab="statistics"] #app-bg-gradient .bg-layer[data-tab="statistics"] {
-		opacity: 1;
-	}
+	/* Per-tab wash values and the active-layer rules are generated in the head
+	   from TAB_SURFACES (src/utils/tabTheme.ts) — see `washStyles` above. */
 
 	@media (prefers-reduced-motion: reduce) {
 		#app-bg-gradient .bg-layer {

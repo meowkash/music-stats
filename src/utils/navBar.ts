@@ -359,17 +359,24 @@ export function initNavBar(): void {
     animateTo(target, duration);
   }
 
-  // Touchpad / mouse wheel on desktop sidebar — scroll through tabs vertically.
+  // Touchpad / mouse wheel over the nav — steps through tabs along whichever
+  // axis the bar runs (vertical sidebar on desktop, horizontal bar on mobile).
   let wheelAccum = 0;
   let wheelResetTimer: ReturnType<typeof setTimeout> | null = null;
   const WHEEL_THRESHOLD = 55;
 
   function onWheel(e: WheelEvent) {
-    if (!desktopLayoutQuery.matches || isOverlayOpen()) return;
+    if (isOverlayOpen()) return;
+
+    const vertical = isVerticalNav();
+    const primary = vertical ? e.deltaY : e.deltaX;
+    const cross = vertical ? e.deltaX : e.deltaY;
+    // A pan across the bar's axis is a tab change; anything else is not ours.
+    if (Math.abs(primary) <= Math.abs(cross)) return;
 
     e.preventDefault();
 
-    wheelAccum += e.deltaY;
+    wheelAccum += primary;
     if (wheelResetTimer) clearTimeout(wheelResetTimer);
     wheelResetTimer = setTimeout(() => {
       wheelAccum = 0;

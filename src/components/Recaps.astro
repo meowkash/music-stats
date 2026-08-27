@@ -1,0 +1,257 @@
+---
+---
+
+<div class="glass-card recaps-card shrink-0" id="recapsCard">
+  <div class="recaps-header">
+    <h4>Recaps</h4>
+    <p class="recaps-sub">Every year, replayed as a story</p>
+  </div>
+  <div class="recap-rail" id="recapYearRail"></div>
+</div>
+
+<style>
+  .recaps-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px 12px;
+    background: rgba(255, 255, 255, 0.015);
+  }
+
+  .recaps-header h4 {
+    font-family: var(--font-header);
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .recaps-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  @media (max-width: 767px) {
+    .recaps-card {
+      padding: 12px 12px 10px;
+      border-radius: 16px;
+    }
+  }
+</style>
+
+<style is:global>
+  /* Global rather than scoped: the year cards, story slides and progress
+     segments are all built at runtime via innerHTML, so they never carry the
+     component's scoping attribute. Every class here is prefixed `recap-` or
+     `story-` to keep that safe. */
+
+  /* One horizontal lane of year cards. Rendered in chunks as it scrolls, so a
+     long listening history does not build every card up front. */
+  .recap-rail {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 2px 6px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    /* Keeps a flick at either end from arming the browser's back gesture. */
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .recap-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Invisible trigger element used for infinite-scroll chunk loading */
+  .recap-rail .recap-scroll-sentinel {
+    flex: 0 0 1px;
+    align-self: stretch;
+  }
+
+  /* ── Year picker cards ─────────────────────────────────────────────── */
+  /* Each card carries its year's palette as inline custom properties (see
+     utils/recapTheme.ts), so the rail reads as a colour ladder across years. */
+  .recap-card {
+    position: relative;
+    flex: 0 0 auto;
+    width: 196px;
+    min-height: 148px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid hsl(var(--year-hue) 70% 60% / 0.28);
+    background:
+      linear-gradient(
+        160deg,
+        hsl(var(--year-hue) 90% 55% / 0.34) 0%,
+        hsl(calc(var(--year-hue) + 32) 90% 55% / 0.16) 52%,
+        var(--year-deep) 100%
+      ),
+      rgba(255, 255, 255, 0.02);
+    cursor: pointer;
+    overflow: hidden;
+    text-align: left;
+    color: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform var(--duration-normal) var(--ios-spring),
+      border-color var(--duration-normal) var(--ios-spring);
+  }
+
+  .recap-card:active {
+    transform: scale(0.98);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .recap-card:hover {
+      border-color: hsl(var(--year-hue) 85% 62% / 0.6);
+    }
+  }
+
+  .recap-card-year {
+    font-family: var(--font-header);
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: #fff;
+    text-shadow: 0 0 28px var(--year-glow);
+  }
+
+  .recap-card-vibe {
+    font-size: 12px;
+    font-weight: 700;
+    /* Lifted well above the card's own tint so it clears contrast on every
+       hue in the ladder, including the dark blues. */
+    color: hsl(var(--year-hue) 95% 76%);
+    letter-spacing: 0.02em;
+  }
+
+  .recap-card-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .recap-card-play {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+
+  .recap-card-play svg {
+    width: 13px;
+    height: 13px;
+    margin-left: 2px;
+  }
+
+  .recap-rail .no-data-message {
+    margin: 0;
+    flex: 1;
+    padding: 24px 20px;
+  }
+
+  @media (max-width: 767px) {
+    .recap-card {
+      width: 172px;
+      min-height: 132px;
+      padding: 12px;
+      border-radius: 14px;
+    }
+
+    .recap-card-year {
+      font-size: 30px;
+    }
+  }
+</style>
+
+<script>
+  import { onReady } from "../utils/dom";
+  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
+  import { escapeHTML } from "../utils/ui";
+  import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
+  import { recapThemeVars } from "../utils/recapTheme";
+  import { RECAP_OPEN_EVENT, type RecapIndexEntry } from "../utils/recapStories";
+
+  onReady(() => {
+    const rail = document.getElementById("recapYearRail") as HTMLDivElement;
+    let scroller: InfiniteScrollController | null = null;
+
+    function cardHTML(entry: RecapIndexEntry): string {
+      return `<button class="recap-card" data-year="${entry.year}" type="button" style="${recapThemeVars(entry.year)}">
+        <span class="recap-card-play" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </span>
+        <span class="recap-card-year">${entry.year}</span>
+        <span class="recap-card-vibe">${escapeHTML(entry.vibe)}</span>
+        <span class="recap-card-meta">${entry.scrobbles.toLocaleString()} plays · ${Math.round(
+          entry.minutes / 60,
+        ).toLocaleString()} hours<br />${escapeHTML(entry.topArtist)} · ${escapeHTML(entry.topGenre)}</span>
+      </button>`;
+    }
+
+    function renderRail(entries: RecapIndexEntry[]) {
+      if (!entries.length) {
+        scroller = null;
+        rail.innerHTML =
+          '<div class="no-data-message">No recaps yet — check back after a few more months of listening.</div>';
+        return;
+      }
+
+      if (scroller) {
+        scroller.reset(entries);
+        return;
+      }
+
+      rail.replaceChildren();
+      scroller = createInfiniteScroll({
+        container: rail,
+        items: entries,
+        chunkSize: 6,
+        renderItem: cardHTML,
+        root: rail,
+        // Horizontal lane, so the lookahead margin goes on the x axis.
+        rootMargin: "0px 600px",
+        sentinelClass: "recap-scroll-sentinel",
+      });
+    }
+
+    // The story viewer lives outside #app-shell (a transformed ancestor would
+    // trap its position:fixed), so the two halves talk over an event.
+    rail.addEventListener("click", (event) => {
+      const card = (event.target as HTMLElement).closest<HTMLElement>(".recap-card");
+      if (!card?.dataset.year) return;
+      window.dispatchEvent(
+        new CustomEvent(RECAP_OPEN_EVENT, { detail: { year: Number(card.dataset.year) } }),
+      );
+    });
+
+    async function load() {
+      try {
+        const { years } = await fetchAppJson<{ years: RecapIndexEntry[] }>("/data/recaps.json");
+        renderRail(years ?? []);
+      } catch (err) {
+        console.error("Failed to load recaps:", err);
+        scroller = null;
+        rail.innerHTML = '<div class="no-data-message">Failed to load recaps</div>';
+      }
+    }
+
+    load();
+    onPathsUpdated(["/data/recaps.json"], () => load());
+  });
+</script>

@@ -1,3 +1,5 @@
+import { bindWheelPan } from './wheelPan';
+
 export interface SwipeDismissOptions {
   panel: HTMLElement;
   scrollContainer: HTMLElement;
@@ -186,6 +188,42 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   panel.addEventListener('touchend', handleTouchEnd);
   panel.addEventListener('touchcancel', cancelDrag);
   window.addEventListener('orientationchange', cancelDrag);
+
+  // Trackpad equivalent: pulling down from the top of the sheet drags it the
+  // same way. Only downward pans at the top are claimed, so scrolling the
+  // sheet's content is never intercepted.
+  bindWheelPan({
+    element: panel,
+    axis: 'y',
+    enabled: () => window.innerWidth < 768,
+    shouldClaim: (primary) => primary > 0 && scrollContainer.scrollTop <= 5,
+    onStart: () => {
+      panelHeight = panel.offsetHeight || window.innerHeight;
+      engaged = true;
+      panel.classList.add('sheet-dragging');
+      panel.style.transition = 'none';
+      if (backdrop) backdrop.style.transition = 'none';
+    },
+    onMove: (delta) => {
+      pendingDragY = Math.max(delta, 0);
+      if (dragRafId === null) dragRafId = requestAnimationFrame(flushDragFrame);
+    },
+    onEnd: (delta, velocity) => {
+      cancelPendingDragFrame(true);
+      engaged = false;
+      panel.classList.remove('sheet-dragging');
+      panel.style.transition = '';
+      if (backdrop) backdrop.style.transition = '';
+
+      if (delta > threshold || velocity > FLICK_VELOCITY) {
+        if (backdrop) backdrop.style.opacity = '';
+        onDismiss();
+        return;
+      }
+
+      releaseInlineStyles();
+    },
+  });
 }
 
 export interface EdgeSwipeNavOptions {
@@ -211,12 +249,6 @@ export interface EdgeSwipeNavOptions {
   /** Max slide distance in px — keep in sync with OVERLAY_SLIDE_PX. */
   slidePx?: number;
 }
-
-/** @deprecated Prefer `bindEdgeSwipeNav` with `direction: 'back'`. */
-export type EdgeSwipeBackOptions = Omit<EdgeSwipeNavOptions, 'direction' | 'canNavigate' | 'onNavigate'> & {
-  canGoBack: () => boolean;
-  onBack: () => void;
-};
 
 const EDGE_ENGAGE = 8;
 const EDGE_FLICK = 0.45;
@@ -396,12 +428,3 @@ export function bindEdgeSwipeNav(options: EdgeSwipeNavOptions): void {
   gestureEl.addEventListener('touchcancel', onCancel, { passive: true });
 }
 
-/** Left-edge swipe → go back in the overlay stack. */
-export function bindEdgeSwipeBack(options: EdgeSwipeBackOptions): void {
-  bindEdgeSwipeNav({
-    ...options,
-    direction: 'back',
-    canNavigate: options.canGoBack,
-    onNavigate: options.onBack,
-  });
-}

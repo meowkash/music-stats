@@ -374,92 +374,6 @@ function showArtworkWrapperShimmer(wrapper: HTMLElement | null, beforeEl: Node) 
   }
 }
 
-function artworkIdentity(url: string | null): string {
-  return url ? url.replace('/500x500/', '/300x300/') : '';
-}
-
-export function bindOverlayArtwork(img: HTMLImageElement, url: string | null, fallbackEl: HTMLElement, bgBlurEl: HTMLElement) {
-  const newIdentity = artworkIdentity(url);
-
-  // Skip reload when same artwork already at high-res (avoid flicker)
-  if (
-    img.dataset.artworkIdentity !== undefined &&
-    img.dataset.artworkIdentity === newIdentity &&
-    img.dataset.artworkQuality === 'high'
-  ) {
-    return;
-  }
-
-  img.onload = null;
-  img.onerror = null;
-  img.src = '';
-  img.style.opacity = '0';
-  img.style.display = 'none';
-  fallbackEl.classList.add('hidden');
-  bgBlurEl.style.backgroundImage = 'none';
-  bgBlurEl.style.opacity = '0';
-
-  const wrapper = img.parentElement;
-  clearArtworkWrapperState(wrapper);
-
-  if (!url) {
-    img.dataset.artworkIdentity = '';
-    img.dataset.artworkQuality = '';
-    if (wrapper) wrapper.classList.remove('artwork-loading');
-    img.style.display = 'none';
-    fallbackEl.classList.remove('hidden');
-    return;
-  }
-
-  showArtworkWrapperShimmer(wrapper, img);
-
-  const sources = getStaticArtworkSources(url);
-  if (sources.length === 0) {
-    if (wrapper) wrapper.classList.remove('artwork-loading');
-    fallbackEl.classList.remove('hidden');
-    return;
-  }
-
-  const finishLoad = (loadedUrl: string, quality: 'high' | 'low') => {
-    img.style.display = 'block';
-    img.style.opacity = '';
-    img.dataset.artworkIdentity = newIdentity;
-    img.dataset.artworkQuality = quality;
-    if (wrapper) {
-      wrapper.classList.remove('artwork-loading');
-      wrapper.classList.add('artwork-loaded');
-      fadeOutShimmer(wrapper.querySelector('.artwork-shimmer'));
-    }
-    bgBlurEl.style.backgroundImage = `url('${loadedUrl}')`;
-    bgBlurEl.style.opacity = '0.45';
-  };
-
-  const showFallback = () => {
-    img.style.display = 'none';
-    img.src = '';
-    img.dataset.artworkIdentity = '';
-    img.dataset.artworkQuality = '';
-    if (wrapper) {
-      wrapper.classList.remove('artwork-loading');
-      fadeOutShimmer(wrapper.querySelector('.artwork-shimmer'));
-    }
-    fallbackEl.classList.remove('hidden');
-    bgBlurEl.style.backgroundImage = 'none';
-    bgBlurEl.style.opacity = '0';
-  };
-
-  // Double rAF so opacity:0 paints before fast cached loads skip the fade
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      loadArtworkWithRetry(img, sources, {
-        beforeRetry: () => { img.style.display = 'block'; },
-        onSuccess: finishLoad,
-        onFailure: showFallback,
-      });
-    });
-  });
-}
-
 export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean = true): string {
   const showThumb = data.showThumb !== false;
   const thumbContent = showThumb ? getArtworkThumbHTML(data.imgUrl, data.type || 'track') : '';
@@ -501,7 +415,7 @@ export async function loadColorsCache() {
   if (colorsCache) return;
   if (!colorsPromise) {
     colorsPromise = fetchAppJson<Record<string, ColorEntry>>('/data/colors.json')
-      .then((data) => { colorsCache = data; })
+      .then((data) => { colorsCache = data; resolvedColorEntries.clear(); })
       .catch((e) => { console.error('Failed to load colors.json', e); colorsCache = {}; });
   }
   await colorsPromise;
@@ -524,6 +438,7 @@ onPathsUpdated(['/data/catalog.json'], ({ data }) => {
 
 onPathsUpdated(['/data/colors.json'], ({ data }) => {
   colorsCache = data as Record<string, ColorEntry>;
+  resolvedColorEntries.clear();
   repaintPendingGlows();
 });
 
@@ -547,17 +462,34 @@ function urlVariants(url: string): string[] {
   return [...variants];
 }
 
+/**
+ * Memoised because this sits on the render path of every row: a list of a few
+ * thousand entries would otherwise build a URL object, a Set and eight string
+ * variants per row, and repaintPendingGlows() re-runs the whole sweep whenever
+ * colours arrive. Cleared whenever colorsCache is replaced.
+ */
+const resolvedColorEntries = new Map<string, ColorEntry | null>();
+
 function resolveColorEntryFromCache(url: string): ColorEntry | null {
   if (!colorsCache) return null;
 
+  const memo = resolvedColorEntries.get(url);
+  if (memo !== undefined) return memo;
+
+  let found: ColorEntry | null = null;
   for (const variant of urlVariants(url)) {
     const entry = colorsCache[variant];
     if (entry) {
       const brightness = (entry.r * 299 + entry.g * 587 + entry.b * 114) / 1000;
-      if (brightness >= 30) return entry;
+      if (brightness >= 30) {
+        found = entry;
+        break;
+      }
     }
   }
-  return null;
+
+  resolvedColorEntries.set(url, found);
+  return found;
 }
 
 function resolveColorFromCache(url: string): { r: number; g: number; b: number } | null {

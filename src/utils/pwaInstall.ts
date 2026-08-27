@@ -7,10 +7,6 @@ export function isStandalonePwa(): boolean {
   );
 }
 
-export function canInstallPwa(): boolean {
-  return deferredPrompt !== null;
-}
-
 export async function promptPwaInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
   if (!deferredPrompt) return 'unavailable';
   const prompt = deferredPrompt as Event & {

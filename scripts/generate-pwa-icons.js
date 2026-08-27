@@ -15,6 +15,9 @@ const SIZES = [
   { name: 'icon-32.png', size: 32 },
 ];
 
+/** Sizes packed into favicon.ico — covers tab, bookmark bar and Windows taskbar. */
+const ICO_SIZES = [16, 32, 48];
+
 /**
  * CSS points → device media query (width/height in CSS px, DPR).
  * Without a matching apple-touch-startup-image, iOS shows a white screen +
@@ -81,6 +84,55 @@ async function generateAppIcons(svg) {
     await sharp(await renderOpaqueIcon(svg, size)).toFile(out);
     console.log(`Wrote ${path.relative(process.cwd(), out)}`);
   }
+}
+
+/**
+ * Packs PNGs into an ICO container. Browsers request /favicon.ico by path
+ * whether or not the document links it, so leaving the Astro template's default
+ * there means every surface that ignores our <link rel="icon"> tags — tab
+ * fallback, bookmarks, Windows taskbar, installed-PWA title bar — shows Astro's
+ * logo instead of ours.
+ *
+ * PNG-in-ICO (rather than BMP) is understood by every browser we target and
+ * keeps the file small.
+ */
+function packIco(images) {
+  const HEADER = 6;
+  const ENTRY = 16;
+
+  const header = Buffer.alloc(HEADER);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(images.length, 4);
+
+  let offset = HEADER + ENTRY * images.length;
+  const entries = images.map(({ size, data }) => {
+    const entry = Buffer.alloc(ENTRY);
+    // 256 is encoded as 0; every size we emit is smaller, but keep it honest.
+    entry.writeUInt8(size >= 256 ? 0 : size, 0);
+    entry.writeUInt8(size >= 256 ? 0 : size, 1);
+    entry.writeUInt8(0, 2); // palette size (0 = truecolour)
+    entry.writeUInt8(0, 3); // reserved
+    entry.writeUInt16LE(1, 4); // colour planes
+    entry.writeUInt16LE(32, 6); // bits per pixel
+    entry.writeUInt32LE(data.length, 8);
+    entry.writeUInt32LE(offset, 12);
+    offset += data.length;
+    return entry;
+  });
+
+  return Buffer.concat([header, ...entries, ...images.map((i) => i.data)]);
+}
+
+async function generateFavicon(svg) {
+  const images = [];
+  for (const size of ICO_SIZES) {
+    images.push({ size, data: await renderOpaqueIcon(svg, size) });
+  }
+
+  const out = path.join(publicDir, 'favicon.ico');
+  fs.writeFileSync(out, packIco(images));
+  console.log(`Wrote ${path.relative(process.cwd(), out)} (${ICO_SIZES.join(', ')}px)`);
 }
 
 /**
@@ -200,6 +252,7 @@ async function generateIcons() {
 
   const svg = fs.readFileSync(svgPath);
   await generateAppIcons(svg);
+  await generateFavicon(svg);
   await generateOgImage(svg);
   await generateSplashScreens(svg);
   writeSplashTags();

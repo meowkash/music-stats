@@ -620,14 +620,15 @@
       },
     });
 
-    sheetPanel.addEventListener(
-      "touchstart",
-      (e) => {
-        const target = e.target as HTMLElement;
-        lastSwipeTarget = target.closest("#categoryDropdownContainer") ? "category" : "year";
-      },
-      { passive: true },
-    );
+    // Whichever control the gesture starts over is the one it pages — tracked
+    // for touch and for trackpad pans alike.
+    const trackSwipeTarget = (e: Event) => {
+      const target = e.target as HTMLElement;
+      lastSwipeTarget = target.closest("#categoryDropdownContainer") ? "category" : "year";
+    };
+    sheetPanel.addEventListener("touchstart", trackSwipeTarget, { passive: true });
+    // Capture so the target is recorded before the pan handler reads it.
+    sheetPanel.addEventListener("wheel", trackSwipeTarget, { passive: true, capture: true });
 
     if (statsList) bindEntityClicks(statsList);
 

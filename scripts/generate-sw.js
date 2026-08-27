@@ -21,6 +21,7 @@ const STATIC_ASSETS = [
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/favicon.ico',
   '/logo-mark.svg',
   '/og-image.png',
   '/icons/icon-32.png',

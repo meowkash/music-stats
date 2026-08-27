@@ -1,3 +1,5 @@
+import { themeColorForTab } from './tabTheme';
+
 export const TAB_ORDER = ['dashboard', 'rankings', 'recents', 'statistics'] as const;
 export type TabId = (typeof TAB_ORDER)[number];
 
@@ -31,10 +33,23 @@ export function getActiveTab(): TabId {
   return TAB_ORDER.includes(id as TabId) ? (id as TabId) : 'dashboard';
 }
 
+/**
+ * Points the browser's theme-color at the top of the active tab's wash, so the
+ * desktop PWA title bar and the mobile status bar blend into the page instead
+ * of framing it with a black band.
+ */
+export function applyThemeColor(tab: string): void {
+  const color = themeColorForTab(tab);
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    if (meta.content !== color) meta.content = color;
+  }
+}
+
 /** Drives the ambient background gradient crossfade. */
 export function applyTabAccent(tab: string): void {
   if (TAB_ORDER.indexOf(tab as TabId) === -1) return;
   document.body.dataset.activeTab = tab;
+  applyThemeColor(tab);
 }
 
 export function setActiveTab(tab: string): void {

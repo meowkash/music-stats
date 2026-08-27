@@ -99,11 +99,12 @@ export function aggregateTrackCounts(
     const yearData = cache[year];
     if (!yearData) continue;
 
-    for (const [dateStr, dayTracks] of Object.entries(yearData)) {
-      if (dateStr >= startStr && dateStr <= endStr) {
-        for (const [trackId, count] of dayTracks) {
-          scrobbleCounts[trackId] = (scrobbleCounts[trackId] || 0) + count;
-        }
+    // for-in rather than Object.entries: a year is ~365 keys and only the
+    // requested window is wanted, so materialising the pair array is waste.
+    for (const dateStr in yearData) {
+      if (dateStr < startStr || dateStr > endStr) continue;
+      for (const [trackId, count] of yearData[dateStr]) {
+        scrobbleCounts[trackId] = (scrobbleCounts[trackId] || 0) + count;
       }
     }
   }
@@ -172,7 +173,7 @@ export function rollupByCategory(
   }));
 }
 
-export function rollupDashboardCounts(
+export function rollupTopCounts(
   trackCounts: Record<number, number>,
   meta: MetaData,
 ): {
@@ -230,11 +231,6 @@ export function rollupDashboardCounts(
   };
 }
 
-export function clearYearCache(): void {
-  for (const key of Object.keys(yearCache)) {
-    delete yearCache[key];
-  }
-}
 
 onPathsUpdated([/^\/data\/year-\d+\.json$/], ({ path, data }) => {
   const match = path.match(/^\/data\/year-(\d+)\.json$/);

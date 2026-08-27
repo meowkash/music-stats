@@ -1,3 +1,5 @@
+import { bindWheelPan } from './wheelPan';
+
 export interface HorizontalSwipeOptions {
   element: HTMLElement;
   onSwipeLeft?: () => void;
@@ -31,8 +33,30 @@ export function bindHorizontalSwipe(options: HorizontalSwipeOptions): () => void
   element.addEventListener('touchstart', onStart, { passive: true });
   element.addEventListener('touchend', onEnd, { passive: true });
 
+  // Trackpad two-finger pans fire the same callbacks. The step is consumed as
+  // the pan crosses each threshold, so one long pan can advance more than once.
+  let consumed = 0;
+  const unbindWheel = bindWheelPan({
+    element,
+    axis: 'x',
+    onStart: () => {
+      consumed = 0;
+    },
+    onMove: (delta) => {
+      while (delta - consumed <= -threshold) {
+        consumed -= threshold;
+        onSwipeLeft?.();
+      }
+      while (delta - consumed >= threshold) {
+        consumed += threshold;
+        onSwipeRight?.();
+      }
+    },
+  });
+
   return () => {
     element.removeEventListener('touchstart', onStart);
     element.removeEventListener('touchend', onEnd);
+    unbindWheel();
   };
 }

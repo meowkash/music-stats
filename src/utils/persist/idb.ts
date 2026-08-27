@@ -92,10 +92,6 @@ export function idbSet(store: string, key: IDBValidKey, value: unknown): Promise
   return runTransaction(store, 'readwrite', (s) => s.put(value, key)).then(() => undefined);
 }
 
-export function idbDelete(store: string, key: IDBValidKey): Promise<void> {
-  return runTransaction(store, 'readwrite', (s) => s.delete(key)).then(() => undefined);
-}
-
 export function idbKeys(store: string): Promise<IDBValidKey[]> {
   return runTransaction<IDBValidKey[]>(store, 'readonly', (s) => s.getAllKeys()).then(
     (keys) => keys ?? [],

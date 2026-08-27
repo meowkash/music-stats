@@ -1,4 +1,5 @@
 import { rafTween } from './motion';
+import { bindWheelPan } from './wheelPan';
 
 /** Matches --duration-normal so pager slides feel like the rest of the UI. */
 const SETTLE_MS = 300;
@@ -182,17 +183,15 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     if (dragRafId === null) dragRafId = requestAnimationFrame(flushDrag);
   };
 
-  const onEnd = () => {
-    if (!dragging) return;
-    dragging = false;
-    cancelPendingDrag(true);
-
+  /** Picks the page to settle on from where the gesture left the track. */
+  function commit(endVelocity: number, moved: boolean) {
     const absX = restingX(index) + offset;
     const exactPage = -absX / (width || 1);
-    
+
     let target = Math.round(exactPage);
 
-    if (didDrag) {
+    if (moved) {
+      const velocity = endVelocity;
       if (velocity < -VELOCITY_COMMIT) {
         target = Math.ceil(exactPage);
       } else if (velocity > VELOCITY_COMMIT) {
@@ -210,7 +209,38 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     }
 
     goTo(target);
+  }
+
+  const onEnd = () => {
+    if (!dragging) return;
+    dragging = false;
+    cancelPendingDrag(true);
+    commit(velocity, didDrag);
   };
+
+  // Trackpad equivalent: a horizontal two-finger pan drives the same track.
+  bindWheelPan({
+    element: gestureEl,
+    axis: 'x',
+    onStart: () => {
+      cancelTween?.();
+      cancelTween = null;
+      cancelPendingDrag();
+      dragging = false;
+      dragStartOffset = !Number.isNaN(lastPaintX) ? lastPaintX - restingX(index) : 0;
+      offset = dragStartOffset;
+      if (width <= 0) measure();
+      setMoving(true);
+    },
+    onMove: (delta) => {
+      pendingOffset = clampOffset(dragStartOffset + delta);
+      if (dragRafId === null) dragRafId = requestAnimationFrame(flushDrag);
+    },
+    onEnd: (_delta, wheelVelocity) => {
+      cancelPendingDrag(true);
+      commit(wheelVelocity, true);
+    },
+  });
 
   gestureEl.addEventListener('touchstart', onStart, { passive: true });
   gestureEl.addEventListener('touchmove', onMove, { passive: false });

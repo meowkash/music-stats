@@ -52,8 +52,6 @@ export const easeIos: Easing = (t: number) => {
   return EASE_LUT[i] + (EASE_LUT[i + 1] - EASE_LUT[i]) * frac;
 };
 
-export const easeOutCubic: Easing = (t) => 1 - Math.pow(1 - t, 3);
-
 export function rafTween(
   from: number,
   to: number,

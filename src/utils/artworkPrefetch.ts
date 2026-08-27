@@ -334,11 +334,3 @@ export async function upgradeHeroArtwork(url: string | null): Promise<void> {
     // Original may not exist for every hash — the 512 entry stays in place.
   }
 }
-
-export function onArtworkPrefetchProgress(
-  callback: (progress: ArtworkPrefetchProgress) => void,
-): void {
-  window.addEventListener('artwork-prefetch-progress', (e) => {
-    callback((e as CustomEvent<ArtworkPrefetchProgress>).detail);
-  });
-}

@@ -33,7 +33,9 @@ export const CRITICAL_DATA_PATHS = [
   '/data/yearly-totals.json',
   '/data/yearly-stats.json',
   '/data/colors.json',
-  '/data/recap-meta.json',
+  // recap-<year>.json is deliberately absent: each is only fetched when that
+  // year's story is opened, so the boot generation stays small.
+  '/data/recaps.json',
 ] as const;
 
 export interface DataUpdatedDetail {
@@ -57,11 +59,6 @@ export function normalizeDataPath(path: string): string {
 
 export function getActiveManifest(): Manifest | null {
   return activeManifest;
-}
-
-/** True when a complete generation is already on disk, readable before first paint. */
-export function hasStoredData(): boolean {
-  return readBootHint()?.complete === true;
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -150,11 +147,6 @@ export async function fetchAppJson<T>(path: string): Promise<T> {
   } finally {
     inflight.delete(normalized);
   }
-}
-
-export function getCachedJson<T>(path: string): T | null {
-  const value = memory.get(normalizeDataPath(path));
-  return value !== undefined ? (value as T) : null;
 }
 
 async function downloadFile(
@@ -351,19 +343,5 @@ export function onPathsUpdated(
       typeof m === 'string' ? m === detail.path : m.test(detail.path),
     );
     if (matched) callback(detail);
-  });
-}
-
-export function onGenerationSwapped(
-  callback: (detail: GenerationSwappedDetail) => void,
-): void {
-  window.addEventListener('data-generation-swapped', (e) => {
-    callback((e as CustomEvent<GenerationSwappedDetail>).detail);
-  });
-}
-
-export function onManifestReady(callback: (manifest: Manifest) => void): void {
-  window.addEventListener('data-manifest-ready', (e) => {
-    callback((e as CustomEvent<Manifest>).detail);
   });
 }

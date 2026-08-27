@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Dashboard from "../components/Dashboard.astro";
+import RecapStory from "../components/RecapStory.astro";
 
 import Leaderboards from "../components/Leaderboards.astro";
 import Recents from "../components/Recents.astro";
@@ -9,6 +10,7 @@ import BottomNav from "../components/BottomNav.astro";
 import DetailOverlay from "../components/DetailOverlay.astro";
 import StatsTopSheet from "../components/StatsTopSheet.astro";
 import { TAB_ORDER } from "../utils/tabs";
+import { TAB_THEME_COLORS } from "../utils/tabTheme";
 ---
 
 <Layout title="My Music Stats">
@@ -17,7 +19,6 @@ import { TAB_ORDER } from "../utils/tabs";
       <section class="panel-section active" id="view-dashboard">
         <Dashboard />
       </section>
-
 
       <section class="panel-section inactive-right" id="view-rankings">
         <Leaderboards />
@@ -35,32 +36,26 @@ import { TAB_ORDER } from "../utils/tabs";
     <BottomNav />
   </div>
 
-  <script is:inline define:vars={{ tabOrder: TAB_ORDER }}>
+  {/* Runs before hydration so a restored tab paints in its own colours rather
+      than flashing the dashboard's. Mirrors setActiveTab() in utils/tabs.ts. */}
+  <script is:inline define:vars={{ tabOrder: TAB_ORDER, themeColors: TAB_THEME_COLORS }}>
     try {
       const lastTab = localStorage.getItem('last-music-stats-tab');
-      if (lastTab && lastTab !== 'dashboard') {
-        const targetIndex = tabOrder.indexOf(lastTab);
-        if (targetIndex !== -1) {
-          document.querySelectorAll('.panel-section').forEach(sec => {
-            const secId = sec.getAttribute('id').replace('view-', '');
-            const secIndex = tabOrder.indexOf(secId);
-            sec.classList.remove('active', 'inactive-left', 'inactive-right');
-            if (secIndex < targetIndex) {
-              sec.classList.add('inactive-left');
-            } else if (secIndex > targetIndex) {
-              sec.classList.add('inactive-right');
-            } else {
-              sec.classList.add('active');
-            }
-          });
-          document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.getAttribute('data-tab') === lastTab) {
-              btn.classList.add('active');
-            }
-          });
-          document.body.dataset.activeTab = lastTab;
-        }
+      const targetIndex = lastTab ? tabOrder.indexOf(lastTab) : -1;
+      if (targetIndex > 0) {
+        document.querySelectorAll('.panel-section').forEach((sec) => {
+          const secIndex = tabOrder.indexOf(sec.id.replace('view-', ''));
+          sec.classList.remove('active', 'inactive-left', 'inactive-right');
+          sec.classList.add(
+            secIndex < targetIndex ? 'inactive-left' : secIndex > targetIndex ? 'inactive-right' : 'active',
+          );
+        });
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.tab === lastTab);
+        });
+        document.body.dataset.activeTab = lastTab;
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta && themeColors[lastTab]) meta.content = themeColors[lastTab];
       }
     } catch (e) {
       console.warn('Could not restore tab from storage', e);
@@ -69,6 +64,7 @@ import { TAB_ORDER } from "../utils/tabs";
 
   <StatsTopSheet />
   <DetailOverlay />
+  <RecapStory />
 </Layout>
 
 <style>

@@ -1,5 +1,6 @@
 ---
-import SwipeableDeck from "./SwipeableDeck.astro";
+import ActivityPath from "./ActivityPath.astro";
+import Recaps from "./Recaps.astro";
 ---
 
 <div class="dashboard-container panel-fill">
@@ -88,18 +89,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     </div>
   </div>
 
-  <!-- Swipeable Top Lists -->
-  <div class="glass-card highlights-section panel-fill" id="dashboardTopSection">
-    <div class="section-header shrink-0">
-      <h4>Over the last month</h4>
-      <span class="category-pill" id="dashboardCategoryPill">Top Tracks</span>
-    </div>
-    <SwipeableDeck tabs={['Tracks', 'Albums', 'Artists']} idPrefix="dashboard">
-      <Fragment slot="header-tracks">Top Tracks</Fragment>
-      <Fragment slot="header-albums">Top Albums</Fragment>
-      <Fragment slot="header-artists">Top Artists</Fragment>
-    </SwipeableDeck>
-  </div>
+  <Recaps />
+
+  <ActivityPath />
 </div>
 
 <style>
@@ -111,6 +103,17 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     gap: 10px;
     padding: 0;
     min-height: 0;
+  }
+
+  /* The recaps rail keeps its natural height; the listening path takes
+     whatever is left over. */
+  .dashboard-container :global(.activity-card) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .dashboard-container :global(.recaps-card) {
+    flex: 0 0 auto;
   }
 
   .stats-grid {
@@ -197,61 +200,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     text-shadow: 0 0 20px var(--accent-green-glow), 0 0 40px var(--accent-green-glow);
   }
 
-  .highlights-section {
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.01);
-    min-height: 0;
-  }
-
-  @media (min-width: 768px) {
-    .highlights-section .category-pill {
-      display: none;
-    }
-
-    .highlights-section :global(.swipeable-list-column:nth-child(1) .swipeable-column-header) {
-      color: var(--accent-cat-songs);
-    }
-    .highlights-section :global(.swipeable-list-column:nth-child(2) .swipeable-column-header) {
-      color: var(--accent-cat-albums);
-    }
-    .highlights-section :global(.swipeable-list-column:nth-child(3) .swipeable-column-header) {
-      color: var(--accent-cat-artists);
-    }
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .section-header h4 {
-    font-family: var(--font-header);
-    font-size: 17px;
-    font-weight: 700;
-    color: #fff;
-  }
-
-  .category-pill {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--pill-color, var(--accent-cat-songs));
-    white-space: nowrap;
-    /* Resting transition only — while paging, navBar-style JS painting takes
-       over and disables it so values aren't smeared frame to frame. */
-    transition: var(--transition-smooth);
-  }
-
-
-
   @media (max-width: 767px) {
     .stats-grid {
       grid-template-columns: repeat(2, 1fr);
@@ -274,308 +222,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     .stat-value {
       font-size: 20px;
     }
-    .highlights-section {
-      padding: 12px;
-      border-radius: 16px;
-    }
   }
 </style>
 
 <script>
-  import {
-    generateScrobbleRowHTML,
-    applyCountGlows,
-    getArtworkUrl,
-    getArtistArtworkUrl,
-    loadArtworkCache,
-    loadMetaCache,
-    initArtworkImages,
-    escapeHTML,
-  } from "../utils/ui";
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { YearlyTotals } from "../types/music";
-  import { loadYearsData, aggregateTrackCounts, rollupDashboardCounts, rawArtistNamesForCanonical } from "../utils/scrobbles";
-  import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
-  import { bindEntityClicks } from "../utils/events";
-  import { bindPagerSwipe } from "../utils/pagerSwipe";
-  import { colorToCss, createCssPaintCache, lerpColorInto, parseColor, type Rgba } from "../utils/motion";
-  import { getCategoryAccent } from "../utils/theme";
-
-  type DashboardCategory = "tracks" | "albums" | "artists";
-
-  const CATEGORIES: DashboardCategory[] = ["tracks", "albums", "artists"];
-
-  const CATEGORY_LABELS: Record<DashboardCategory, string> = {
-    tracks: "Top Tracks",
-    albums: "Top Albums",
-    artists: "Top Artists",
-  };
-
-  const CATEGORY_COLORS: Record<DashboardCategory, string> = {
-    tracks: "var(--accent-cat-songs)",
-    albums: "var(--accent-cat-albums)",
-    artists: "var(--accent-cat-artists)",
-  };
-
-  /** Absolute equivalents of CATEGORY_COLORS, in CATEGORIES order. */
-  const CATEGORY_RGBA = CATEGORIES.map(
-    (cat) =>
-      parseColor(getCategoryAccent(cat === "tracks" ? "songs" : cat).color) ?? {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 1,
-      },
-  );
-
-  const PAGE_IDS: Record<DashboardCategory, string> = {
-    tracks: "dashboardPageTracks",
-    albums: "dashboardPageAlbums",
-    artists: "dashboardPageArtists",
-  };
-
-  const LIST_IDS: Record<DashboardCategory, string> = {
-    tracks: "dashboardListTracks",
-    albums: "dashboardListAlbums",
-    artists: "dashboardListArtists",
-  };
 
   document.addEventListener("DOMContentLoaded", () => {
-    const desktopQuery = window.matchMedia("(min-width: 768px)");
-    const isDesktopLayout = () => desktopQuery.matches;
-
-    let activeIndex = 0;
-    let pillLabelIndex = 0;
-    let topArtists: ReturnType<typeof rollupDashboardCounts>["artists"] = [];
-    let topSongs: ReturnType<typeof rollupDashboardCounts>["tracks"] = [];
-    let topAlbums: ReturnType<typeof rollupDashboardCounts>["albums"] = [];
-    let meta: Awaited<ReturnType<typeof loadMetaCache>> = null;
-    let artworkCache: Record<string, string> = {};
-    const scrollControllers: Partial<Record<DashboardCategory, InfiniteScrollController>> = {};
-
-    const trackEl = document.getElementById("dashboardListTrack") as HTMLDivElement;
-    const viewportEl = document.getElementById("dashboardViewport") as HTMLDivElement;
-    const pillEl = document.getElementById("dashboardCategoryPill") as HTMLSpanElement;
-    const sectionEl = document.getElementById("dashboardTopSection") as HTMLDivElement;
-    const pillPaint = createCssPaintCache();
-    const pillMix: Rgba = { r: 0, g: 0, b: 0, a: 0 };
-    let lastPillColor = "";
-    let lastPillOpacity = "";
-    let lastPillTransform = "";
-
-    function activeCategory(): DashboardCategory {
-      return CATEGORIES[activeIndex];
-    }
-
-    function getItemsForCategory(cat: DashboardCategory) {
-      if (cat === "tracks") return topSongs;
-      if (cat === "albums") return topAlbums;
-      return topArtists;
-    }
-
-    function pageEl(cat: DashboardCategory): HTMLDivElement {
-      return document.getElementById(PAGE_IDS[cat]) as HTMLDivElement;
-    }
-
-    function listEl(cat: DashboardCategory): HTMLDivElement {
-      return document.getElementById(LIST_IDS[cat]) as HTMLDivElement;
-    }
-
-    function renderRow(
-      type: DashboardCategory,
-      item: { id: number; name: string; count: number; artistName?: string; albumName?: string },
-      idx: number,
-    ): string {
-      const rowType = type === "tracks" ? "track" : type === "albums" ? "album" : "artist";
-      const img =
-        type === "artists"
-          ? getArtistArtworkUrl(item.name, artworkCache, meta ? rawArtistNamesForCanonical(item.id, meta) : [])
-          : type === "tracks"
-            ? getArtworkUrl("track", item.name, item.artistName!, item.albumName!, artworkCache)
-            : getArtworkUrl("album", item.name, item.artistName!, item.name, artworkCache);
-
-      const subtitle = type === "artists" ? "" : item.artistName || "";
-      const artistCatalog = type === "artists" ? "canonicalArtists" as const : undefined;
-
-      return generateScrobbleRowHTML(
-        {
-          type: rowType,
-          id: item.id,
-          rank: idx + 1,
-          name: item.name,
-          subtitle,
-          imgUrl: img || null,
-          count: item.count,
-          artistCatalog,
-        },
-        true,
-      );
-    }
-
-    function updateCategoryUI() {
-      const cat = activeCategory();
-      pillEl.textContent = CATEGORY_LABELS[cat];
-      pillEl.style.setProperty("--pill-color", CATEGORY_COLORS[cat]);
-      sectionEl.style.setProperty("--pill-color", CATEGORY_COLORS[cat]);
-      pillEl.style.color = "";
-      pillEl.style.opacity = "";
-      pillEl.style.transform = "";
-      pillEl.style.transition = "";
-      lastPillColor = "";
-      lastPillOpacity = "";
-      lastPillTransform = "";
-      pillPaint.reset();
-      pillLabelIndex = CATEGORIES.indexOf(cat);
-    }
-
-    /**
-     * Keeps the category pill in step with the slide: the label swaps at the
-     * halfway point while the accent colour interpolates continuously.
-     */
-    function renderCategoryPill(fraction: number) {
-      const clamped = Math.min(Math.max(fraction, 0), CATEGORIES.length - 1);
-      const nearest = Math.round(clamped);
-      const drift = clamped - nearest;
-
-      if (nearest !== pillLabelIndex) {
-        pillLabelIndex = nearest;
-        pillEl.textContent = CATEGORY_LABELS[CATEGORIES[nearest]];
-      }
-
-      const i0 = Math.floor(clamped);
-      const i1 = Math.min(i0 + 1, CATEGORIES.length - 1);
-      lerpColorInto(CATEGORY_RGBA[i0], CATEGORY_RGBA[i1], clamped - i0, pillMix);
-      const color = colorToCss(pillMix);
-      const opacity = String(Math.round((1 - Math.min(Math.abs(drift) * 2, 1) * 0.7) * 40) / 40);
-      const transform = pillPaint.translate3d(-drift * 14, 0);
-
-      if (pillEl.style.transition !== "none") pillEl.style.transition = "none";
-      if (color !== lastPillColor) {
-        lastPillColor = color;
-        pillEl.style.color = color;
-      }
-      if (opacity !== lastPillOpacity) {
-        lastPillOpacity = opacity;
-        pillEl.style.opacity = opacity;
-      }
-      if (transform !== lastPillTransform) {
-        lastPillTransform = transform;
-        pillEl.style.transform = transform;
-      }
-    }
-
-    const renderedPages = new Set<DashboardCategory>();
-
-    function renderCategoryPage(cat: DashboardCategory) {
-      if (renderedPages.has(cat)) return;
-      renderedPages.add(cat);
-
-      const container = listEl(cat);
-      const root = pageEl(cat);
-      const items = getItemsForCategory(cat);
-
-      if (!items.length) {
-        container.innerHTML = '<div class="no-data-message">No data found for last 4 weeks</div>';
-        return;
-      }
-
-      container.replaceChildren();
-      scrollControllers[cat] = createInfiniteScroll({
-        container,
-        items,
-        chunkSize: 25,
-        renderItem: (item, idx) => renderRow(cat, item, idx),
-        root: root,
-        rootMargin: "600px 0px",
-        sentinelClass: "swipeable-scroll-sentinel",
-        onChunkRendered: () => {
-          initArtworkImages(container);
-          applyCountGlows(container);
-        },
-      });
-    }
-
-    /** Active page now; neighbours just before they scroll into view. */
-    function ensurePagesAround(index: number) {
-      renderCategoryPage(CATEGORIES[index]);
-      if (index > 0) renderCategoryPage(CATEGORIES[index - 1]);
-      if (index < CATEGORIES.length - 1) renderCategoryPage(CATEGORIES[index + 1]);
-    }
-
-    function scheduleNeighborWarmup(index: number) {
-      const warm = () => ensurePagesAround(index);
-      if ("requestIdleCallback" in window) {
-        (window as Window & { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(warm);
-      } else {
-        setTimeout(warm, 1);
-      }
-    }
-
-    function renderAllLists() {
-      renderedPages.clear();
-      for (const cat of CATEGORIES) {
-        listEl(cat).replaceChildren();
-        delete scrollControllers[cat];
-      }
-
-      if (isDesktopLayout()) {
-        for (const cat of CATEGORIES) {
-          renderCategoryPage(cat);
-          pageEl(cat).classList.add("panel-scroll-active");
-        }
-        return;
-      }
-
-      // Active page immediately so the viewport is never blank; neighbours warm
-      // on idle so the first swipe does not pay a mid-gesture HTML parse cost.
-      renderCategoryPage(CATEGORIES[activeIndex]);
-      setActiveIndex(activeIndex);
-      scheduleNeighborWarmup(activeIndex);
-    }
-
-    let pager: ReturnType<typeof bindPagerSwipe> | null = null;
-
-    if (!isDesktopLayout()) {
-      pager = bindPagerSwipe({
-        gestureEl: sectionEl,
-        trackEl,
-        viewportEl,
-        pageCount: CATEGORIES.length,
-        onProgress: (fraction) => {
-          // Safety net if idle warmup has not finished before the finger moves.
-          const lo = Math.floor(fraction);
-          const hi = Math.ceil(fraction);
-          if (!renderedPages.has(CATEGORIES[lo])) renderCategoryPage(CATEGORIES[lo]);
-          if (!renderedPages.has(CATEGORIES[hi])) renderCategoryPage(CATEGORIES[hi]);
-          renderCategoryPill(fraction);
-        },
-        onSettled: (index) => {
-          activeIndex = index;
-          scheduleNeighborWarmup(index);
-          for (const cat of CATEGORIES) {
-            pageEl(cat).classList.toggle("panel-scroll-active", CATEGORIES.indexOf(cat) === index);
-          }
-          updateCategoryUI();
-        },
-      });
-    }
-
-    function setActiveIndex(index: number) {
-      pager?.goTo(index, false);
-    }
-
-    desktopQuery.addEventListener("change", () => {
-      if (isDesktopLayout()) {
-        trackEl.style.transform = "";
-        trackEl.classList.remove("pager-moving");
-        renderAllLists();
-      }
-    });
-
-    for (const cat of CATEGORIES) {
-      bindEntityClicks(pageEl(cat));
-    }
-
     async function loadDashboardStats() {
       try {
         const totals = await fetchAppJson<YearlyTotals>("/data/yearly-totals.json");
@@ -584,12 +238,15 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         let activeDays = 0;
         let totalPossibleDays = 0;
         let currentYearScrobbles = 0;
-        const currentYearStr = new Date().toISOString().split("-")[0];
+        const currentYearStr = String(new Date().getFullYear());
 
         for (const [yearStr, dayCounts] of Object.entries(totals)) {
-          const sum = dayCounts.reduce((acc, c) => acc + c, 0);
+          let sum = 0;
+          for (const count of dayCounts) {
+            sum += count;
+            if (count > 0) activeDays++;
+          }
           totalScrobbles += sum;
-          activeDays += dayCounts.filter((count) => count > 0).length;
           totalPossibleDays += dayCounts.length;
           if (yearStr === currentYearStr) currentYearScrobbles = sum;
         }
@@ -608,52 +265,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
     }
 
-    async function loadTopLists() {
-      try {
-        const [recentList, metaResult] = await Promise.all([
-          fetchAppJson<{ uts: number }[]>("/data/recent.json"),
-          loadMetaCache(),
-        ]);
-        if (!metaResult) {
-          for (const cat of CATEGORIES) {
-            listEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
-          }
-          return;
-        }
-        meta = metaResult;
-        artworkCache = await loadArtworkCache();
-
-        const latestTimestamp = recentList[0]?.uts || Math.floor(Date.now() / 1000);
-        const startTime = latestTimestamp - 28 * 24 * 60 * 60;
-        const startYear = new Date(startTime * 1000).getUTCFullYear();
-        const endYear = new Date(latestTimestamp * 1000).getUTCFullYear();
-        const yearsToLoad = Array.from(new Set([String(startYear), String(endYear)]));
-
-        await loadYearsData(yearsToLoad);
-
-        const startDateStr = new Date(startTime * 1000).toISOString().split("T")[0];
-        const endDateStr = new Date(latestTimestamp * 1000).toISOString().split("T")[0];
-        const trackCounts = aggregateTrackCounts(yearsToLoad, startDateStr, endDateStr);
-        const rolled = rollupDashboardCounts(trackCounts, meta);
-
-        topArtists = rolled.artists;
-        topSongs = rolled.tracks;
-        topAlbums = rolled.albums;
-        renderAllLists();
-      } catch (err) {
-        console.error("Failed to load top lists:", err);
-        for (const cat of CATEGORIES) {
-          listEl(cat).innerHTML = '<div class="no-data-message">Failed to load data</div>';
-        }
-      }
-    }
-
-    pager?.measure();
-
     loadDashboardStats();
-    loadTopLists();
-
     onPathsUpdated(["/data/yearly-totals.json"], () => loadDashboardStats());
-    onPathsUpdated(["/data/recent.json", /^\/data\/year-\d+\.json$/], () => loadTopLists());
   });
 </script>
