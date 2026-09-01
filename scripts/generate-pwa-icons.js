@@ -84,6 +84,12 @@ async function generateAppIcons(svg) {
     await sharp(await renderOpaqueIcon(svg, size)).toFile(out);
     console.log(`Wrote ${path.relative(process.cwd(), out)}`);
   }
+
+  // Safari probes /apple-touch-icon.png at the site root when adding to Home
+  // Screen, even when <link rel="apple-touch-icon"> points elsewhere.
+  const rootTouchIcon = path.join(publicDir, 'apple-touch-icon.png');
+  fs.copyFileSync(path.join(iconsDir, 'apple-touch-icon.png'), rootTouchIcon);
+  console.log(`Wrote ${path.relative(process.cwd(), rootTouchIcon)}`);
 }
 
 /**

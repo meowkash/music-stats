@@ -376,7 +376,8 @@ function populateAlbums(
   }
 
   overlayAlbumsSection.classList.remove('hidden');
-  overlayAlbumsHeader.textContent = type === 'artist' ? 'Albums' : 'Other Albums by this Artist';
+  overlayAlbumsHeader.textContent =
+    type === 'artist' ? 'Albums' : `Other Albums by ${artistNameForArtworkLookup}`;
 
   overlayAlbumsList.innerHTML = albumsToRender
     .map((alb) => {

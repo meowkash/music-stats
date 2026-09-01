@@ -1,5 +1,6 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
 import { promoteCanonicalArtworkCache } from './artwork-keys.js';
+import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { parseCSVLine } from './scrobble-source.js';
 import fs from 'fs';
 import path from 'path';
@@ -41,6 +42,34 @@ function main() {
 
   const albums = [];
   const albumMap = new Map();
+  /** artist|normalized-title → canonical albumId */
+  const albumGroupMap = new Map();
+
+  function resolveAlbumId(artistName, albumName) {
+    const trimmed = String(albumName ?? '').trim();
+    if (!trimmed) {
+      let emptyId = albumMap.get('');
+      if (emptyId === undefined) {
+        emptyId = albums.length;
+        albums.push('');
+        albumMap.set('', emptyId);
+      }
+      return emptyId;
+    }
+
+    const cached = albumMap.get(trimmed);
+    if (cached !== undefined) return cached;
+
+    const groupKey = albumGroupingKey(artistName, trimmed);
+    let albumId = albumGroupMap.get(groupKey);
+    if (albumId === undefined) {
+      albumId = albums.length;
+      albums.push(canonicalAlbumTitle(trimmed));
+      albumGroupMap.set(groupKey, albumId);
+    }
+    albumMap.set(trimmed, albumId);
+    return albumId;
+  }
 
   const tracks = []; // Array of [trackName, artistId, albumId]
   const trackMap = new Map(); // Key: "trackName|artistId|albumId" -> index
@@ -74,12 +103,7 @@ function main() {
       artistMap.set(artistName, artistId);
     }
 
-    let albumId = albumMap.get(albumName);
-    if (albumId === undefined) {
-      albumId = albums.length;
-      albums.push(albumName);
-      albumMap.set(albumName, albumId);
-    }
+    let albumId = resolveAlbumId(artistName, albumName);
 
     const trackKey = `${trackName}|${artistId}|${albumId}`;
     let trackId = trackMap.get(trackKey);

@@ -36,7 +36,7 @@ jobs:
         run: npm ci
 
       - name: Ensure Data Directory Exists
-        run: mkdir -p src/data
+        run: mkdir -p src/data public/data
 
       - name: Download Database from Cloudflare R2
         env:

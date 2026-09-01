@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1787780806';
+const SHELL_CACHE = 'music-stats-shell-1788287181';
 const DATA_CACHE = 'music-stats-data-v1';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1787780806';
+const CACHE_VERSION = '1788287181';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -12,6 +12,7 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/favicon.svg',
   '/favicon.ico',
+  '/apple-touch-icon.png',
   '/logo-mark.svg',
   '/og-image.png',
   '/icons/icon-32.png',
@@ -20,6 +21,17 @@ const STATIC_ASSETS = [
   '/icons/apple-touch-icon.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
+
+const PWA_ICON_PATHS = new Set([
+  '/favicon.svg',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/og-image.png',
+  '/icons/icon-32.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+]);
 
 const SHELL_FALLBACK_URLS = ['/', '/index.html'];
 
@@ -156,6 +168,21 @@ async function respondWithShell(event) {
   return Response.error();
 }
 
+/** Network-first for install icons so a deploy can't leave Safari on a stale mark. */
+async function respondWithPwaIcon(event) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const response = await fetch(event.request);
+    if (response.ok) {
+      await cache.put(event.request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(event.request);
+    return cached || Response.error();
+  }
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then(cache => {
@@ -197,6 +224,11 @@ self.addEventListener('fetch', event => {
 
   if (isArtworkRequest(requestUrl)) {
     event.respondWith(respondWithArtwork(event));
+    return;
+  }
+
+  if (PWA_ICON_PATHS.has(requestUrl.pathname)) {
+    event.respondWith(respondWithPwaIcon(event));
     return;
   }
 

@@ -44,6 +44,7 @@ const washStyles = [
 		<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href="/favicon.ico" />
 		<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
 		<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 		<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
 		<link rel="manifest" href="/manifest.json" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
@@ -476,6 +477,15 @@ const washStyles = [
 		--duration-overlay: var(--duration-normal);
 	}
 
+	/* Safari in browser mode doesn't report bottom safe-area, but the toolbar
+	   still overlaps fixed UI — give content more clearance than standalone. */
+	@media not all and (display-mode: standalone) {
+		:root {
+			--nav-bar-gap: 10px;
+			--nav-content-gap: 20px;
+		}
+	}
+
 	.panel-container {
 		width: 100%;
 		padding: var(--spacing-section);
@@ -501,8 +511,15 @@ const washStyles = [
 		scrollbar-width: none;
 	}
 
+	@media (max-width: 767px) {
+		.panel-scroll {
+			scroll-padding-bottom: 8px;
+		}
+	}
+
 	/* Hide scrollbars for all scroll containers */
 	.panel-scroll::-webkit-scrollbar,
+	.dashboard-container.panel-scroll::-webkit-scrollbar,
 	.dashboard-list-page::-webkit-scrollbar,
 	.leaderboard-list-page::-webkit-scrollbar,
 	.overlay-scroll-container::-webkit-scrollbar,

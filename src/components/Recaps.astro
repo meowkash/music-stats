@@ -53,7 +53,11 @@
     gap: 12px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 2px 2px 6px;
+    /* Bleed to the card edge so the first/last year tiles aren't clipped by
+       the card's tight inner padding or scroll-snap at scrollLeft = 0. */
+    margin-inline: -16px;
+    padding: 2px 16px 6px;
+    scroll-padding-inline: 16px;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     /* Keeps a flick at either end from arming the browser's back gesture. */
@@ -171,6 +175,12 @@
       min-height: 132px;
       padding: 12px;
       border-radius: 14px;
+    }
+
+    .recap-rail {
+      margin-inline: -12px;
+      padding-inline: 12px;
+      scroll-padding-inline: 12px;
     }
 
     .recap-card-year {

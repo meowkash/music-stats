@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { readScrobbles } from './scrobble-source.js';
 import { buildArtistAttribution, loadOverrides, parseArtistCredits } from './artist-resolve.js';
+import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { canonicalizeTag, genreDisplayName, tagWeight } from './genre-taxonomy.js';
 
 const PUBLIC_DATA_DIR = path.resolve('public/data');
@@ -406,6 +407,7 @@ function main() {
         lastUts: uts,
         artists: new Map(),
         albums: new Map(),
+        albumDisplayNames: new Map(),
         tracks: new Map(),
         albumArtist: new Map(),
         trackArtist: new Map(),
@@ -431,12 +433,18 @@ function main() {
 
     artistIdFor(artist);
     bump(bucket.rawArtistPlays, artist);
-    bump(bucket.albums, album);
-    if (album) bucket.albumArtist.set(album, artist);
+    if (album) {
+      const albumKey = albumGroupingKey(artist, album);
+      bump(bucket.albums, albumKey);
+      bucket.albumArtist.set(albumKey, artist);
+      if (!bucket.albumDisplayNames.has(albumKey)) {
+        bucket.albumDisplayNames.set(albumKey, canonicalAlbumTitle(album));
+      }
+    }
     const tKey = trackKey(track, artist);
     bump(bucket.tracks, tKey);
     bucket.trackArtist.set(tKey, artist);
-    if (album) bucket.trackAlbum.set(tKey, album);
+    if (album) bucket.trackAlbum.set(tKey, canonicalAlbumTitle(album));
 
     bucket.byHour[local.hour]++;
     bucket.byWeekday[local.weekday]++;
@@ -501,9 +509,9 @@ function main() {
       share: share(plays, bucket.scrobbles),
     }));
 
-    const topAlbums = topEntries(bucket.albums, 5).map(([name, plays]) => ({
-      name,
-      artist: bucket.albumArtist.get(name) ?? '',
+    const topAlbums = topEntries(bucket.albums, 5).map(([key, plays]) => ({
+      name: bucket.albumDisplayNames.get(key) ?? key,
+      artist: bucket.albumArtist.get(key) ?? '',
       plays,
     }));
 

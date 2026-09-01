@@ -24,6 +24,7 @@ const VERSION_SUFFIX = new RegExp(
       'album version',
       'bonus track',
       'deluxe(?: edition)?',
+      'custom(?: edition)?',
       'mono|stereo',
       '.*\\bremix\\b.*',
       '.*\\bmix(?:ed)?\\s+by\\b.*',
@@ -34,13 +35,26 @@ const VERSION_SUFFIX = new RegExp(
 
 /** Bracketed decorations anywhere in the string. */
 const BRACKETED_NOISE =
-  /\s*[([{](?:feat\.?|ft\.?|featuring|with|prod\.?|mixed by|remaster(?:ed)?|deluxe|bonus|explicit|clean|radio edit|original mix|extended|live|instrumental|acoustic)[^)\]}]*[)\]}]/gi;
+  /\s*[([{](?:feat\.?|ft\.?|featuring|with|prod\.?|mixed by|remaster(?:ed)?|deluxe|custom(?: edition)?|bonus|explicit|clean|radio edit|original mix|extended|live|instrumental|acoustic)[^)\]}]*[)\]}]/gi;
 
 /** Episodic releases: "A State of Trance 1234", "Group Therapy 500", "ASOT Episode 900". */
 const EPISODIC = /^(?<series>.*?[a-z].*?)\s*(?:[-–—:,]\s*)?(?:episode|ep\.?|edition|vol\.?|volume|part|pt\.?|#)?\s*(?<number>\d{2,4})\s*$/i;
 
 /** Series names too generic to safely share one cover across episodes. */
 const MIN_SERIES_WORD_COUNT = 2;
+
+export function canonicalAlbumTitle(albumName) {
+  if (!albumName) return '';
+  const trimmed = String(albumName).trim();
+  return stripDecorations(trimmed) || trimmed;
+}
+
+/** Stable key for merging deluxe/custom/remaster editions per artist. */
+export function albumGroupingKey(artistName, albumName) {
+  const base = canonicalAlbumTitle(albumName);
+  if (!base) return '';
+  return `${normalizeForCompare(artistName)}|${normalizeForCompare(base)}`;
+}
 
 export function stripDecorations(title) {
   if (!title) return '';

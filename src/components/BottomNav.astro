@@ -108,8 +108,8 @@
     max-width: 500px;
     height: var(--nav-bar-height);
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 4px;
     /* Matches the card/sheet radius language used across the app */
     border-radius: var(--radius-xl);
     /* Minimal tint — blur samples whatever is actually behind */
@@ -147,7 +147,8 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     height: 48px;
     border-radius: var(--radius-md);
     cursor: pointer;

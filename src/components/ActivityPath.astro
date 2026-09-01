@@ -8,9 +8,33 @@
       <p class="activity-sub" id="activityRangeLabel">Last month</p>
     </div>
     <div class="activity-range" role="group" aria-label="Range">
-      <button class="range-btn" data-days="7" type="button">1w</button>
-      <button class="range-btn is-active" data-days="30" type="button">1m</button>
-      <button class="range-btn" data-days="90" type="button">3m</button>
+      <button
+        class="range-chip"
+        data-days="7"
+        type="button"
+        style="--chip-color: var(--accent-cyan); --chip-color-glow: var(--accent-cyan-glow); --chip-led-glow: rgba(0, 240, 255, 0.85);"
+      >
+        <span class="led-indicator"></span>
+        <span class="chip-label">1w</span>
+      </button>
+      <button
+        class="range-chip active"
+        data-days="30"
+        type="button"
+        style="--chip-color: var(--accent-pink); --chip-color-glow: var(--accent-pink-glow); --chip-led-glow: rgba(255, 45, 85, 0.85);"
+      >
+        <span class="led-indicator"></span>
+        <span class="chip-label">1m</span>
+      </button>
+      <button
+        class="range-chip"
+        data-days="90"
+        type="button"
+        style="--chip-color: var(--accent-violet); --chip-color-glow: var(--accent-violet-glow); --chip-led-glow: rgba(168, 85, 247, 0.85);"
+      >
+        <span class="led-indicator"></span>
+        <span class="chip-label">3m</span>
+      </button>
     </div>
   </div>
 
@@ -50,31 +74,66 @@
 
   .activity-range {
     display: flex;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    flex-wrap: wrap;
+    gap: 8px;
     flex-shrink: 0;
   }
 
-  .range-btn {
-    padding: 5px 11px;
-    border: none;
-    border-radius: 999px;
-    background: none;
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 600;
-    font-family: var(--font-body);
+  .range-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: var(--transition-smooth);
+    user-select: none;
+    color: var(--chip-color);
+    opacity: 0.6;
+    font-family: var(--font-body);
   }
 
-  .range-btn.is-active {
-    background: rgba(255, 45, 85, 0.16);
-    color: var(--accent-pink);
-    box-shadow: inset 0 0 0 1px rgba(255, 45, 85, 0.3);
+  @media (hover: hover) and (pointer: fine) {
+    .range-chip:hover {
+      background: rgba(255, 255, 255, 0.04);
+      opacity: 0.85;
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+  }
+
+  .range-chip .led-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: var(--transition-smooth);
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
+  }
+
+  .range-chip.active {
+    opacity: 1;
+    border-color: var(--chip-color);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 12px var(--chip-color-glow), inset 0 0 4px var(--chip-color-glow);
+  }
+
+  .range-chip.active .led-indicator {
+    background: var(--chip-color);
+    border-color: #fff;
+    box-shadow:
+      0 0 8px var(--chip-led-glow),
+      0 0 16px var(--chip-color-glow),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .chip-label {
+    line-height: 1;
   }
 
   .activity-plot {
@@ -204,7 +263,7 @@
     const plot = document.getElementById("activityPlot") as HTMLDivElement;
     const rangeLabel = document.getElementById("activityRangeLabel") as HTMLParagraphElement;
     const buttons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".activity-range .range-btn"),
+      document.querySelectorAll<HTMLButtonElement>(".activity-range .range-chip"),
     );
 
     let totals: YearlyTotals | null = null;
@@ -288,7 +347,7 @@
         const next = Number(button.dataset.days);
         if (!next || next === days) return;
         days = next;
-        for (const other of buttons) other.classList.toggle("is-active", other === button);
+        for (const other of buttons) other.classList.toggle("active", other === button);
         render();
       });
     }

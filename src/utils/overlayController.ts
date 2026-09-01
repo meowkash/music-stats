@@ -115,7 +115,11 @@ export function initDetailOverlay(): void {
     overlayAlbumsList: document.getElementById('overlayAlbumsList') as HTMLElement,
   };
 
-  const contentRegions = [overlayHeaderContent, overlayContentWrapper];
+  const contentRegions = [
+    elements.overlayArtworkWrapper,
+    overlayHeaderContent,
+    overlayContentWrapper,
+  ];
   type NavEntry = { type: string; id: number; artistCatalog?: ArtistCatalogKey };
   let currentEntity: NavEntry | null = null;
   const navHistory: NavEntry[] = [];
