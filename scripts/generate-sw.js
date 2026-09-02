@@ -2,8 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 const version = process.env.CACHE_VERSION || String(Math.floor(Date.now() / 1000));
-const shellCache = `music-stats-shell-${version}`;
-const dataCache = 'music-stats-data-v1';
+const safeVersion = version.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+const shellCache = `music-stats-shell-${safeVersion}`;
+// Scoped per deploy so a new build can't be blocked by stale JSON the SW kept
+// from an older generation (the client verifies content hashes on download).
+const dataCache = `music-stats-data-${safeVersion}`;
 // Deliberately not version-scoped: artwork is expensive to re-download and is
 // invalidated per-URL by the data manifest, never wholesale by a deploy.
 const imageCache = 'music-stats-images-v1';
@@ -78,6 +81,7 @@ function jsonUnavailable() {
  */
 function respondWithDataJson(event, dataPath) {
   const cacheKey = cacheKeyForPath(dataPath);
+  const bustCache = new URL(event.request.url).searchParams.has('v');
 
   const network = fetch(event.request).then(async (response) => {
     if (response.ok) {
@@ -88,6 +92,15 @@ function respondWithDataJson(event, dataPath) {
   });
 
   event.waitUntil(network.catch(() => {}));
+
+  // Manifest and cache-busted fetches must not lose a race to stale JSON —
+  // the client hashes every byte and aborts the whole update on mismatch.
+  if (dataPath === '/data/manifest.json' || bustCache) {
+    return network.catch(async () => {
+      const cache = await caches.open(DATA_CACHE);
+      return (await cache.match(cacheKey)) || jsonUnavailable();
+    });
+  }
 
   return (async () => {
     let timer;
@@ -208,7 +221,11 @@ self.addEventListener('activate', event => {
       return Promise.all(
         keys.map(key => {
           if (key === DATA_CACHE || key === SHELL_CACHE || key === IMAGE_CACHE) return;
-          if (key.startsWith('music-stats-shell-') || key.startsWith('aakashmusic-cache-')) {
+          if (
+            key.startsWith('music-stats-shell-') ||
+            key.startsWith('music-stats-data-') ||
+            key.startsWith('aakashmusic-cache-')
+          ) {
             console.log('[SW] Clearing old cache:', key);
             return caches.delete(key);
           }

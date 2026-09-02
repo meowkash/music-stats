@@ -90,6 +90,10 @@ export interface PathGeometry {
   line: string;
   /** Same curve closed to the baseline, for the area fill. */
   area: string;
+  /** Plot inset — room for Y-axis labels on the left. */
+  plot: { left: number; top: number; right: number; bottom: number };
+  /** Horizontal grid + Y-axis tick labels (matches Statistics chart styling). */
+  yTicks: Array<{ y: number; label: string }>;
   /** Average reference line, plus where to hang its label. */
   averageLine: {
     y: number;
@@ -189,6 +193,27 @@ function buildTicks(days: ActivityDay[], xAt: (index: number) => number): Array<
   return ticks;
 }
 
+/** Round up to a human-friendly axis maximum (2000, 5000, 10000, …). */
+function niceAxisMax(value: number): number {
+  if (value <= 0) return 10;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const nice =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+
+function buildYTicks(scaleMax: number, toY: (value: number) => number): Array<{ y: number; label: string }> {
+  const steps = scaleMax <= 20 ? 4 : 5;
+  const ticks: Array<{ y: number; label: string }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const value = (scaleMax * i) / steps;
+    const label = Number.isInteger(value) ? String(value) : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    ticks.push({ y: toY(value), label });
+  }
+  return ticks;
+}
+
 export function buildPathGeometry(
   series: ActivitySeries,
   width = 720,
@@ -198,24 +223,23 @@ export function buildPathGeometry(
   // Headroom at the top for the peak callout, room at the bottom for the axis.
   const padTop = 30;
   const padBottom = 22;
-  const padX = 10;
+  const padLeft = 42;
+  const padRight = 10;
   const plotHeight = height - padTop - padBottom;
-  const plotWidth = Math.max(1, width - padX * 2);
+  const plotWidth = Math.max(1, width - padLeft - padRight);
   const baseline = height - padBottom;
 
-  // Scaled off the true peak (with a little headroom) so the marked day sits on
-  // the curve exactly where the annotation says it does.
   const maxPlays = Math.max(...days.map((d) => d.plays), 1);
-  const scaleMax = Math.max(maxPlays * 1.15, 1);
+  const scaleMax = niceAxisMax(Math.max(maxPlays * 1.15, 1));
 
   const toY = (value: number) => padTop + plotHeight * (1 - Math.min(value / scaleMax, 1));
   const step = days.length > 1 ? plotWidth / (days.length - 1) : 0;
-  const xAt = (index: number) => padX + index * step;
+  const xAt = (index: number) => padLeft + index * step;
 
   const points = days.map((day, i) => ({ x: xAt(i), y: toY(day.plays) }));
   const line = smoothPath(points, padTop, baseline);
   const area = points.length
-    ? `${line} L ${(width - padX).toFixed(2)} ${baseline.toFixed(2)} L ${padX.toFixed(2)} ${baseline.toFixed(2)} Z`
+    ? `${line} L ${(width - padRight).toFixed(2)} ${baseline.toFixed(2)} L ${padLeft.toFixed(2)} ${baseline.toFixed(2)} Z`
     : '';
 
   const averageY = toY(dailyAverage);
@@ -270,7 +294,7 @@ export function buildPathGeometry(
     }
   }
 
-  const bestX = points[bestIndex]?.x ?? (padX + width - padX) / 2;
+  const bestX = points[bestIndex]?.x ?? (padLeft + width - padRight) / 2;
   const avgAnchor: 'start' | 'end' | 'middle' =
     bestX < width * 0.3 ? 'start' : bestX > width * 0.7 ? 'end' : 'middle';
   // The curve mostly sits below the line here (fewer plays), so the label
@@ -285,12 +309,14 @@ export function buildPathGeometry(
     height,
     line,
     area,
+    plot: { left: padLeft, top: padTop, right: width - padRight, bottom: baseline },
+    yTicks: buildYTicks(scaleMax, toY),
     averageLine: {
       y: averageY,
-      x1: padX,
-      x2: width - padX,
+      x1: padLeft,
+      x2: width - padRight,
       value: dailyAverage,
-      labelX: avgAnchor === 'start' ? Math.max(bestX, padX + 2) : avgAnchor === 'end' ? Math.min(bestX, width - padX - 2) : bestX,
+      labelX: avgAnchor === 'start' ? Math.max(bestX, padLeft + 2) : avgAnchor === 'end' ? Math.min(bestX, width - padRight - 2) : bestX,
       labelY: avgLabelY,
       anchor: avgAnchor,
     },

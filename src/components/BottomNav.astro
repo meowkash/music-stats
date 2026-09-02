@@ -110,13 +110,15 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    /* Matches the card/sheet radius language used across the app */
+    /* Liquid-glass tint follows the active tab (driven from navBar.ts). */
+    --nav-tint: rgba(255, 255, 255, 0.08);
+    --nav-glow: transparent;
     border-radius: var(--radius-xl);
-    /* Minimal tint — blur samples whatever is actually behind */
-    background: rgba(14, 14, 18, 0.38);
-    border: 1px solid var(--panel-border-hover);
+    background: color-mix(in srgb, var(--nav-tint) 14%, rgba(14, 14, 18, 0.38));
+    border: 1px solid color-mix(in srgb, var(--nav-tint) 22%, var(--panel-border-hover));
     box-shadow:
       0 12px 36px rgba(0, 0, 0, 0.45),
+      0 0 32px var(--nav-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
     padding: 8px;
     pointer-events: auto;
@@ -262,11 +264,14 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 16px;
-      background: rgba(14, 14, 18, 0.38);
-      border: 1px solid var(--panel-border-hover);
+      --nav-tint: rgba(255, 255, 255, 0.08);
+      --nav-glow: transparent;
+      background: color-mix(in srgb, var(--nav-tint) 14%, rgba(14, 14, 18, 0.38));
+      border: 1px solid color-mix(in srgb, var(--nav-tint) 22%, var(--panel-border-hover));
       border-radius: var(--radius-xl);
       box-shadow:
         0 12px 36px rgba(0, 0, 0, 0.45),
+        0 0 32px var(--nav-glow),
         inset 0 1px 0 rgba(255, 255, 255, 0.08);
       backdrop-filter: blur(14px) saturate(140%);
       -webkit-backdrop-filter: blur(14px) saturate(140%);

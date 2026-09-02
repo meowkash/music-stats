@@ -211,6 +211,8 @@ export async function stageUpdate(): Promise<number> {
       return 0;
     }
 
+    console.info('[data] New deploy detected:', remote.generation, remote.builtAt);
+
     const activeByPath = new Map(activeManifest?.files.map((f) => [f.path, f.hash]) ?? []);
     const changed = remote.files.filter((f) => activeByPath.get(f.path) !== f.hash);
 

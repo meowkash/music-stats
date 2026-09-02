@@ -57,6 +57,15 @@ jobs:
           LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
         run: node scripts/fetch-lastfm.js
 
+      - name: Log sync summary
+        run: |
+          lines=$(wc -l < src/data/scrobbles.csv | tr -d ' ')
+          echo "scrobbles.csv row count (incl. header): $lines"
+          if [ "$lines" -le 1 ]; then
+            echo "::error::scrobbles.csv is empty after fetch — sync may have failed"
+            exit 1
+          fi
+
       - name: Build and Deploy
         env:
           CACHE_VERSION: ${{ github.run_number }}-${{ github.sha }}
@@ -75,6 +84,23 @@ jobs:
             echo "Running incremental build (backfill missing artwork + new colors only)"
             npm run build
           fi
+
+      - name: Verify build artifacts
+        run: |
+          test -f dist/data/manifest.json
+          test -f dist/data/meta.json
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('dist/data/manifest.json', 'utf8'));
+            const meta = JSON.parse(fs.readFileSync('dist/data/meta.json', 'utf8'));
+            if (!manifest.generation || !manifest.builtAt) throw new Error('manifest missing generation/builtAt');
+            if (!Array.isArray(manifest.files) || manifest.files.length < 5) throw new Error('manifest file list too small');
+            if (!Array.isArray(meta.tracks) || meta.tracks.length === 0) throw new Error('meta.json has no tracks');
+            console.log('✓ generation', manifest.generation);
+            console.log('✓ builtAt', manifest.builtAt);
+            console.log('✓ data files', manifest.files.length);
+            console.log('✓ tracks', meta.tracks.length);
+          "
 
       - name: Upload Updated Database back to Cloudflare R2
         env:

@@ -134,7 +134,7 @@ async function main() {
 
   do {
     console.log(`Fetching page ${page} of ${totalPages}...`);
-    let url = `http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${USERNAME}&api_key=${API_KEY}&format=json&limit=200&page=${page}`;
+    let url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${USERNAME}&api_key=${API_KEY}&format=json&limit=200&page=${page}`;
     if (fromUts > 0) {
       url += `&from=${fromUts}`;
     }
@@ -282,7 +282,7 @@ async function main() {
   for (const albumKey of missingAlbums) {
     const [album, artist] = albumKey.split('|');
     try {
-      const url = `http://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&format=json`;
+      const url = `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&format=json`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -307,7 +307,7 @@ async function main() {
     try {
       // Last.fm artist.getinfo no longer provides images consistently, but we can search for their top tracks/albums 
       // Or just try artist.getinfo anyway as fallback
-      const url = `http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&format=json`;
+      const url = `https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&format=json`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();

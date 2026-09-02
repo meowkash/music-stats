@@ -8,33 +8,9 @@
       <p class="activity-sub" id="activityRangeLabel">Last month</p>
     </div>
     <div class="activity-range" role="group" aria-label="Range">
-      <button
-        class="range-chip"
-        data-days="7"
-        type="button"
-        style="--chip-color: var(--accent-cyan); --chip-color-glow: var(--accent-cyan-glow); --chip-led-glow: rgba(0, 240, 255, 0.85);"
-      >
-        <span class="led-indicator"></span>
-        <span class="chip-label">1w</span>
-      </button>
-      <button
-        class="range-chip active"
-        data-days="30"
-        type="button"
-        style="--chip-color: var(--accent-pink); --chip-color-glow: var(--accent-pink-glow); --chip-led-glow: rgba(255, 45, 85, 0.85);"
-      >
-        <span class="led-indicator"></span>
-        <span class="chip-label">1m</span>
-      </button>
-      <button
-        class="range-chip"
-        data-days="90"
-        type="button"
-        style="--chip-color: var(--accent-violet); --chip-color-glow: var(--accent-violet-glow); --chip-led-glow: rgba(168, 85, 247, 0.85);"
-      >
-        <span class="led-indicator"></span>
-        <span class="chip-label">3m</span>
-      </button>
+      <button class="range-btn" data-days="7" type="button">1w</button>
+      <button class="range-btn is-active" data-days="30" type="button">1m</button>
+      <button class="range-btn" data-days="90" type="button">3m</button>
     </div>
   </div>
 
@@ -74,85 +50,62 @@
 
   .activity-range {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .range-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 14px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-    user-select: none;
-    color: var(--chip-color);
-    opacity: 0.6;
-    font-family: var(--font-body);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .range-chip:hover {
-      background: rgba(255, 255, 255, 0.04);
-      opacity: 0.85;
-      border-color: rgba(255, 255, 255, 0.15);
-    }
-  }
-
-  .range-chip .led-indicator {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: var(--transition-smooth);
-    flex-shrink: 0;
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
-  }
-
-  .range-chip.active {
-    opacity: 1;
-    border-color: var(--chip-color);
+    gap: 4px;
+    padding: 3px;
+    border-radius: 999px;
     background: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 0 12px var(--chip-color-glow), inset 0 0 4px var(--chip-color-glow);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    flex-shrink: 0;
   }
 
-  .range-chip.active .led-indicator {
-    background: var(--chip-color);
-    border-color: #fff;
-    box-shadow:
-      0 0 8px var(--chip-led-glow),
-      0 0 16px var(--chip-color-glow),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  .range-btn {
+    padding: 5px 11px;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: var(--transition-fast);
   }
 
-  .chip-label {
-    line-height: 1;
+  .range-btn.is-active {
+    background: rgba(255, 45, 85, 0.16);
+    color: var(--accent-pink);
+    box-shadow: inset 0 0 0 1px rgba(255, 45, 85, 0.3);
   }
 
   .activity-plot {
     flex: 1;
     min-height: 150px;
-    /* Capped so a sparse dashboard can't stretch the series into a wall of
-       chart; the card keeps the leftover space instead. */
     max-height: 300px;
     margin: auto 0;
     display: flex;
     width: 100%;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.02);
+    padding: 8px 4px 4px;
   }
 
-  /* The viewBox is rendered at the measured pixel size of this box, so the
-     chart fills it exactly with no letterboxing and no non-uniform scaling. */
   .activity-plot :global(svg) {
     width: 100%;
     height: 100%;
     overflow: visible;
+  }
+
+  .activity-plot :global(.activity-grid-line) {
+    stroke: rgba(255, 255, 255, 0.03);
+    stroke-width: 1;
+  }
+
+  .activity-plot :global(.activity-y-tick) {
+    fill: rgba(255, 255, 255, 0.3);
+    font-size: 10px;
+    font-weight: 400;
+    font-family: Inter, var(--font-body), sans-serif;
   }
 
   .activity-plot :global(.activity-area) {
@@ -162,15 +115,15 @@
   .activity-plot :global(.activity-line) {
     fill: none;
     stroke: url(#activityLineGradient);
-    stroke-width: 2.75;
+    stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter: drop-shadow(0 0 10px rgba(255, 45, 85, 0.35));
+    filter: drop-shadow(0 0 8px rgba(255, 45, 85, 0.3));
   }
 
   .activity-plot :global(.activity-avg-line) {
     stroke: var(--accent-green);
-    stroke-width: 2.75;
+    stroke-width: 2;
     stroke-dasharray: 5 5;
     opacity: 0.5;
   }
@@ -183,9 +136,10 @@
   }
 
   .activity-plot :global(.activity-tick) {
-    fill: rgba(255, 255, 255, 0.35);
+    fill: rgba(255, 255, 255, 0.3);
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 400;
+    font-family: Inter, var(--font-body), sans-serif;
   }
 
   .activity-plot :global(.activity-peak-halo) {
@@ -205,7 +159,6 @@
     font-weight: 700;
   }
 
-  /* Draw-on reveal. Length is set per render since the path changes with range. */
   .activity-plot :global(.activity-line.is-animating) {
     animation: activity-draw 1.1s var(--ios-spring) both;
   }
@@ -263,16 +216,12 @@
     const plot = document.getElementById("activityPlot") as HTMLDivElement;
     const rangeLabel = document.getElementById("activityRangeLabel") as HTMLParagraphElement;
     const buttons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".activity-range .range-chip"),
+      document.querySelectorAll<HTMLButtonElement>(".activity-range .range-btn"),
     );
 
     let totals: YearlyTotals | null = null;
     let days = 30;
 
-    /**
-     * `animate` is off for resize-driven rebuilds — replaying the draw-on every
-     * time the panel settles or the window nudges reads as a glitch.
-     */
     function render(animate = true) {
       if (!totals) return;
       const reveal = animate ? " is-animating" : "";
@@ -285,6 +234,7 @@
         Math.max(plot.clientHeight || 190, 130),
       );
       const avg = geo.averageLine;
+      const { left, right, bottom } = geo.plot;
 
       plot.innerHTML = `
         <svg viewBox="0 0 ${geo.width} ${geo.height}" role="img"
@@ -296,10 +246,22 @@
               <stop offset="100%" stop-color="#ff2d55" />
             </linearGradient>
             <linearGradient id="activityAreaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="rgba(168, 85, 247, 0.28)" />
+              <stop offset="0%" stop-color="rgba(168, 85, 247, 0.18)" />
               <stop offset="100%" stop-color="rgba(168, 85, 247, 0)" />
             </linearGradient>
           </defs>
+
+          <g class="${fade.trim()}">
+            ${geo.yTicks
+              .map(
+                (tick) =>
+                  `<line class="activity-grid-line" x1="${left.toFixed(2)}" y1="${tick.y.toFixed(2)}"
+                     x2="${right.toFixed(2)}" y2="${tick.y.toFixed(2)}" />
+                   <text class="activity-y-tick" x="${(left - 6).toFixed(2)}" y="${(tick.y + 3.5).toFixed(2)}"
+                     text-anchor="end">${tick.label}</text>`,
+              )
+              .join("")}
+          </g>
 
           <path class="activity-area${fade}" d="${geo.area}" />
           <path class="activity-line${reveal}" d="${geo.line}" />
@@ -325,13 +287,11 @@
           <g>${geo.ticks
             .map(
               (tick) =>
-                `<text class="activity-tick" x="${tick.x.toFixed(2)}" y="${geo.height - 4}" text-anchor="middle">${tick.label}</text>`,
+                `<text class="activity-tick" x="${tick.x.toFixed(2)}" y="${bottom + 14}" text-anchor="middle">${tick.label}</text>`,
             )
             .join("")}</g>
         </svg>`;
 
-      // The dash length has to match this particular path, so it's measured
-      // after insertion rather than guessed.
       const line = plot.querySelector<SVGPathElement>(".activity-line");
       if (line) {
         const length = line.getTotalLength();
@@ -347,7 +307,7 @@
         const next = Number(button.dataset.days);
         if (!next || next === days) return;
         days = next;
-        for (const other of buttons) other.classList.toggle("active", other === button);
+        for (const other of buttons) other.classList.toggle("is-active", other === button);
         render();
       });
     }
@@ -365,14 +325,12 @@
     load();
     onPathsUpdated(["/data/yearly-totals.json"], () => load());
 
-    // Geometry is pixel-based, so it has to be rebuilt when the box changes.
     let resizeFrame = 0;
     let lastWidth = 0;
     let lastHeight = 0;
     new ResizeObserver(() => {
       const width = plot.clientWidth;
       const height = plot.clientHeight;
-      // Sub-pixel jitter from the panel transition would otherwise thrash this.
       if (Math.abs(width - lastWidth) < 2 && Math.abs(height - lastHeight) < 2) return;
       lastWidth = width;
       lastHeight = height;
