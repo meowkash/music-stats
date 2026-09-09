@@ -1,14 +1,13 @@
-const SHELL_CACHE = 'music-stats-shell-1788320368';
-const DATA_CACHE = 'music-stats-data-1788320368';
+const SHELL_CACHE = 'music-stats-shell-1788919111';
+const DATA_CACHE = 'music-stats-data-1788919111';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1788320368';
+const CACHE_VERSION = '1788919111';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
 
 const STATIC_ASSETS = [
   '/',
-  '/index.html',
   '/manifest.json',
   '/favicon.svg',
   '/favicon.ico',
@@ -195,9 +194,17 @@ async function respondWithPwaIcon(event) {
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then(cache => {
+    caches.open(SHELL_CACHE).then(async cache => {
       console.log('[SW] Pre-caching static app shell');
-      return cache.addAll(STATIC_ASSETS);
+      await Promise.allSettled(
+        STATIC_ASSETS.map(url =>
+          fetch(url, { cache: 'reload' })
+            .then(response => {
+              if (response.ok) return cache.put(url, response);
+            })
+            .catch(err => console.warn('[SW] Could not pre-cache:', url, err))
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });

@@ -66,34 +66,9 @@ export function initNavBar(): void {
   }
 
   const paintedBg = bgLayers.map(() => -1);
-  let lastBarTint = '';
-  let lastBarGlow = '';
+  function paintBarTint(_value: number) {}
 
-  function paintBarTint(value: number) {
-    const i0 = Math.min(Math.max(Math.floor(value), 0), buttons.length - 1);
-    const i1 = Math.min(i0 + 1, buttons.length - 1);
-    const t = value - i0;
-    const tint = t < 0.001 || i0 === i1 ? accentCss[i0] : paint.color(accentRgba[i0], accentRgba[i1], t);
-    const glowFrom = parseColor(glowCss[i0]) ?? accentRgba[i0];
-    const glowTo = parseColor(glowCss[i1]) ?? accentRgba[i1];
-    const glow = t < 0.001 || i0 === i1 ? glowCss[i0] : paint.color(glowFrom, glowTo, t);
-    if (tint === lastBarTint && glow === lastBarGlow) return;
-    lastBarTint = tint;
-    lastBarGlow = glow;
-    bar.style.setProperty('--nav-tint', tint);
-    bar.style.setProperty('--nav-glow', glow);
-    navZone.style.setProperty('--nav-tint', tint);
-    navZone.style.setProperty('--nav-glow', glow);
-  }
-
-  function clearBarTint() {
-    lastBarTint = '';
-    lastBarGlow = '';
-    bar.style.removeProperty('--nav-tint');
-    bar.style.removeProperty('--nav-glow');
-    navZone.style.removeProperty('--nav-tint');
-    navZone.style.removeProperty('--nav-glow');
-  }
+  function clearBarTint() {}
 
   function paintBackground(value: number) {
     for (let i = 0; i < bgLayers.length; i++) {

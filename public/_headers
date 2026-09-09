@@ -1,0 +1,27 @@
+/manifest.json
+  Content-Type: application/manifest+json; charset=utf-8
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=0, must-revalidate
+
+/sw.js
+  Content-Type: text/javascript; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
+
+/apple-touch-icon.png
+  Content-Type: image/png
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
+
+/icons/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
+
+/favicon.ico
+  Content-Type: image/x-icon
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
+
+/favicon.svg
+  Content-Type: image/svg+xml
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
