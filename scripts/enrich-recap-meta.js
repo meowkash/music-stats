@@ -57,7 +57,8 @@ function readJson(file, fallback = null) {
   if (!fs.existsSync(file)) return fallback;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error(`[EnrichRecapMeta] Failed to parse JSON from ${file}:`, err);
     return fallback;
   }
 }

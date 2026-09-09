@@ -211,6 +211,7 @@
     let activeCategory: "tracks" | "albums" | "artists" = "tracks";
     let rawTotals: YearlyTotals | null = null;
     let metaDict: any = null;
+    const albumToArtist = new Map<number, number>();
     let lastSwipeTarget: "year" | "category" = "year";
 
     let chart: Chart | null = null;
@@ -257,6 +258,15 @@
         rawTotals = totals;
         rawStats = stats;
         metaDict = meta;
+        albumToArtist.clear();
+        if (meta?.tracks) {
+          for (let i = 0; i < meta.tracks.length; i++) {
+            const t = meta.tracks[i];
+            if (t && t[2] && !albumToArtist.has(t[2])) {
+              albumToArtist.set(t[2], t[1]);
+            }
+          }
+        }
 
         initializeCheckboxes(rawTotals!);
         updateChart();
@@ -459,15 +469,10 @@
             imgUrl = getArtworkUrl("track", name, artistName, albumName, cache);
           } else if (activeCategory === "albums" && metaDict.albums[id]) {
             name = metaDict.albums[id];
-            const trackEntry = metaDict.tracks.find((t: any) => t && t[2] == id);
-            if (trackEntry) {
-              const artistName = metaDict.artists[trackEntry[1]];
-              subtitle = artistName;
-              imgUrl = getArtworkUrl("album", name, artistName, name, cache);
-            } else {
-              subtitle = "Album";
-              imgUrl = getArtworkUrl("album", name, "", name, cache);
-            }
+            const artistId = albumToArtist.get(id);
+            const artistName = (artistId !== undefined ? metaDict.artists[artistId] : null) || "Unknown Artist";
+            subtitle = artistName;
+            imgUrl = getArtworkUrl("album", name, artistName === "Unknown Artist" ? "" : artistName, name, cache);
             rowType = "album";
           } else if (activeCategory === "artists" && metaDict.canonicalArtists?.[id]) {
             name = metaDict.canonicalArtists[id];

@@ -30,7 +30,8 @@ function openDb(): Promise<IDBDatabase | null> {
     let request: IDBOpenDBRequest;
     try {
       request = indexedDB.open(DB_NAME, DB_VERSION);
-    } catch {
+    } catch (err) {
+      console.warn('[IDB] Failed to open IndexedDB:', err);
       resolve(null);
       return;
     }
@@ -43,8 +44,14 @@ function openDb(): Promise<IDBDatabase | null> {
     request.onsuccess = () => resolve(request.result);
     // Private browsing and storage-disabled contexts land here. Every caller
     // treats a null db as "no persistence", falling back to network.
-    request.onerror = () => resolve(null);
-    request.onblocked = () => resolve(null);
+    request.onerror = (e) => {
+      console.warn('[IDB] Database open error:', e);
+      resolve(null);
+    };
+    request.onblocked = (e) => {
+      console.warn('[IDB] Database open blocked:', e);
+      resolve(null);
+    };
   });
 
   return dbPromise;
@@ -67,13 +74,20 @@ function runTransaction<T>(
         try {
           const tx = db.transaction(storeName, mode);
           request = work(tx.objectStore(storeName));
-          tx.onabort = () => resolve(undefined);
-          tx.onerror = () => resolve(undefined);
+          tx.onabort = (e) => {
+            console.warn('[IDB] Transaction aborted on store', storeName, e);
+            resolve(undefined);
+          };
+          tx.onerror = (e) => {
+            console.warn('[IDB] Transaction error on store', storeName, e);
+            resolve(undefined);
+          };
           if (!request) {
             tx.oncomplete = () => resolve(undefined);
             return;
           }
-        } catch {
+        } catch (err) {
+          console.warn('[IDB] Transaction execution failed on store', storeName, err);
           resolve(undefined);
           return;
         }
@@ -119,7 +133,8 @@ export function idbSetMany(
           tx.oncomplete = () => resolve();
           tx.onabort = () => resolve();
           tx.onerror = () => resolve();
-        } catch {
+        } catch (err) {
+          console.warn('[IDB] Bulk put failed on store', store, err);
           resolve();
         }
       }),
@@ -143,7 +158,8 @@ export function idbDeleteMany(store: string, keys: IDBValidKey[]): Promise<void>
           tx.oncomplete = () => resolve();
           tx.onabort = () => resolve();
           tx.onerror = () => resolve();
-        } catch {
+        } catch (err) {
+          console.warn('[IDB] Bulk delete failed on store', store, err);
           resolve();
         }
       }),

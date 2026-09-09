@@ -257,10 +257,15 @@ import Recaps from "./Recaps.astro";
             ? Math.round((totalScrobbles / totalPossibleDays) * 10) / 10
             : 0;
 
-        document.getElementById("stat-total-scrobbles")!.textContent = totalScrobbles.toLocaleString();
-        document.getElementById("stat-year-scrobbles")!.textContent = currentYearScrobbles.toLocaleString();
-        document.getElementById("stat-active-days")!.textContent = `${activeDays}`;
-        document.getElementById("stat-daily-avg")!.textContent = `${dailyAverage}`;
+        const totalEl = document.getElementById("stat-total-scrobbles");
+        const yearEl = document.getElementById("stat-year-scrobbles");
+        const activeEl = document.getElementById("stat-active-days");
+        const avgEl = document.getElementById("stat-daily-avg");
+
+        if (totalEl) totalEl.textContent = totalScrobbles.toLocaleString();
+        if (yearEl) yearEl.textContent = currentYearScrobbles.toLocaleString();
+        if (activeEl) activeEl.textContent = `${activeDays}`;
+        if (avgEl) avgEl.textContent = `${dailyAverage}`;
       } catch (err) {
         console.error("Failed to compute dashboard stats:", err);
       }

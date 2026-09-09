@@ -131,7 +131,8 @@ async function runManualRefresh(): Promise<void> {
     } else {
       showUpdateToast('Already up to date');
     }
-  } catch {
+  } catch (err) {
+    console.error('[DataRefresh] Manual pull-to-refresh failed:', err);
     showUpdateToast('Refresh failed');
   } finally {
     suppressUpdateToasts = false;

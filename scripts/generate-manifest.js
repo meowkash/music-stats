@@ -40,7 +40,8 @@ function readJson(file) {
   if (!fs.existsSync(full)) return null;
   try {
     return JSON.parse(fs.readFileSync(full, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error(`[GenerateManifest] Failed to parse JSON from ${full}:`, err);
     return null;
   }
 }

@@ -129,7 +129,7 @@ function main() {
   console.log(`Parsed database. Unique artists: ${artists.length}, Unique albums: ${albums.length}, Unique tracks: ${tracks.length}`);
 
   const overrides = loadOverrides();
-  const { canonicalArtists, rawToCanonical, trackToCanonical, parseReport } = buildArtistAttribution(artists, overrides, artistCounts, tracks, trackCounts);
+  const { canonicalArtists, rawToCanonical, trackToCanonical } = buildArtistAttribution(artists, overrides, artistCounts, tracks, trackCounts);
   console.log(`Built canonical artist graph: ${canonicalArtists.length} canonical entities`);
 
   for (let trackId = 0; trackId < tracks.length; trackId++) {
@@ -164,7 +164,7 @@ function main() {
     const dayTracks = Object.entries(dailyRecords[dateStr])
       .map(([tId, count]) => {
         const trackId = parseInt(tId, 10);
-        const [trackName, artistId, albumId] = tracks[trackId];
+        const [, artistId, albumId] = tracks[trackId];
         
         yearlyStats[yearStr].tracks[trackId] = (yearlyStats[yearStr].tracks[trackId] || 0) + count;
         for (const cId of trackToCanonical[trackId] ?? rawToCanonical[artistId] ?? [artistId]) {

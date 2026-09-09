@@ -1,5 +1,3 @@
-import type { CategoryTab } from '../types/music';
-
 /**
  * Absolute colours (not `var()`) so animations can interpolate them.
  * Keep in sync with the --accent-cat-* tokens in Layout.astro.

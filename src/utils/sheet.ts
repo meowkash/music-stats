@@ -29,6 +29,8 @@ export function createSheet(options: SheetOptions): SheetController | null {
   const panel = document.getElementById(`${id}Panel`);
   const backdrop = document.getElementById(`${id}Backdrop`);
   if (!panel || !backdrop) return null;
+  const panelEl = panel;
+  const backdropEl = backdrop;
 
   const scrollContainer =
     options.scrollContainer ?? (document.getElementById(`${id}Scroll`) as HTMLElement | null);
@@ -39,20 +41,16 @@ export function createSheet(options: SheetOptions): SheetController | null {
     if (open) return;
     open = true;
 
-    // Guarantee the off-screen frame is committed before .visible flips the
-    // transform — otherwise Safari can skip the entrance transition entirely,
-    // which reads as a delayed "pop in".
-    panel.style.transform = '';
-    backdrop.style.opacity = '';
-    panel.classList.remove('visible');
-    backdrop.classList.remove('visible');
-    void panel.offsetWidth;
+    panelEl.style.transform = '';
+    backdropEl.style.opacity = '';
+    panelEl.classList.remove('visible');
+    backdropEl.classList.remove('visible');
+    void panelEl.offsetWidth;
 
-    panel.classList.add('visible');
-    backdrop.classList.add('visible');
+    panelEl.classList.add('visible');
+    backdropEl.classList.add('visible');
     document.body.classList.add(bodyClass);
 
-    // Fire content hooks after the slide has started.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => onOpen?.());
     });
@@ -61,18 +59,15 @@ export function createSheet(options: SheetOptions): SheetController | null {
   function closeSheet(): void {
     if (!open) return;
     open = false;
-    panel.classList.remove('visible');
-    backdrop.classList.remove('visible');
+    panelEl.classList.remove('visible');
+    backdropEl.classList.remove('visible');
     document.body.classList.remove(bodyClass);
-    // Keep any in-flight drag offset so dismiss continues from the finger.
-    // Clearing after the transition would be nicer, but transform '' while
-    // .visible is gone targets translateY(100%) and CSS animates from here.
-    panel.style.transform = '';
-    backdrop.style.opacity = '';
+    panelEl.style.transform = '';
+    backdropEl.style.opacity = '';
     onClose?.();
   }
 
-  backdrop.addEventListener('click', closeSheet);
+  backdropEl.addEventListener('click', closeSheet);
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && open) closeSheet();
@@ -80,9 +75,9 @@ export function createSheet(options: SheetOptions): SheetController | null {
 
   if (scrollContainer) {
     bindSwipeDismiss({
-      panel,
+      panel: panelEl,
       scrollContainer,
-      backdrop,
+      backdrop: backdropEl,
       onDismiss: closeSheet,
     });
   }
@@ -91,7 +86,7 @@ export function createSheet(options: SheetOptions): SheetController | null {
     open: openSheet,
     close: closeSheet,
     isOpen: () => open,
-    panel,
-    backdrop,
+    panel: panelEl,
+    backdrop: backdropEl,
   };
 }

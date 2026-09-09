@@ -92,7 +92,8 @@ async function encodeAt(bitmap: ImageBitmap, px: number): Promise<Response | nul
 
     const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.8 });
     return new Response(blob, { headers: { 'Content-Type': 'image/webp' } });
-  } catch {
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Failed to encode bitmap at size', px, err);
     return null;
   }
 }
@@ -111,7 +112,8 @@ async function reencode(response: Response, px: number): Promise<Response> {
     const encoded = await encodeAt(bitmap, px);
     bitmap.close();
     return encoded ?? response;
-  } catch {
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Failed to re-encode image response:', err);
     return response;
   }
 }
@@ -129,7 +131,8 @@ async function quotaHeadroomBytes(): Promise<number> {
     const { usage = 0, quota = 0 } = await navigator.storage.estimate();
     if (!quota) return Number.POSITIVE_INFINITY;
     return quota * MAX_QUOTA_FRACTION - usage;
-  } catch {
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Storage quota estimation failed:', err);
     return Number.POSITIVE_INFINITY;
   }
 }
@@ -286,8 +289,8 @@ export async function prefetchArtwork(manifest: Manifest): Promise<void> {
 
     if (priorityDone && restDone) dispatchProgress({ ...progress, stage: 'done' });
     recordProgress(manifest, progress.cached);
-  } catch {
-    /* cache unavailable — images still load straight from the network */
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Prefetch pipeline encountered an error:', err);
   } finally {
     running = false;
   }
@@ -330,7 +333,7 @@ export async function upgradeHeroArtwork(url: string | null): Promise<void> {
 
     const cache = await caches.open(IMAGE_CACHE);
     await cache.put(url, await reencode(response, HERO_UPGRADE_PX));
-  } catch {
-    // Original may not exist for every hash — the 512 entry stays in place.
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Failed to upgrade hero artwork for', url, err);
   }
 }

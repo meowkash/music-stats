@@ -65,8 +65,8 @@ export function navigateToTab(tab: string): void {
 
   try {
     localStorage.setItem('last-music-stats-tab', tab);
-  } catch {
-    // localStorage unavailable
+  } catch (err) {
+    console.warn('[Tabs] Failed to persist active tab to localStorage:', err);
   }
 
   window.dispatchEvent(new CustomEvent('tab-navigated', { detail: { tab } }));
@@ -80,7 +80,7 @@ export function restoreTabFromStorage(): void {
       applyNavButtonStates(lastTab);
       applyTabAccent(lastTab);
     }
-  } catch {
-    // localStorage unavailable
+  } catch (err) {
+    console.warn('[Tabs] Failed to restore active tab from localStorage:', err);
   }
 }

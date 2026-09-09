@@ -162,7 +162,8 @@ async function downloadFile(
 
   try {
     return [file.hash, JSON.parse(text)];
-  } catch {
+  } catch (err) {
+    console.error(`[DataStore] Failed to parse JSON for file ${file.path} (${file.hash}):`, err);
     return null;
   }
 }
@@ -230,8 +231,8 @@ export async function stageUpdate(): Promise<number> {
     dispatch<Manifest>('data-manifest-ready', remote);
 
     return changed.length;
-  } catch {
-    // Offline or the manifest is unreachable — the stored generation stands.
+  } catch (err) {
+    console.warn('[DataStore] Stage remote update failed; continuing with active stored generation:', err);
     return 0;
   } finally {
     staging = false;
@@ -305,8 +306,8 @@ export async function ensureInitialGeneration(): Promise<void> {
     activeManifest = remote;
     writeBootHint({ generation: remote.generation, complete: true, artworkCached: 0 });
     dispatch<Manifest>('data-manifest-ready', remote);
-  } catch {
-    /* stays cold; the app falls back to direct network reads */
+  } catch (err) {
+    console.warn('[DataStore] Initial generation seed failed; falling back to direct network reads:', err);
   }
 }
 

@@ -204,30 +204,33 @@ export function rollupTopCounts(
   return {
     artists: Object.entries(artistCounts)
       .map(([id, count]) => ({ id: parseInt(id, 10), name: artistDisplayName(meta, parseInt(id, 10)), count }))
-      .sort((a, b) => b.count - a.count),
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     tracks: Object.entries(songCounts)
       .map(([id, count]) => {
-        const [trackName, artistId, albumId] = meta.tracks[parseInt(id, 10)];
+        const track = meta.tracks[parseInt(id, 10)];
+        if (!track) return null;
+        const [trackName, artistId, albumId] = track;
         return {
           id: parseInt(id, 10),
           name: trackName,
-          artistName: meta.artists[artistId],
-          albumName: meta.albums[albumId],
+          artistName: meta.artists[artistId] || 'Unknown Artist',
+          albumName: meta.albums[albumId] || 'Unknown Album',
           artistId,
           albumId,
           count,
         };
       })
-      .sort((a, b) => b.count - a.count),
+      .filter((t): t is NonNullable<typeof t> => t !== null)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     albums: Object.entries(albumCounts)
       .map(([id, data]) => ({
         id: parseInt(id, 10),
-        name: meta.albums[parseInt(id, 10)],
-        artistName: meta.artists[data.artistId],
+        name: meta.albums[parseInt(id, 10)] || 'Unknown Album',
+        artistName: meta.artists[data.artistId] || 'Unknown Artist',
         artistId: data.artistId,
         count: data.count,
       }))
-      .sort((a, b) => b.count - a.count),
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
   };
 }
 

@@ -27,7 +27,8 @@ function loadJson(file, fallback) {
   if (!fs.existsSync(file)) return fallback;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error(`[ReportArtworkCoverage] Failed to parse JSON from ${file}:`, err);
     return fallback;
   }
 }

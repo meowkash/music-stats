@@ -5,11 +5,9 @@ import {
   getArtworkUrl,
   getArtistArtworkUrl,
   getArtworkThumbHTML,
-  getArtworkFallbackHTML,
   getArtworkFallbackIcon,
   getColorForUrl,
   getBottomColorForUrl,
-  initArtworkImages,
   initOverlayAlbumArtwork,
 } from './ui';
 import { getGlowStyle } from './theme';
@@ -124,7 +122,7 @@ export function buildOverlayPayload(
       : [];
     imgUrl = getArtistArtworkUrl(name, artworkCache, artworkFallbackNames);
     artistNameForArtworkLookup = name;
-    metadataStr = `${sortedTracks.length} Songs • ${(artistInfo?.scrobbles ?? 0).toLocaleString()} Plays`;
+    metadataStr = `${(sortedTracks?.length ?? 0)} Songs • ${(artistInfo?.scrobbles ?? 0).toLocaleString()} Plays`;
   } else if (type === 'album') {
     const albumInfo = catalogData.albums[id];
     name = albumInfo ? albumInfo.name : dictionary.albums[id] || 'Unknown Album';
@@ -132,8 +130,8 @@ export function buildOverlayPayload(
     subtitle = albumInfo ? albumInfo.artistName : dictionary.artists[artistId] || 'Unknown Artist';
     imgUrl = getArtworkUrl('album', name, subtitle, name, artworkCache);
     if (albumInfo?.tracks) {
-      sortedTracks = Object.values(albumInfo.tracks).sort(
-        (a: any, b: any) => b.count - a.count,
+      sortedTracks = (Object.values(albumInfo.tracks) as { name: string; count: number }[]).sort(
+        (a, b) => b.count - a.count,
       );
     }
     artistNameForArtworkLookup = subtitle;

@@ -74,7 +74,7 @@ export function artworkContentHash(url: string | null): string {
   if (!url) return '';
 
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, 'https://local.placeholder');
     const path = decodeURIComponent(parsed.pathname);
 
     const mzThumb = path.match(/\/image\/thumb\/(.+?)\/\d+x\d+bb?\.(jpg|png|webp)$/i);
@@ -92,7 +92,8 @@ export function artworkContentHash(url: string | null): string {
       .replace(/\/\d+s\//g, '/');
 
     return `path:${stripped}`;
-  } catch {
+  } catch (err) {
+    console.warn('[Artwork] Failed to extract content hash for url:', url, err);
     return artworkIdentity(url);
   }
 }

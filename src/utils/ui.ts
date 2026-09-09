@@ -357,22 +357,6 @@ export function initOverlayAlbumArtwork(container: ParentNode = document) {
   });
 }
 
-function clearArtworkWrapperState(wrapper: HTMLElement | null) {
-  if (!wrapper) return;
-  wrapper.classList.remove('artwork-loaded', 'artwork-error');
-  wrapper.querySelector('.artwork-shimmer')?.remove();
-}
-
-function showArtworkWrapperShimmer(wrapper: HTMLElement | null, beforeEl: Node) {
-  if (!wrapper) return;
-  wrapper.classList.add('artwork-loading');
-  if (!wrapper.querySelector('.artwork-shimmer')) {
-    const shimmer = document.createElement('div');
-    shimmer.className = 'artwork-shimmer';
-    shimmer.setAttribute('aria-hidden', 'true');
-    wrapper.insertBefore(shimmer, beforeEl);
-  }
-}
 
 export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean = true): string {
   const showThumb = data.showThumb !== false;
@@ -444,10 +428,13 @@ onPathsUpdated(['/data/colors.json'], ({ data }) => {
 
 function urlVariants(url: string): string[] {
   let cleanUrl = url;
-  try {
+  if (URL.canParse(url)) {
     const parsed = new URL(url);
     cleanUrl = parsed.origin + parsed.pathname;
-  } catch { /* ignore */ }
+  } else if (typeof window !== 'undefined' && URL.canParse(url, window.location.href)) {
+    const parsed = new URL(url, window.location.href);
+    cleanUrl = parsed.origin === window.location.origin ? parsed.pathname : parsed.origin + parsed.pathname;
+  }
 
   const variants = new Set<string>([cleanUrl]);
   variants.add(cleanUrl.replace('/500x500/', '/300x300/'));

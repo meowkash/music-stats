@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { buildArtistAttribution, loadOverrides, parseArtistCredits } from './artist-resolve.js';
+import { buildArtistAttribution, loadOverrides } from './artist-resolve.js';
 
 const META_PATH = path.resolve('public/data/meta.json');
 const REPORT_PATH = path.resolve('src/data/artist-parsing-report.json');
@@ -20,7 +20,6 @@ function main() {
 
   const topCanonical = canonicalArtists
     .map((name, id) => {
-      let count = 0;
       for (let rawId = 0; rawId < meta.artists.length; rawId++) {
         if ((rawToCanonical[rawId] ?? []).includes(id)) {
           // approximate from catalog if available

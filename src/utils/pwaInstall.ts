@@ -51,14 +51,28 @@ function hideInstallUi(): void {
   getInstallBanner()?.classList.add('hidden');
 }
 
+const PWA_DISMISSED_KEY = 'pwa-install-dismissed';
+
+function isInstallDismissed(): boolean {
+  try {
+    return localStorage.getItem(PWA_DISMISSED_KEY) === '1';
+  } catch (err) {
+    console.warn('[PWA] Failed to read install dismissed state:', err);
+    return false;
+  }
+}
+
+function setInstallDismissed(): void {
+  try {
+    localStorage.setItem(PWA_DISMISSED_KEY, '1');
+  } catch (err) {
+    console.warn('[PWA] Failed to persist install dismissed state:', err);
+  }
+}
+
 function shouldOfferInstall(): boolean {
   if (isStandalonePwa()) return false;
-  try {
-    if (localStorage.getItem('pwa-install-dismissed') === '1') return false;
-  } catch {
-    /* ignore */
-  }
-  return true;
+  return !isInstallDismissed();
 }
 
 export function initPwaInstall(): void {
@@ -68,31 +82,19 @@ export function initPwaInstall(): void {
     const mode = banner?.dataset.mode;
 
     if (mode === 'manual') {
-      try {
-        localStorage.setItem('pwa-install-dismissed', '1');
-      } catch {
-        /* ignore */
-      }
+      setInstallDismissed();
       hideInstallUi();
       return;
     }
 
     const outcome = await promptPwaInstall();
     if (outcome === 'dismissed') {
-      try {
-        localStorage.setItem('pwa-install-dismissed', '1');
-      } catch {
-        /* ignore */
-      }
+      setInstallDismissed();
     }
   });
 
   document.getElementById('pwa-install-dismiss')?.addEventListener('click', () => {
-    try {
-      localStorage.setItem('pwa-install-dismissed', '1');
-    } catch {
-      /* ignore */
-    }
+    setInstallDismissed();
     hideInstallUi();
   });
 

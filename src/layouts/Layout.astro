@@ -476,8 +476,7 @@ const washStyles = [
 		--duration-overlay: var(--duration-normal);
 	}
 
-	/* Safari in browser mode doesn't report bottom safe-area, but the toolbar
-	   still overlaps fixed UI — give content more clearance than standalone. */
+	/* Clearances for mobile browser toolbars when not in standalone PWA mode */
 	@media not all and (display-mode: standalone) {
 		:root {
 			--nav-bar-gap: 10px;
@@ -578,9 +577,7 @@ const washStyles = [
 	/* ── Shared bottom sheet / side panel ────────────────────────────────
 	   Used by the entity detail overlay and the statistics top-lists sheet. */
 
-	/* Canonical sheet control (back / close). Previously declared separately in
-	   DetailOverlay.astro and StatsTopSheet.astro with different sizes and
-	   fills, so the two sheets read as different surfaces. */
+	/* Canonical sheet control (back / close) */
 	.nav-circle-btn {
 		width: 36px;
 		height: 36px;
@@ -618,8 +615,7 @@ const washStyles = [
 		position: fixed;
 		inset: 0;
 		z-index: var(--z-overlay-backdrop);
-		/* No backdrop-filter here: animating blur+opacity is a common cause of
-		   the sheet feeling a beat behind the finger / tap. Dim alone is enough. */
+		/* Dim background without backdrop-filter to prevent animation hitching */
 		background: rgba(0, 0, 0, 0.55);
 		opacity: 0;
 		pointer-events: none;
@@ -728,11 +724,6 @@ const washStyles = [
 	body {
 		width: 100%;
 		height: 100%;
-		/* 
-		@media all and (display-mode: standalone) {
-			height: 10lvh;
-		} */
-
 		background-color: var(--bg-dark);
 		color: var(--text-primary);
 		font-family: var(--font-body);
@@ -761,10 +752,7 @@ const washStyles = [
 		transition: var(--transition-smooth);
 	}
 
-	/* A backdrop-filtered surface has to re-blur what is behind it on every
-	   frame the content under it moves. Drop glass-card blur during the deck
-	   slide — but keep the nav bar's blur. Stripping nav blur made the bar
-	   flash semi-transparent in browser mode (its fill is only ~38% opaque). */
+	/* Disable expensive backdrop blur on glass cards while dragging to maintain 120fps */
 	.view-deck.tab-dragging .glass-card {
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;

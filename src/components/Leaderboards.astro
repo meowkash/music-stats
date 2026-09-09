@@ -119,6 +119,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   .search-bar-row {
     display: flex;
     align-items: center;
+    /* Isolate toggle-reveal geometry updates during 120Hz swipe gestures */
+    contain: layout style;
     /* Gap is folded into the toggle's padding so width animates cleanly. */
     gap: 0;
     --toggle-reveal: 0;
@@ -791,7 +793,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
             );
           }
 
-          itemsList.sort((a, b) => b.count - a.count);
+          itemsList.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
           itemsByTab[tab] = itemsList;
         }
 

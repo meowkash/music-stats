@@ -37,7 +37,8 @@ export function readBootHint(): BootHint | null {
   try {
     const raw = localStorage.getItem(BOOT_HINT_KEY);
     return raw ? (JSON.parse(raw) as BootHint) : null;
-  } catch {
+  } catch (err) {
+    console.warn('[Generations] Failed to parse boot hint from localStorage:', err);
     return null;
   }
 }
@@ -45,8 +46,8 @@ export function readBootHint(): BootHint | null {
 export function writeBootHint(hint: BootHint): void {
   try {
     localStorage.setItem(BOOT_HINT_KEY, JSON.stringify(hint));
-  } catch {
-    /* storage disabled — the IDB manifest is still authoritative */
+  } catch (err) {
+    console.warn('[Generations] Failed to write boot hint to localStorage:', err);
   }
 }
 
@@ -79,7 +80,8 @@ export async function hashText(text: string): Promise<string | null> {
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
       .slice(0, 16);
-  } catch {
+  } catch (err) {
+    console.warn('[Generations] SHA-256 hash computation failed:', err);
     return null;
   }
 }

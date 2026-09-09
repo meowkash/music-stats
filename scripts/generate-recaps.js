@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { readScrobbles } from './scrobble-source.js';
-import { buildArtistAttribution, loadOverrides, parseArtistCredits } from './artist-resolve.js';
+import { buildArtistAttribution, loadOverrides } from './artist-resolve.js';
 import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { canonicalizeTag, genreDisplayName, tagWeight } from './genre-taxonomy.js';
 
@@ -49,7 +49,8 @@ function readJson(file, fallback = null) {
   if (!fs.existsSync(file)) return fallback;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error(`[GenerateRecaps] Failed to parse JSON from ${file}:`, err);
     return fallback;
   }
 }

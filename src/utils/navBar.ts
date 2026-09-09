@@ -40,6 +40,8 @@ export function initNavBar(): void {
   const highlight = document.getElementById('navSliderHighlight');
   const buttons = [...document.querySelectorAll('.tab-btn')] as HTMLElement[];
   if (!bar || !navZone || !highlight || buttons.length === 0) return;
+  const barEl = bar;
+  const navZoneEl = navZone;
 
   const deck = createDeckSlider();
   const paint = createCssPaintCache();
@@ -157,7 +159,7 @@ export function initNavBar(): void {
 
     // Hand control back in one paint: classes first, then clear inline overrides
     // that exactly match the class-driven end state.
-    bar.classList.remove('nav-animating');
+    barEl.classList.remove('nav-animating');
     navigateToTab(TAB_ORDER[index]);
     deck?.end();
     clearButtonPaint();
@@ -169,7 +171,7 @@ export function initNavBar(): void {
 
   function animateTo(index: number, durationMs: number) {
     cancelTween?.();
-    bar.classList.add('nav-animating');
+    barEl.classList.add('nav-animating');
     beginBackgroundPaint();
     deck?.begin();
 
@@ -309,16 +311,16 @@ export function initNavBar(): void {
       cancelTween?.();
       cancelTween = null;
       track.measure();
-      bar.classList.add('nav-animating', 'nav-dragging');
+      barEl.classList.add('nav-animating', 'nav-dragging');
       beginBackgroundPaint();
       deck?.begin();
 
-      const rect = bar.getBoundingClientRect();
+      const rect = barEl.getBoundingClientRect();
       if (vertical) {
-        barOrigin = rect.top + bar.clientTop;
+        barOrigin = rect.top + barEl.clientTop;
         grabOffset = track.centerAt(fraction) - (startY - barOrigin);
       } else {
-        barOrigin = rect.left + bar.clientLeft;
+        barOrigin = rect.left + barEl.clientLeft;
         grabOffset = track.centerAt(fraction) - (startX - barOrigin);
       }
     }
@@ -345,7 +347,7 @@ export function initNavBar(): void {
     if (!engaged) return;
     engaged = false;
 
-    bar.classList.remove('nav-dragging');
+    barEl.classList.remove('nav-dragging');
     setTimeout(() => {
       suppressClick = false;
     }, 0);
@@ -395,9 +397,9 @@ export function initNavBar(): void {
     selectTab(Math.min(Math.max(activeIndex + direction, 0), buttons.length - 1));
   }
 
-  navZone.addEventListener('touchstart', onTouchStart, { passive: true });
-  navZone.addEventListener('touchmove', onTouchMove, { passive: false });
-  navZone.addEventListener('touchend', onTouchEnd, { passive: true });
-  navZone.addEventListener('touchcancel', onTouchEnd, { passive: true });
-  navZone.addEventListener('wheel', onWheel, { passive: false });
+  navZoneEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  navZoneEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  navZoneEl.addEventListener('touchend', onTouchEnd, { passive: true });
+  navZoneEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+  navZoneEl.addEventListener('wheel', onWheel, { passive: false });
 }

@@ -31,9 +31,10 @@ export async function loadBestArtworkSource(url: string): Promise<string | null>
       void upgradeHeroArtwork(loaded);
       return loaded;
     } catch {
-      /* try next source */
+      // Candidate failed to load; attempt next resolution candidate
     }
   }
+  console.warn('[OverlayArtwork] All candidate sources failed to preload for:', url);
   return null;
 }
 
