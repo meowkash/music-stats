@@ -20,14 +20,16 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       <button class="range-btn" data-range="custom">Custom</button>
     </div>
 
-    <div class="custom-date-inputs hidden" id="customDateInputs">
-      <div class="date-input-group">
-        <label for="startDate">From</label>
-        <input type="date" id="startDate" class="glass-input" />
-      </div>
-      <div class="date-input-group">
-        <label for="endDate">To</label>
-        <input type="date" id="endDate" class="glass-input" />
+    <div class="custom-date-wrapper" id="customDateWrapper">
+      <div class="custom-date-inputs hidden" id="customDateInputs">
+        <div class="date-input-group">
+          <label for="startDate">From</label>
+          <input type="date" id="startDate" class="glass-input" />
+        </div>
+        <div class="date-input-group">
+          <label for="endDate">To</label>
+          <input type="date" id="endDate" class="glass-input" />
+        </div>
       </div>
     </div>
   </div>
@@ -42,21 +44,23 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     </div>
   </div>
 
-  <!-- Search + artist mode toggle -->
-  <div class="search-bar-row shrink-0">
-    <div class="search-bar-wrapper">
-      <svg
-        class="search-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
+  <!-- Search + toggles -->
+  <div class="search-bar-row shrink-0" id="searchBarRow">
+    <div class="search-container" id="searchContainer">
+      <button class="search-btn" id="leaderboardSearchBtn" aria-label="Search">
+        <svg
+          class="search-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </button>
       <input
         type="text"
         id="leaderboardSearch"
@@ -64,18 +68,37 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         placeholder="Search entries..."
       />
     </div>
-    <div class="artist-ranking-toggle" id="artistRankingToggle">
-      <span class="unified-label">Unified</span>
-      <button
-        type="button"
-        class="toggle-switch active"
-        id="artistRankingSwitch"
-        role="switch"
-        aria-checked="true"
-        aria-label="Unified artist rankings"
-      >
-        <span class="toggle-knob"></span>
-      </button>
+    
+    <div class="toggles-wrapper" id="leaderboardToggles">
+      <!-- Unified Artist Toggle -->
+      <div class="ranking-toggle artist-ranking-toggle" id="artistRankingToggle">
+        <span class="unified-label">Unified</span>
+        <button
+          type="button"
+          class="toggle-switch active"
+          id="artistRankingSwitch"
+          role="switch"
+          aria-checked="true"
+          aria-label="Unified artist rankings"
+        >
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+
+      <!-- Playtime Toggle -->
+      <div class="ranking-toggle playtime-toggle" id="playtimeRankingToggle">
+        <span class="unified-label">Playtime</span>
+        <button
+          type="button"
+          class="toggle-switch"
+          id="playtimeRankingSwitch"
+          role="switch"
+          aria-checked="false"
+          aria-label="Sort by playtime"
+        >
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -104,7 +127,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
 <style>
   .leaderboard-container {
-    /* panel-container handles layout */
+    padding-top: 4px; /* Reduce padding to save vertical real-estate */
+    gap: 12px !important;
   }
 
   .leaderboard-tab-group {
@@ -119,13 +143,18 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   .search-bar-row {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    position: relative;
     /* Isolate toggle-reveal geometry updates during 120Hz swipe gestures */
     contain: layout style;
+    overflow: hidden;
     /* Gap is folded into the toggle's padding so width animates cleanly. */
     gap: 0;
     --toggle-reveal: 0;
     --search-accent: var(--accent-cat-songs);
     --search-glow: var(--accent-cat-songs-glow);
+    height: 40px;
+    width: 100%;
   }
 
   .search-bar-row .search-bar-wrapper {
@@ -194,11 +223,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     transition:
       background-color var(--duration-normal) var(--ios-spring),
       border-color var(--duration-normal) var(--ios-spring);
+    will-change: background-color, border-color;
   }
 
   .toggle-switch.active {
-    background: rgba(249, 115, 22, 0.35);
-    border-color: rgba(249, 115, 22, 0.55);
+    background: rgba(249, 115, 22, 0.45);
+    background: rgb(from var(--search-accent) r g b / 0.45);
+    border-color: rgba(249, 115, 22, 0.65);
+    border-color: rgb(from var(--search-accent) r g b / 0.65);
   }
 
   .toggle-knob {
@@ -211,6 +243,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     background: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     transition: transform var(--duration-normal) var(--ios-spring);
+    will-change: transform;
   }
 
   .toggle-switch.active .toggle-knob {
@@ -250,14 +283,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     display: flex;
     flex-direction: column;
     gap: 12px;
+    margin-bottom: -8px; /* Pull the tabs even closer */
   }
 
   .quick-ranges {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    padding-bottom: 12px;
   }
 
   .range-btn {
@@ -296,18 +328,33 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   /* Custom date inputs */
-  .custom-date-inputs {
-    display: flex;
-    gap: 16px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    padding: 12px;
-    border-radius: 12px;
-    animation: fadeIn var(--duration-normal) var(--ios-spring);
+  .custom-date-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--duration-normal) var(--ios-spring);
+  }
+  
+  .custom-date-wrapper.is-open {
+    grid-template-rows: 1fr;
   }
 
-  .custom-date-inputs.hidden {
-    display: none;
+  .custom-date-inputs {
+    overflow: hidden;
+    display: flex;
+    gap: 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 0 12px;
+    border-radius: 12px;
+    transition: padding var(--duration-normal) var(--ios-spring), 
+                border-color var(--duration-normal) var(--ios-spring),
+                background var(--duration-normal) var(--ios-spring);
+  }
+
+  .custom-date-wrapper.is-open .custom-date-inputs {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.04);
   }
 
   @keyframes fadeIn {
@@ -391,27 +438,73 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   /* Search bar */
-  .search-bar-wrapper {
-    position: relative;
+  .search-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    /* Hardware accelerated, perfectly smooth 120fps reveal */
+    clip-path: inset(0 calc(100% - 40px) 0 0 round 20px);
+    transition: clip-path var(--duration-normal) var(--ios-spring);
     width: 100%;
+    height: 40px;
+    will-change: clip-path;
+    z-index: 5;
+    pointer-events: none;
   }
 
-  .search-icon {
+  .search-container.is-searching {
+    clip-path: inset(0 0 0 0 round 20px);
+    pointer-events: auto;
+  }
+
+  .search-btn {
     position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 16px;
-    height: 16px;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    transition: background var(--duration-normal) var(--ios-spring), border-color var(--duration-normal) var(--ios-spring), color var(--duration-normal) var(--ios-spring);
     color: var(--text-muted);
+    pointer-events: auto; /* Always clickable since container has pointer-events: none */
+  }
+  
+  .search-container.is-searching .search-btn {
+    background: transparent;
+    border-color: transparent;
     pointer-events: none;
-    transition: color var(--duration-normal) var(--ios-spring);
+    color: var(--search-accent);
+  }
+
+  .search-btn .search-icon {
+    width: 18px;
+    height: 18px;
   }
 
   .search-input {
     width: 100%;
-    padding-left: 38px;
-    background: rgba(0, 0, 0, 0.15);
+    height: 100%;
+    padding-left: 40px;
+    opacity: 0;
+    pointer-events: none;
+    /* Use !important to override .glass-input */
+    background: rgba(0, 0, 0, 0.15) !important;
+    border-radius: 20px !important;
+    transition: opacity var(--duration-normal) var(--ios-spring);
+  }
+
+  .search-container.is-searching .search-input {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   /* Category accent instead of the global pink glass-input focus. */
@@ -420,8 +513,27 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     box-shadow: 0 0 12px var(--search-glow);
   }
 
-  .search-bar-wrapper:focus-within .search-icon {
-    color: var(--search-accent);
+  .toggles-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    white-space: nowrap;
+    transition: transform var(--duration-normal) var(--ios-spring), opacity var(--duration-normal) var(--ios-spring);
+    will-change: transform, opacity;
+  }
+
+  .search-container.is-searching ~ .toggles-wrapper {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(30px);
+  }
+
+  .ranking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding-left: 12px;
   }
 
   .desktop-artist-toggle {
@@ -559,6 +671,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const ARTIST_MODE_KEY = "artistRankingMode";
     let artistRankingMode: ArtistRollupMode =
       (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw" ? "raw" : "canonical";
+    const PLAYTIME_MODE_KEY = "playtimeRankingMode";
+    let playtimeMode = localStorage.getItem(PLAYTIME_MODE_KEY) === "true";
     const CHUNK_SIZE = 50;
     let searchQuery = "";
     /** Items keyed by tab for the current range/search snapshot. */
@@ -569,11 +683,15 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     const viewportEl = document.getElementById("leaderboardViewport") as HTMLDivElement;
     const trackEl = document.getElementById("leaderboardListTrack") as HTMLDivElement;
-    const customDateContainer = document.getElementById("customDateInputs") as HTMLDivElement;
+    const customDateWrapper = document.getElementById("customDateWrapper") as HTMLDivElement;
     const startDateInput = document.getElementById("startDate") as HTMLInputElement;
     const endDateInput = document.getElementById("endDate") as HTMLInputElement;
+    const searchContainer = document.getElementById("searchContainer") as HTMLDivElement;
+    const searchBtn = document.getElementById("leaderboardSearchBtn") as HTMLButtonElement;
     const searchInput = document.getElementById("leaderboardSearch") as HTMLInputElement;
     const searchBarRow = document.querySelector(".search-bar-row") as HTMLElement;
+    const playtimeRankingToggle = document.getElementById("playtimeRankingToggle") as HTMLDivElement;
+    const playtimeRankingSwitch = document.getElementById("playtimeRankingSwitch") as HTMLButtonElement;
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
     const desktopArtistRankingSwitch = document.getElementById(
@@ -622,6 +740,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         console.error("Failed to load dictionary metadata:", err);
         return null;
       }
+    }
+
+    function formatPlaytime(ms: number): string {
+      const hrs = ms / 3600000;
+      return `${hrs.toFixed(1).replace(/\.0$/, '')} hrs`;
     }
 
     function renderRow(tab: RankingTab, item: RankItem, index: number): string {
@@ -677,7 +800,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           subtitle: "",
           infoHtml,
           imgUrl: imgUrl || null,
-          count: item.count,
+          count: playtimeMode ? formatPlaytime(item.playtimeMs) : item.count,
           artistCatalog,
         },
         true,
@@ -793,7 +916,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
             );
           }
 
-          itemsList.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+          itemsList.sort((a, b) => playtimeMode ? (b.playtimeMs - a.playtimeMs || a.name.localeCompare(b.name)) : (b.count - a.count || a.name.localeCompare(b.name)));
           itemsByTab[tab] = itemsList;
         }
 
@@ -914,6 +1037,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         desktopArtistRankingSwitch.classList.toggle("active", isUnified);
         desktopArtistRankingSwitch.setAttribute("aria-checked", String(isUnified));
       }
+      playtimeRankingSwitch.classList.toggle("active", playtimeMode);
+      playtimeRankingSwitch.setAttribute("aria-checked", String(playtimeMode));
     }
 
     function applyActiveTab(
@@ -1035,9 +1160,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
         activeRange = range;
         if (range === "custom") {
-          customDateContainer.classList.remove("hidden");
+          customDateWrapper.classList.add("is-open");
         } else {
-          customDateContainer.classList.add("hidden");
+          customDateWrapper.classList.remove("is-open");
           updateLeaderboard();
         }
       });
@@ -1065,6 +1190,24 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     desktopArtistRankingSwitch?.addEventListener("click", () => {
       setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
+    });
+
+    playtimeRankingSwitch.addEventListener("click", () => {
+      playtimeMode = !playtimeMode;
+      localStorage.setItem(PLAYTIME_MODE_KEY, String(playtimeMode));
+      syncArtistRankingToggle();
+      updateLeaderboard();
+    });
+
+    searchBtn.addEventListener("click", () => {
+      searchContainer.classList.add("is-searching");
+      searchInput.focus();
+    });
+
+    searchInput.addEventListener("blur", () => {
+      if (!searchInput.value.trim()) {
+        searchContainer.classList.remove("is-searching");
+      }
     });
 
     document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((btn) => {

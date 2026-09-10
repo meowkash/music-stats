@@ -296,20 +296,32 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
 
     // Selection updates immediately; the glide catches up visually.
     currentIndex = index;
+    
+    // 1. Prepare start state (color snaps immediately to target)
+    highlightEl.style.transition = 'none';
     paintTo(fromRect, index);
-
-    cancel = rafTween(
-      0,
-      1,
-      durationMs,
-      (t) => {
-        paintTo(lerpRect(fromRect, toRect, t), index);
-      },
-      () => {
-        cancel = null;
-        paintTo(toRect, index);
-      },
-    );
+    
+    // 2. Force layout flush to apply start state
+    void highlightEl.offsetWidth;
+    
+    // 3. Enable CSS transitions
+    highlightEl.style.transition = `transform ${durationMs}ms var(--ios-spring), width ${durationMs}ms var(--ios-spring), height ${durationMs}ms var(--ios-spring)`;
+    
+    // 4. Set final state
+    paintTo(toRect, index);
+    
+    // 5. Cleanup transition after it finishes
+    let cleaned = false;
+    cancel = () => {
+      if (cleaned) return;
+      cleaned = true;
+      highlightEl.style.transition = 'none';
+      cancel = null;
+    };
+    
+    setTimeout(() => {
+      if (cancel) cancel();
+    }, durationMs + 50);
 
     onSync?.(btn);
   }

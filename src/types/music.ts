@@ -1,7 +1,7 @@
 export interface MetaData {
   artists: string[];
   albums: string[];
-  tracks: [string, number, number][];
+  tracks: [string, number, number, number?][];
   canonicalArtists?: string[];
   rawToCanonical?: number[][];
   trackToCanonical?: number[][];

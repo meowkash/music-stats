@@ -37,6 +37,13 @@ function main() {
   const content = fs.readFileSync(CSV_PATH, 'utf-8');
   const lines = content.split('\n');
 
+  const recapCachePath = path.join(DATA_DIR, 'recap-meta-cache.json');
+  let trackDurations = {};
+  if (fs.existsSync(recapCachePath)) {
+    const recapCache = JSON.parse(fs.readFileSync(recapCachePath, 'utf-8'));
+    trackDurations = recapCache.tracks ?? {};
+  }
+
   const artists = [];
   const artistMap = new Map();
 
@@ -109,7 +116,9 @@ function main() {
     let trackId = trackMap.get(trackKey);
     if (trackId === undefined) {
       trackId = tracks.length;
-      tracks.push([trackName, artistId, albumId]);
+      const durationInfo = trackDurations[`${trackName}\0${artistName}`];
+      const duration = durationInfo?.duration ?? 210000;
+      tracks.push([trackName, artistId, albumId, duration]);
       trackMap.set(trackKey, trackId);
     }
 

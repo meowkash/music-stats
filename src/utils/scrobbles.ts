@@ -36,15 +36,18 @@ export function getYearsInRange(startStr: string, endStr: string): string[] {
 /** Lexical YYYY-MM-DD comparison matches chronological order. */
 
 function creditArtistRollup(
-  counts: Record<number, number>,
+  counts: Record<number, { count: number; playtimeMs: number }>,
   trackId: number,
   rawArtistId: number,
   playCount: number,
+  playtimeMs: number,
   meta: MetaData,
   mode: ArtistRollupMode = 'canonical',
 ): void {
   if (mode === 'raw') {
-    counts[rawArtistId] = (counts[rawArtistId] || 0) + playCount;
+    if (!counts[rawArtistId]) counts[rawArtistId] = { count: 0, playtimeMs: 0 };
+    counts[rawArtistId].count += playCount;
+    counts[rawArtistId].playtimeMs += playtimeMs;
     return;
   }
   const trackMap = meta.trackToCanonical;
@@ -53,11 +56,15 @@ function creditArtistRollup(
   if (canonical) {
     const ids = trackMap?.[trackId] ?? mapping?.[rawArtistId] ?? [rawArtistId];
     for (const cId of ids) {
-      counts[cId] = (counts[cId] || 0) + playCount;
+      if (!counts[cId]) counts[cId] = { count: 0, playtimeMs: 0 };
+      counts[cId].count += playCount;
+      counts[cId].playtimeMs += playtimeMs;
     }
     return;
   }
-  counts[rawArtistId] = (counts[rawArtistId] || 0) + playCount;
+  if (!counts[rawArtistId]) counts[rawArtistId] = { count: 0, playtimeMs: 0 };
+  counts[rawArtistId].count += playCount;
+  counts[rawArtistId].playtimeMs += playtimeMs;
 }
 
 function isValidAlbum(meta: MetaData, albumId: number): boolean {
@@ -117,7 +124,7 @@ export function rollupByCategory(
   meta: MetaData,
   category: 'tracks' | 'artists' | 'albums',
   options?: { artistMode?: ArtistRollupMode },
-): Array<{ id: number; name: string; subtitle?: string; count: number; artistId?: number; albumId?: number; artistName?: string; albumName?: string }> {
+): Array<{ id: number; name: string; subtitle?: string; count: number; playtimeMs: number; artistId?: number; albumId?: number; artistName?: string; albumName?: string }> {
   if (category === 'tracks') {
     return Object.entries(trackCounts).map(([tIdStr, count]) => {
       const tId = parseInt(tIdStr, 10);
@@ -125,6 +132,7 @@ export function rollupByCategory(
       const trackName = trackInfo[0];
       const artistId = trackInfo[1];
       const albumId = trackInfo[2];
+      const duration = trackInfo[3] ?? 210000;
       return {
         id: tId,
         name: trackName,
@@ -134,35 +142,42 @@ export function rollupByCategory(
         artistName: meta.artists[artistId],
         albumName: meta.albums[albumId],
         count,
+        playtimeMs: count * duration,
       };
     });
   }
 
   if (category === 'artists') {
     const artistMode = options?.artistMode ?? 'canonical';
-    const artistCounts: Record<number, number> = {};
+    const artistCounts: Record<number, { count: number; playtimeMs: number }> = {};
     for (const [tIdStr, count] of Object.entries(trackCounts)) {
       const tId = parseInt(tIdStr, 10);
-      const artistId = meta.tracks[tId][1];
-      creditArtistRollup(artistCounts, tId, artistId, count, meta, artistMode);
+      const trackInfo = meta.tracks[tId];
+      const artistId = trackInfo[1];
+      const duration = trackInfo[3] ?? 210000;
+      creditArtistRollup(artistCounts, tId, artistId, count, count * duration, meta, artistMode);
     }
-    return Object.entries(artistCounts).map(([artIdStr, count]) => ({
+    return Object.entries(artistCounts).map(([artIdStr, data]) => ({
       id: parseInt(artIdStr, 10),
       name: artistDisplayName(meta, parseInt(artIdStr, 10), artistMode),
-      count,
+      count: data.count,
+      playtimeMs: data.playtimeMs,
     }));
   }
 
-  const albumCounts: Record<number, { count: number; artistId: number }> = {};
+  const albumCounts: Record<number, { count: number; playtimeMs: number; artistId: number }> = {};
   for (const [tIdStr, count] of Object.entries(trackCounts)) {
     const tId = parseInt(tIdStr, 10);
-    const albumId = meta.tracks[tId][2];
-    const artistId = meta.tracks[tId][1];
+    const trackInfo = meta.tracks[tId];
+    const albumId = trackInfo[2];
+    const artistId = trackInfo[1];
+    const duration = trackInfo[3] ?? 210000;
     if (!isValidAlbum(meta, albumId)) continue;
     if (!albumCounts[albumId]) {
-      albumCounts[albumId] = { count: 0, artistId };
+      albumCounts[albumId] = { count: 0, playtimeMs: 0, artistId };
     }
     albumCounts[albumId].count += count;
+    albumCounts[albumId].playtimeMs += count * duration;
   }
   return Object.entries(albumCounts).map(([albIdStr, data]) => ({
     id: parseInt(albIdStr, 10),
@@ -170,6 +185,7 @@ export function rollupByCategory(
     subtitle: meta.artists[data.artistId],
     artistId: data.artistId,
     count: data.count,
+    playtimeMs: data.playtimeMs,
   }));
 }
 
@@ -177,36 +193,42 @@ export function rollupTopCounts(
   trackCounts: Record<number, number>,
   meta: MetaData,
 ): {
-  artists: Array<{ id: number; name: string; count: number }>;
-  tracks: Array<{ id: number; name: string; artistName: string; albumName: string; artistId: number; albumId: number; count: number }>;
-  albums: Array<{ id: number; name: string; artistName: string; artistId: number; count: number }>;
+  artists: Array<{ id: number; name: string; count: number; playtimeMs: number }>;
+  tracks: Array<{ id: number; name: string; artistName: string; albumName: string; artistId: number; albumId: number; count: number; playtimeMs: number }>;
+  albums: Array<{ id: number; name: string; artistName: string; artistId: number; count: number; playtimeMs: number }>;
 } {
-  const artistCounts: Record<number, number> = {};
-  const albumCounts: Record<number, { count: number; artistId: number }> = {};
-  const songCounts: Record<number, number> = {};
+  const artistCounts: Record<number, { count: number; playtimeMs: number }> = {};
+  const albumCounts: Record<number, { count: number; playtimeMs: number; artistId: number }> = {};
+  const songCounts: Record<number, { count: number; playtimeMs: number }> = {};
 
   for (const [trackIdStr, count] of Object.entries(trackCounts)) {
     const trackId = parseInt(trackIdStr, 10);
     const trackInfo = meta.tracks[trackId];
     if (!trackInfo) continue;
-    const [, artistId, albumId] = trackInfo;
+    const [, artistId, albumId, duration = 210000] = trackInfo;
+    const playtimeMs = count * duration;
 
-    songCounts[trackId] = (songCounts[trackId] || 0) + count;
-    creditArtistRollup(artistCounts, trackId, artistId, count, meta);
+    if (!songCounts[trackId]) songCounts[trackId] = { count: 0, playtimeMs: 0 };
+    songCounts[trackId].count += count;
+    songCounts[trackId].playtimeMs += playtimeMs;
+
+    creditArtistRollup(artistCounts, trackId, artistId, count, playtimeMs, meta);
+    
     if (isValidAlbum(meta, albumId)) {
       if (!albumCounts[albumId]) {
-        albumCounts[albumId] = { count: 0, artistId };
+        albumCounts[albumId] = { count: 0, playtimeMs: 0, artistId };
       }
       albumCounts[albumId].count += count;
+      albumCounts[albumId].playtimeMs += playtimeMs;
     }
   }
 
   return {
     artists: Object.entries(artistCounts)
-      .map(([id, count]) => ({ id: parseInt(id, 10), name: artistDisplayName(meta, parseInt(id, 10)), count }))
+      .map(([id, data]) => ({ id: parseInt(id, 10), name: artistDisplayName(meta, parseInt(id, 10)), count: data.count, playtimeMs: data.playtimeMs }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     tracks: Object.entries(songCounts)
-      .map(([id, count]) => {
+      .map(([id, data]) => {
         const track = meta.tracks[parseInt(id, 10)];
         if (!track) return null;
         const [trackName, artistId, albumId] = track;
@@ -217,7 +239,8 @@ export function rollupTopCounts(
           albumName: meta.albums[albumId] || 'Unknown Album',
           artistId,
           albumId,
-          count,
+          count: data.count,
+          playtimeMs: data.playtimeMs,
         };
       })
       .filter((t): t is NonNullable<typeof t> => t !== null)
@@ -229,6 +252,7 @@ export function rollupTopCounts(
         artistName: meta.artists[data.artistId] || 'Unknown Artist',
         artistId: data.artistId,
         count: data.count,
+        playtimeMs: data.playtimeMs,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
   };
