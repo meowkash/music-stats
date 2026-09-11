@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1789056892';
-const DATA_CACHE = 'music-stats-data-1789056892';
+const SHELL_CACHE = 'music-stats-shell-1789090131';
+const DATA_CACHE = 'music-stats-data-1789090131';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1789056892';
+const CACHE_VERSION = '1789090131';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -67,7 +67,10 @@ function jsonUnavailable() {
  */
 function respondWithDataJson(event, dataPath) {
   const cacheKey = cacheKeyForPath(dataPath);
-  const bustCache = new URL(event.request.url).searchParams.has('v');
+  // 'fresh' is set only by the manifest read and the hash-verified generation
+  // downloads. Keying off 'v' instead matched every request the app makes,
+  // which made the deadline below unreachable.
+  const mustBeFresh = new URL(event.request.url).searchParams.has('fresh');
 
   const network = fetch(event.request).then(async (response) => {
     if (response.ok) {
@@ -79,9 +82,9 @@ function respondWithDataJson(event, dataPath) {
 
   event.waitUntil(network.catch(() => {}));
 
-  // Manifest and cache-busted fetches must not lose a race to stale JSON —
+  // The manifest and generation downloads must not lose a race to stale JSON —
   // the client hashes every byte and aborts the whole update on mismatch.
-  if (dataPath === '/data/manifest.json' || bustCache) {
+  if (dataPath === '/data/manifest.json' || mustBeFresh) {
     return network.catch(async () => {
       const cache = await caches.open(DATA_CACHE);
       return (await cache.match(cacheKey)) || jsonUnavailable();
@@ -187,7 +190,9 @@ async function respondWithPwaIcon(event) {
     }
     return response;
   } catch {
-    const cached = await cache.match(event.request);
+    // ignoreSearch because STATIC_ASSETS pre-caches bare paths while the page
+    // requests '/apple-touch-icon.png?v=<version>'; an exact match never hit.
+    const cached = await cache.match(event.request, { ignoreSearch: true });
     return cached || Response.error();
   }
 }

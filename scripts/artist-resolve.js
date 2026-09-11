@@ -285,13 +285,6 @@ export function creditTrackCanonicalIds(trackId, trackToCanonical, rawArtistId, 
   return trackToCanonical?.[trackId] ?? creditCanonicalIds(rawArtistId, rawToCanonical);
 }
 
-export function addCanonicalCredits(counts, rawArtistId, playCount, rawToCanonical) {
-  const ids = creditCanonicalIds(rawArtistId, rawToCanonical);
-  for (const id of ids) {
-    counts[id] = (counts[id] || 0) + playCount;
-  }
-}
-
 export function addTrackCanonicalCredits(counts, trackId, rawArtistId, playCount, trackToCanonical, rawToCanonical) {
   const ids = creditTrackCanonicalIds(trackId, trackToCanonical, rawArtistId, rawToCanonical);
   for (const id of ids) {

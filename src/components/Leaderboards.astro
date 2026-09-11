@@ -106,29 +106,30 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   <SwipeableDeck tabs={['Songs', 'Albums', 'Artists']} idPrefix="leaderboard">
     <Fragment slot="header-songs">Songs</Fragment>
     <Fragment slot="header-albums">Albums</Fragment>
-    <Fragment slot="header-artists">
-      <span>Artists</span>
-      <div class="artist-ranking-toggle desktop-artist-toggle" id="desktopArtistRankingToggle">
-        <span class="unified-label">Unified</span>
-        <button
-          type="button"
-          class="toggle-switch active"
-          id="desktopArtistRankingSwitch"
-          role="switch"
-          aria-checked="true"
-          aria-label="Unified artist rankings"
-        >
-          <span class="toggle-knob"></span>
-        </button>
-      </div>
-    </Fragment>
+    <Fragment slot="header-artists">Artists</Fragment>
   </SwipeableDeck>
+
+  {/* Desktop shows all three columns at once, so an empty range is one fact
+      about the whole board rather than the same sentence in each column. */}
+  <div class="leaderboard-empty">
+    <div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>
+  </div>
 </div>
 
 <style>
   .leaderboard-container {
-    padding-top: 4px; /* Reduce padding to save vertical real-estate */
+    /* Top padding stays at the .panel-container default so the "Rankings"
+       heading sits at the same height as every other view's. */
     gap: 12px !important;
+  }
+
+  /* Keeps the dashed empty-state card off the column's own rounded border. */
+  .leaderboard-container :global(.no-data-message) {
+    margin: 20px 12px;
+  }
+
+  .leaderboard-empty {
+    display: none;
   }
 
   .leaderboard-tab-group {
@@ -155,11 +156,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     --search-glow: var(--accent-cat-songs-glow);
     height: 40px;
     width: 100%;
-  }
-
-  .search-bar-row .search-bar-wrapper {
-    flex: 1;
-    min-width: 0;
   }
 
   /*
@@ -206,7 +202,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     transition: color var(--duration-normal) var(--ios-spring);
   }
 
-  .artist-ranking-toggle:has(.toggle-switch.active) .unified-label {
+  /* Both toggles, not just Unified: they sit side by side on desktop, so the
+     active label treatment has to match. */
+  .ranking-toggle:has(.toggle-switch.active) .unified-label {
     color: #fff;
   }
 
@@ -536,18 +534,65 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     padding-left: 12px;
   }
 
-  .desktop-artist-toggle {
-    display: none;
-    pointer-events: auto;
-  }
-
   @media (min-width: 768px) {
     .leaderboard-tabs {
       display: none;
     }
 
+    /*
+     * The collapse-to-a-circle search is a mobile affordance: at this width the
+     * row has room for the field and both toggles at once, so the field simply
+     * stays open and nothing has to be hidden to make space for it.
+     */
+    .search-container {
+      position: relative;
+      flex: 0 1 360px;
+      width: auto;
+      margin-right: auto;
+      clip-path: none;
+      pointer-events: auto;
+    }
+
+    /* Permanently the in-field icon rather than a standalone round button.
+       pointer-events: none lets a click on it fall through to the input. */
+    .search-btn {
+      background: transparent;
+      border-color: transparent;
+      pointer-events: none;
+    }
+
+    .search-input {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .search-container.is-searching ~ .toggles-wrapper {
+      opacity: 1;
+      pointer-events: auto;
+      transform: none;
+    }
+
+    /*
+     * Unified sits beside Playtime in the toolbar. On mobile it belongs to the
+     * Artists page and slides in with it, which is what --toggle-reveal drives;
+     * with all three columns on screen it is not a property of one column, so
+     * the reveal geometry is overridden back to a plain static control.
+     */
     .search-bar-row .artist-ranking-toggle {
-      display: none;
+      display: flex;
+      max-width: none;
+      padding-left: 12px;
+      opacity: 1;
+      overflow: visible;
+      transform: none;
+      pointer-events: auto;
+    }
+
+    /* Per-tab accents are a mobile idea — one page is in view at a time there.
+       Here all three are, so selection uses the app accent instead. */
+    .toggle-switch.active {
+      background: rgb(from var(--accent-pink) r g b / 0.45);
+      border-color: rgb(from var(--accent-pink) r g b / 0.65);
     }
 
     .leaderboard-container :global(.swipeable-list-column[data-tab="songs"] .swipeable-column-header) {
@@ -560,24 +605,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       color: var(--accent-cat-artists);
     }
 
-    .desktop-artist-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      max-width: none;
-      padding-left: 0;
-      opacity: 1;
-      transform: none;
-      pointer-events: auto;
-      text-transform: none;
-      letter-spacing: normal;
+    .leaderboard-container.is-empty :global(.swipeable-list-viewport) {
+      display: none;
     }
-  }
 
-  .leaderboard-list.updating {
-    opacity: 0.55;
-    pointer-events: none;
-    transition: opacity var(--duration-normal) var(--ios-spring);
+    .leaderboard-container.is-empty .leaderboard-empty {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .leaderboard-empty .no-data-message {
+      max-width: 480px;
+      margin: 0;
+    }
   }
 
 
@@ -639,7 +682,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     aggregateTrackCounts,
     rollupByCategory,
     rawArtistNamesForCanonical,
+    nameCollator,
     type ArtistRollupMode,
+    type RollupItem,
   } from "../utils/scrobbles";
   import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
@@ -650,7 +695,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   const RANKING_TABS = ["songs", "albums", "artists"] as const;
   type RankingTab = (typeof RANKING_TABS)[number];
-  type RankItem = ReturnType<typeof rollupByCategory>[number];
+  type RankItem = RollupItem;
 
   const PAGE_IDS: Record<RankingTab, string> = {
     songs: "leaderboardListSongs",
@@ -681,6 +726,67 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const scrollControllers: Partial<Record<RankingTab, InfiniteScrollController>> = {};
     let dataEpoch = 0;
 
+    const CATEGORY_FOR_TAB = {
+      songs: "tracks",
+      albums: "albums",
+      artists: "artists",
+    } as const;
+
+    /**
+     * The rollup is the expensive step — three passes over ~13k tracks on an
+     * "All time" range — and it depends only on the date window and the artist
+     * mode, never on the search query. Cached under that key so typing costs a
+     * filter and a sort instead of a full re-aggregation per keystroke, and
+     * computed per tab so a mobile pager only pays for the panes it paints.
+     */
+    let rollupKey = "";
+    let rollupCounts: Map<number, number> | null = null;
+    let rollupMeta: MetaData | null = null;
+    const baseByTab: Partial<Record<RankingTab, RankItem[]>> = {};
+
+    function invalidateRollups() {
+      rollupKey = "";
+      rollupCounts = null;
+      for (const tab of RANKING_TABS) delete baseByTab[tab];
+    }
+
+    function baseItems(tab: RankingTab): RankItem[] {
+      const cached = baseByTab[tab];
+      if (cached) return cached;
+      if (!rollupCounts || !rollupMeta) return [];
+      const category = CATEGORY_FOR_TAB[tab];
+      const items = rollupByCategory(rollupCounts, rollupMeta, category, {
+        artistMode: category === "artists" ? artistRankingMode : undefined,
+      });
+      baseByTab[tab] = items;
+      return items;
+    }
+
+    function compareItems(a: RankItem, b: RankItem): number {
+      const primary = playtimeMode ? b.playtimeMs - a.playtimeMs : b.count - a.count;
+      return primary || nameCollator.compare(a.name, b.name);
+    }
+
+    function prepareTab(tab: RankingTab): RankItem[] {
+      const existing = itemsByTab[tab];
+      if (existing) return existing;
+
+      const query = searchQuery.trim().toLowerCase();
+      const base = baseItems(tab);
+      const items = query
+        ? base.filter(
+            (item) =>
+              item.name.toLowerCase().includes(query) ||
+              (item.subtitle && item.subtitle.toLowerCase().includes(query)),
+          )
+        : base.slice();
+
+      items.sort(compareItems);
+      itemsByTab[tab] = items;
+      return items;
+    }
+
+    const rootEl = document.querySelector(".leaderboard-container") as HTMLElement;
     const viewportEl = document.getElementById("leaderboardViewport") as HTMLDivElement;
     const trackEl = document.getElementById("leaderboardListTrack") as HTMLDivElement;
     const customDateWrapper = document.getElementById("customDateWrapper") as HTMLDivElement;
@@ -690,13 +796,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const searchBtn = document.getElementById("leaderboardSearchBtn") as HTMLButtonElement;
     const searchInput = document.getElementById("leaderboardSearch") as HTMLInputElement;
     const searchBarRow = document.querySelector(".search-bar-row") as HTMLElement;
-    const playtimeRankingToggle = document.getElementById("playtimeRankingToggle") as HTMLDivElement;
     const playtimeRankingSwitch = document.getElementById("playtimeRankingSwitch") as HTMLButtonElement;
     const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
     const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
-    const desktopArtistRankingSwitch = document.getElementById(
-      "desktopArtistRankingSwitch",
-    ) as HTMLButtonElement | null;
     const ARTISTS_TAB_INDEX = RANKING_TABS.indexOf("artists");
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -807,6 +909,12 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       );
     }
 
+    /** Disconnects the observer before the controller is dropped. */
+    function releaseController(tab: RankingTab) {
+      scrollControllers[tab]?.destroy();
+      delete scrollControllers[tab];
+    }
+
     function paintPage(tab: RankingTab, items: RankItem[]) {
       const container = listEl(tab);
       itemsByTab[tab] = items;
@@ -814,7 +922,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       if (items.length === 0) {
         container.innerHTML =
           '<div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>';
-        delete scrollControllers[tab];
+        releaseController(tab);
         renderedTabs.add(tab);
         return;
       }
@@ -829,9 +937,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           root: pageEl(tab),
           rootMargin: "600px 0px",
           sentinelClass: "swipeable-scroll-sentinel",
-          onChunkRendered: () => {
-            initArtworkImages(container);
-            applyCountGlows(container);
+          onChunkRendered: (added) => {
+            initArtworkImages(added);
+            applyCountGlows(added);
           },
         });
       } else {
@@ -842,17 +950,18 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     function ensurePage(tab: RankingTab) {
-      if (renderedTabs.has(tab) && itemsByTab[tab]) {
+      if (renderedTabs.has(tab)) {
         // Already painted for this data epoch.
         return;
       }
-      const items = itemsByTab[tab];
-      if (items) paintPage(tab, items);
+      if (!rollupCounts) return;
+      paintPage(tab, prepareTab(tab));
     }
 
     async function updateLeaderboard() {
       const epoch = ++dataEpoch;
 
+      rootEl.classList.remove("is-empty");
       for (const tab of RANKING_TABS) {
         listEl(tab).innerHTML = '<div class="no-data-message">Aggregating scrobbles...</div>';
       }
@@ -893,35 +1002,31 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         await loadYearsData(yearsToLoad);
         if (epoch !== dataEpoch) return;
 
-        const trackCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
-        const query = searchQuery.toLowerCase();
+        const key = `${startStr}|${endStr}|${artistRankingMode}`;
+        if (key !== rollupKey) {
+          rollupKey = key;
+          rollupCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
+          rollupMeta = dictionary;
+          for (const tab of RANKING_TABS) delete baseByTab[tab];
+        }
 
         // Fresh snapshot — clear painted pages so ensure/paint refill them.
         renderedTabs.clear();
-        for (const key of Object.keys(scrollControllers) as RankingTab[]) {
-          delete scrollControllers[key];
-        }
-
         for (const tab of RANKING_TABS) {
-          const category = tab === "songs" ? "tracks" : tab === "albums" ? "albums" : "artists";
-          let itemsList = rollupByCategory(trackCounts, dictionary, category, {
-            artistMode: category === "artists" ? artistRankingMode : undefined,
-          });
-
-          if (query) {
-            itemsList = itemsList.filter(
-              (item) =>
-                item.name.toLowerCase().includes(query) ||
-                (item.subtitle && item.subtitle.toLowerCase().includes(query)),
-            );
-          }
-
-          itemsList.sort((a, b) => playtimeMode ? (b.playtimeMs - a.playtimeMs || a.name.localeCompare(b.name)) : (b.count - a.count || a.name.localeCompare(b.name)));
-          itemsByTab[tab] = itemsList;
+          releaseController(tab);
+          delete itemsByTab[tab];
         }
 
         if (isDesktopLayout()) {
-          for (const tab of RANKING_TABS) paintPage(tab, itemsByTab[tab] || []);
+          let anyItems = false;
+          for (const tab of RANKING_TABS) {
+            const items = prepareTab(tab);
+            if (items.length > 0) anyItems = true;
+            paintPage(tab, items);
+          }
+          // Every column empty is one fact about the range, so the deck is
+          // swapped for a single message rather than repeating it three times.
+          rootEl.classList.toggle("is-empty", !anyItems);
           return;
         }
 
@@ -929,7 +1034,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         const tabsToPaint = new Set<RankingTab>([activeTab()]);
         if (activeIndex > 0) tabsToPaint.add(RANKING_TABS[activeIndex - 1]);
         if (activeIndex < RANKING_TABS.length - 1) tabsToPaint.add(RANKING_TABS[activeIndex + 1]);
-        for (const tab of tabsToPaint) paintPage(tab, itemsByTab[tab] || []);
+        for (const tab of tabsToPaint) paintPage(tab, prepareTab(tab));
       } catch (err) {
         if (epoch !== dataEpoch) return;
         console.error("Failed to aggregate data:", err);
@@ -1033,10 +1138,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       const isUnified = artistRankingMode === "canonical";
       artistRankingSwitch.classList.toggle("active", isUnified);
       artistRankingSwitch.setAttribute("aria-checked", String(isUnified));
-      if (desktopArtistRankingSwitch) {
-        desktopArtistRankingSwitch.classList.toggle("active", isUnified);
-        desktopArtistRankingSwitch.setAttribute("aria-checked", String(isUnified));
-      }
       playtimeRankingSwitch.classList.toggle("active", playtimeMode);
       playtimeRankingSwitch.setAttribute("aria-checked", String(playtimeMode));
     }
@@ -1177,6 +1278,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     function setArtistRankingMode(mode: ArtistRollupMode) {
       artistRankingMode = mode;
+      delete baseByTab.artists;
       localStorage.setItem(ARTIST_MODE_KEY, mode);
       syncArtistRankingToggle();
       // Desktop shows all three columns — artists list must refresh even when
@@ -1185,10 +1287,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     artistRankingSwitch.addEventListener("click", () => {
-      setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
-    });
-
-    desktopArtistRankingSwitch?.addEventListener("click", () => {
       setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
     });
 
@@ -1237,6 +1335,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     updateLeaderboard();
 
     onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {
+      // The window key is unchanged but the underlying scrobbles are not.
+      invalidateRollups();
       void loadMeta().then(() => updateLeaderboard());
     });
 

@@ -1,5 +1,3 @@
-export { CACHE_VERSION, dataUrl, fetchAppJson } from './dataStore';
-
 import { fetchAppJson, onPathsUpdated } from './dataStore';
 import { getGlowStyle } from './theme';
 import { getStaticArtworkSources, getThumbArtworkSources, normalizeStaticArtworkUrl, resolveAlbumArtwork, resolveArtistArtwork, resolveArtistArtworkFromCandidates, resolveArtworkFromCache, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
@@ -162,10 +160,69 @@ export function getArtworkThumbHTML(
   `;
 }
 
-const ARTWORK_LOAD_TIMEOUT = 5000;
+/**
+ * Stall detection is swept from one shared interval rather than a setTimeout
+ * per image: a fully scrolled leaderboard binds hundreds of images at once, and
+ * a live timer each was pure overhead for a case that almost never fires.
+ */
+const ARTWORK_STALL_MS = 8000;
+const ARTWORK_STALL_SWEEP_MS = 1000;
 const ARTWORK_MAX_RETRIES = 2;
+/** Retries are capped globally so a slow network can't pile up hundreds of them. */
+const ARTWORK_RETRY_CONCURRENCY = 4;
 const SHIMMER_FADE_MS = 280;
 const OVERLAY_SHIMMER_FADE_MS = 120;
+
+const stallWatch = new Map<HTMLImageElement, { deadline: number; onStall: () => void }>();
+let stallTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopStallSweepIfIdle(): void {
+  if (stallTimer !== null && stallWatch.size === 0) {
+    clearInterval(stallTimer);
+    stallTimer = null;
+  }
+}
+
+function sweepStalledArtwork(): void {
+  const now = Date.now();
+  for (const [img, entry] of [...stallWatch]) {
+    if (entry.deadline > now) continue;
+    stallWatch.delete(img);
+    entry.onStall();
+  }
+  stopStallSweepIfIdle();
+}
+
+function watchForStall(img: HTMLImageElement, onStall: () => void): void {
+  stallWatch.set(img, { deadline: Date.now() + ARTWORK_STALL_MS, onStall });
+  if (stallTimer === null) stallTimer = setInterval(sweepStalledArtwork, ARTWORK_STALL_SWEEP_MS);
+}
+
+function unwatchStall(img: HTMLImageElement): void {
+  stallWatch.delete(img);
+  stopStallSweepIfIdle();
+}
+
+const retryQueue: Array<() => void> = [];
+let retriesInFlight = 0;
+
+function pumpRetries(): void {
+  while (retriesInFlight < ARTWORK_RETRY_CONCURRENCY && retryQueue.length > 0) {
+    const run = retryQueue.shift()!;
+    retriesInFlight++;
+    run();
+  }
+}
+
+function scheduleRetry(run: () => void): void {
+  retryQueue.push(run);
+  pumpRetries();
+}
+
+function releaseRetrySlot(): void {
+  if (retriesInFlight > 0) retriesInFlight--;
+  pumpRetries();
+}
 
 // Cross-fade shimmer out to avoid blink while image fades in
 function fadeOutShimmer(shimmer: Element | null) {
@@ -205,68 +262,87 @@ interface ArtworkLoadCallbacks {
   beforeRetry?: () => void;
 }
 
+/**
+ * The first attempt runs immediately and leans on the browser's own error
+ * handling; only retries queue behind the concurrency cap, and only a genuinely
+ * stalled request — no load, no error — is timed out.
+ */
 function loadArtworkWithRetry(
   img: HTMLImageElement,
   sources: string[],
   callbacks: ArtworkLoadCallbacks,
 ): void {
+  const maxAttempts = sources.length * ARTWORK_MAX_RETRIES;
   let attempt = 0;
-  let timeoutId: ReturnType<typeof setTimeout>;
+  let holdsRetrySlot = false;
+  let settled = false;
 
-  const cleanup = () => {
-    clearTimeout(timeoutId);
+  const releaseSlot = () => {
+    if (!holdsRetrySlot) return;
+    holdsRetrySlot = false;
+    releaseRetrySlot();
+  };
+
+  const detach = () => {
+    unwatchStall(img);
     img.onload = null;
     img.onerror = null;
+  };
+
+  const succeed = (src: string, quality: 'high' | 'low') => {
+    if (settled) return;
+    settled = true;
+    detach();
+    releaseSlot();
+    callbacks.onSuccess(src, quality);
+  };
+
+  const fail = () => {
+    if (settled) return;
+    settled = true;
+    detach();
+    releaseSlot();
+    callbacks.onFailure();
   };
 
   // Exhaust high-res retries before falling back to low-res
   const sourceIndexFor = (n: number) => Math.min(Math.floor(n / ARTWORK_MAX_RETRIES), sources.length - 1);
 
+  const advance = () => {
+    if (settled) return;
+    detach();
+    releaseSlot();
+    attempt++;
+    if (attempt >= maxAttempts) {
+      fail();
+      return;
+    }
+    scheduleRetry(() => {
+      holdsRetrySlot = true;
+      tryLoad();
+    });
+  };
+
   const tryLoad = () => {
-    clearTimeout(timeoutId);
+    if (settled) {
+      releaseSlot();
+      return;
+    }
+
     const idx = sourceIndexFor(attempt);
     const src = sources[idx];
+    const quality: 'high' | 'low' = idx === 0 ? 'high' : 'low';
     callbacks.beforeRetry?.();
 
-    timeoutId = setTimeout(() => {
-      cleanup();
-      attempt++;
-      if (attempt < sources.length * ARTWORK_MAX_RETRIES) {
-        tryLoad();
-      } else {
-        callbacks.onFailure();
-      }
-    }, ARTWORK_LOAD_TIMEOUT);
+    img.onload = () => succeed(src, quality);
+    img.onerror = advance;
+    watchForStall(img, advance);
 
-    img.onload = () => {
-      cleanup();
-      callbacks.onSuccess(src, idx === 0 ? 'high' : 'low');
-    };
-
-    img.onerror = () => {
-      cleanup();
-      attempt++;
-      if (attempt < sources.length * ARTWORK_MAX_RETRIES) {
-        setTimeout(tryLoad, 300);
-      } else {
-        callbacks.onFailure();
-      }
-    };
-
-    if (img.src !== src) img.src = src;
-    else if (img.complete) {
-      cleanup();
-      if (img.naturalWidth > 0) {
-        callbacks.onSuccess(src, idx === 0 ? 'high' : 'low');
-      } else {
-        // Image already failed
-        attempt++;
-        if (attempt < sources.length * ARTWORK_MAX_RETRIES) {
-          setTimeout(tryLoad, 300);
-        } else {
-          callbacks.onFailure();
-        }
-      }
+    if (img.src !== src) {
+      img.src = src;
+    } else if (img.complete) {
+      if (img.naturalWidth > 0) succeed(src, quality);
+      else advance();
     }
   };
 
@@ -345,10 +421,30 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
   };
 }
 
-export function initArtworkImages(container: ParentNode = document) {
-  container.querySelectorAll('img.artwork-img, .scrobble-row-thumb img:not([data-artwork-bound]), .carousel-artwork-wrapper img:not([data-artwork-bound])').forEach(el => {
-    bindArtworkImage(el as HTMLImageElement);
-  });
+/**
+ * Either a container to search, or the exact nodes to act on. Passing the nodes
+ * lets an infinite-scroll chunk touch only its own rows instead of re-querying
+ * everything already rendered.
+ */
+export type RenderScope = ParentNode | Iterable<Element>;
+
+function eachMatch(scope: RenderScope, selector: string, fn: (el: Element) => void): void {
+  if (typeof (scope as ParentNode).querySelectorAll === 'function') {
+    (scope as ParentNode).querySelectorAll(selector).forEach(fn);
+    return;
+  }
+  for (const el of scope as Iterable<Element>) {
+    if (el.matches(selector)) fn(el);
+    el.querySelectorAll(selector).forEach(fn);
+  }
+}
+
+export function initArtworkImages(scope: RenderScope = document) {
+  eachMatch(
+    scope,
+    'img.artwork-img, .scrobble-row-thumb img:not([data-artwork-bound]), .carousel-artwork-wrapper img:not([data-artwork-bound])',
+    (el) => bindArtworkImage(el as HTMLImageElement),
+  );
 }
 
 export function initOverlayAlbumArtwork(container: ParentNode = document) {
@@ -528,8 +624,8 @@ function paintRowGlow(row: Element): void {
   }
 }
 
-export function applyCountGlows(container: HTMLElement) {
-  container.querySelectorAll('.scrobble-row').forEach(paintRowGlow);
+export function applyCountGlows(scope: RenderScope) {
+  eachMatch(scope, '.scrobble-row', paintRowGlow);
 }
 
 /** Re-resolve rows still showing the fallback glow, after colors data arrives. */

@@ -10,7 +10,7 @@ import BottomNav from "../components/BottomNav.astro";
 import DetailOverlay from "../components/DetailOverlay.astro";
 import StatsTopSheet from "../components/StatsTopSheet.astro";
 import { TAB_ORDER } from "../utils/tabs";
-import { TAB_THEME_COLORS } from "../utils/tabTheme";
+import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
 ---
 
 <Layout title="My Music Stats">
@@ -38,7 +38,7 @@ import { TAB_THEME_COLORS } from "../utils/tabTheme";
 
   {/* Runs before hydration so a restored tab paints in its own colours rather
       than flashing the dashboard's. Mirrors setActiveTab() in utils/tabs.ts. */}
-  <script is:inline define:vars={{ tabOrder: TAB_ORDER, themeColors: TAB_THEME_COLORS }}>
+  <script is:inline define:vars={{ tabOrder: TAB_ORDER, themeColors: TAB_THEME_COLORS, bottomColors: TAB_BOTTOM_COLORS }}>
     try {
       const lastTab = localStorage.getItem('last-music-stats-tab');
       const targetIndex = lastTab ? tabOrder.indexOf(lastTab) : -1;
@@ -56,6 +56,7 @@ import { TAB_THEME_COLORS } from "../utils/tabTheme";
         document.body.dataset.activeTab = lastTab;
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta && themeColors[lastTab]) meta.content = themeColors[lastTab];
+        if (bottomColors[lastTab]) document.documentElement.style.backgroundColor = bottomColors[lastTab];
       }
     } catch (e) {
       console.warn('Could not restore tab from storage', e);

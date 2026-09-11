@@ -187,7 +187,7 @@
 </style>
 
 <script>
-  import Chart from "chart.js/auto";
+  import type { Chart as ChartType } from "chart.js";
   import {
     generateScrobbleRowHTML,
     applyCountGlows,
@@ -204,6 +204,7 @@
   import { rawArtistNamesForCanonical } from "../utils/scrobbles";
   import { bindHorizontalSwipe } from "../utils/horizontalSwipe";
   import { createSheet } from "../utils/sheet";
+  import { getActiveTab } from "../utils/tabs";
 
   document.addEventListener("DOMContentLoaded", () => {
     let rawStats: Record<string, unknown> | null = null;
@@ -214,7 +215,7 @@
     const albumToArtist = new Map<number, number>();
     let lastSwipeTarget: "year" | "category" = "year";
 
-    let chart: Chart | null = null;
+    let chart: ChartType | null = null;
     const selectedYears = new Set<string>();
     const checkboxGroup = document.getElementById("yearCheckboxes") as HTMLDivElement;
 
@@ -317,12 +318,42 @@
       };
     }
 
-    function ensureChart() {
+    /**
+     * chart.js/auto registers every controller and scale the library ships —
+     * ~211 KB, about half of all the JS on the page, downloaded and parsed on
+     * first paint for a visitor who may never open this tab. Registering only
+     * the pieces a filled line chart needs, behind a dynamic import that fires
+     * when the tab is first shown, takes both costs off the boot path.
+     */
+    let chartLibrary: Promise<typeof ChartType> | null = null;
+
+    function loadChartLibrary(): Promise<typeof ChartType> {
+      if (!chartLibrary) {
+        chartLibrary = import("chart.js").then((m) => {
+          m.Chart.register(
+            m.LineController,
+            m.LineElement,
+            m.PointElement,
+            m.LinearScale,
+            m.CategoryScale,
+            m.Filler,
+            m.Tooltip,
+          );
+          return m.Chart;
+        });
+      }
+      return chartLibrary;
+    }
+
+    async function ensureChart() {
       if (chart) return;
+      const ChartCtor = await loadChartLibrary();
+      if (chart) return;
+
       const ctx = (document.getElementById("yearlyCompareChart") as HTMLCanvasElement)?.getContext("2d");
       if (!ctx) return;
 
-      chart = new Chart(ctx, {
+      chart = new ChartCtor(ctx, {
         type: "line",
         data: { labels: xLabels, datasets: [] },
         options: {
@@ -372,6 +403,9 @@
           },
         },
       });
+
+      // Datasets selected while the library was still loading.
+      updateChart();
     }
 
     function updateDropdownsUI() {
@@ -645,7 +679,13 @@
       }
     });
 
-    ensureChart();
+    // Deferred until the tab is actually shown, so a visitor who never opens
+    // Statistics never pays for chart.js at all.
+    if (getActiveTab() === "statistics") void ensureChart();
+    window.addEventListener("tab-navigated", (e: Event) => {
+      if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") void ensureChart();
+    });
+
     loadData();
     onPathsUpdated(["/data/yearly-totals.json", "/data/yearly-stats.json"], () => loadData());
   });

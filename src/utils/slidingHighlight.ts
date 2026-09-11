@@ -2,7 +2,6 @@ import {
   colorToCss,
   lerpColorInto,
   parseColor,
-  rafTween,
   withAlpha,
   type Rgba,
 } from './motion';

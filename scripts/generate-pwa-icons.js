@@ -90,6 +90,13 @@ async function generateAppIcons(svg) {
   const rootTouchIcon = path.join(publicDir, 'apple-touch-icon.png');
   fs.copyFileSync(path.join(iconsDir, 'apple-touch-icon.png'), rootTouchIcon);
   console.log(`Wrote ${path.relative(process.cwd(), rootTouchIcon)}`);
+
+  // Older iOS prefers the -precomposed name when probing by convention. It used
+  // to be a hand-committed copy, so the two would silently diverge the first
+  // time the logo changed and some devices would keep the old mark.
+  const precomposed = path.join(publicDir, 'apple-touch-icon-precomposed.png');
+  fs.copyFileSync(rootTouchIcon, precomposed);
+  console.log(`Wrote ${path.relative(process.cwd(), precomposed)}`);
 }
 
 /**

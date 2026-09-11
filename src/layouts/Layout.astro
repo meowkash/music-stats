@@ -33,7 +33,7 @@ const washStyles = [
 ---
 
 <!doctype html>
-<html lang="en" style="background-color: #000000; color-scheme: dark;">
+<html lang="en" style="color-scheme: dark;">
 	<head>
 		<meta charset="UTF-8" />
 		<meta
@@ -81,10 +81,34 @@ const washStyles = [
 		<!-- Google Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		{/* media="print" makes this non-blocking, then it is promoted to "all" once
+		    it has arrived: a render-blocking stylesheet on a third-party origin
+		    makes first paint wait on a DNS lookup, TLS handshake and CSS
+		    round-trip, and the splash overlay hides the result anyway. */}
 		<link
+			id="webfont-stylesheet"
 			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
 			rel="stylesheet"
+			media="print"
 		/>
+		<script is:inline>
+			(function () {
+				var link = document.getElementById("webfont-stylesheet");
+				var apply = function () {
+					link.media = "all";
+				};
+				// .sheet is already populated if it landed before this ran, in which
+				// case the load event has been and gone.
+				if (link.sheet) apply();
+				else link.addEventListener("load", apply, { once: true });
+			})();
+		</script>
+		<noscript>
+			<link
+				href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+				rel="stylesheet"
+			/>
+		</noscript>
 		<style is:inline>
 			/* Critical inline styles for Splash Screen to prevent FOUC (jumpiness) */
 			#pwa-splash-screen {
@@ -307,7 +331,7 @@ const washStyles = [
 		</style>
 	</head>
 	<body
-		style="background-color: #000000; margin: 0; padding: 0;"
+		style="margin: 0; padding: 0;"
 		data-active-tab="dashboard"
 	>
 		<div id="app-bg-gradient" aria-hidden="true">
@@ -521,10 +545,7 @@ const washStyles = [
 	/* Hide scrollbars for all scroll containers */
 	.panel-scroll::-webkit-scrollbar,
 	.dashboard-container.panel-scroll::-webkit-scrollbar,
-	.dashboard-list-page::-webkit-scrollbar,
-	.leaderboard-list-page::-webkit-scrollbar,
 	.overlay-scroll-container::-webkit-scrollbar,
-	.recent-list::-webkit-scrollbar,
 	.stats-list::-webkit-scrollbar,
 	.swipeable-list-page::-webkit-scrollbar {
 		display: none;
@@ -716,6 +737,13 @@ const washStyles = [
 	}
 
 	html {
+		/* applyThemeColor() writes the active tab's composited bottom colour
+		   here. It shows in the safe-area gutter the position:fixed body leaves,
+		   so the chrome blends into the foot of the wash rather than a black
+		   band. Must not be re-declared by the `html, body` rule below, which
+		   would out-order it at equal specificity. */
+		background-color: #000000;
+		transition: background-color var(--duration-normal) var(--ios-spring);
 		/* Prevent iOS Safari text autosizing from inflating fonts on rotation */
 		-webkit-text-size-adjust: 100%;
 		text-size-adjust: 100%;
@@ -725,11 +753,28 @@ const washStyles = [
 	body {
 		width: 100%;
 		height: 100%;
-		background-color: var(--bg-dark);
 		color: var(--text-primary);
 		font-family: var(--font-body);
 		overflow: hidden;
+		position: fixed; /* Stop elastic bounce on body itself */
+		/* Must stay on html/body: on a descendant this does nothing for the
+		   viewport, which re-enables Android Chrome's native pull-to-refresh
+		   and lets it fight the custom one in dataRefresh.ts. */
 		overscroll-behavior: none;
+	}
+
+	body {
+		/* The ambient wash is a stack of low-alpha layers composited against
+		   solid black (PAGE_BASE in tabTheme.ts), and #app-bg-gradient is a
+		   child of body — so this is the base it paints onto. */
+		background-color: var(--bg-dark);
+	}
+
+	/* No background: #app-shell is position:fixed inset:0 at z-index 1, directly
+	   over #app-bg-gradient at z-index 0. Painting it opaque hides the wash
+	   entirely. */
+	#app-shell {
+		overflow: hidden;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
@@ -822,8 +867,7 @@ const washStyles = [
 		.tab-btn:active,
 		.range-btn:active,
 		.sub-tab-btn:active,
-		.nav-circle-btn:active,
-		.album-card-thumb:active {
+		.nav-circle-btn:active {
 			transform: scale(0.96) !important;
 			transition-duration: 0.05s !important;
 		}
@@ -848,7 +892,6 @@ const washStyles = [
 	.range-btn.is-pressed,
 	.sub-tab-btn.is-pressed,
 	.nav-circle-btn.is-pressed,
-	.album-card-thumb.is-pressed,
 	.years-info-btn.is-pressed {
 		transform: scale(0.96) !important;
 		transition-duration: 0.05s !important;
@@ -920,6 +963,12 @@ const washStyles = [
 		cursor: pointer;
 		width: 100%;
 		user-select: none;
+		/* A fully scrolled "All time" list is ~13k rows. Skipping layout and
+		   paint for the off-screen ones is what keeps that affordable; the
+		   intrinsic size is only a pre-first-render estimate, after which the
+		   browser remembers each row's real height. */
+		content-visibility: auto;
+		contain-intrinsic-size: auto 72px;
 	}
 
 	.scrobble-row:last-child {
@@ -1103,22 +1152,6 @@ const washStyles = [
 		display: flex;
 		align-items: center;
 		gap: 12px;
-	}
-
-	.scrobble-row-compact .scrobble-row-title {
-		font-size: 14px;
-	}
-
-	.scrobble-row-compact .scrobble-row-subtitle {
-		font-size: 12px;
-	}
-
-	.scrobble-row-compact .scrobble-row-right {
-		font-size: 11px;
-	}
-
-	.scrobble-row-compact .scrobble-row-thumb {
-		border-radius: var(--radius-sm);
 	}
 
 	/* Position and colour are driven from a rAF loop (see slidingHighlight.ts)

@@ -1,5 +1,6 @@
 import type { Manifest } from './persist/generations';
 import { readBootHint, writeBootHint } from './persist/generations';
+import type { EncodeRequest, EncodeResult } from './artworkEncode.worker';
 
 /**
  * Staged artwork warming.
@@ -137,6 +138,30 @@ async function quotaHeadroomBytes(): Promise<number> {
   }
 }
 
+/** How long a headroom reading stays good enough to reuse. */
+const QUOTA_RECHECK_MS = 5000;
+
+let quotaCheckedAt = 0;
+let quotaHeadroom = Number.POSITIVE_INFINITY;
+
+/**
+ * estimate() walks the whole origin's storage accounting, so calling it once per
+ * six-image batch cost ~120 walks over a full sweep. Time-based instead: the
+ * reading only has to be fresh enough to catch the approach to the ceiling, and
+ * a genuine QuotaExceededError still forces an immediate re-read.
+ */
+async function throttledQuotaHeadroom(): Promise<number> {
+  const now = Date.now();
+  if (now - quotaCheckedAt < QUOTA_RECHECK_MS) return quotaHeadroom;
+  quotaHeadroom = await quotaHeadroomBytes();
+  quotaCheckedAt = now;
+  return quotaHeadroom;
+}
+
+function invalidateQuotaHeadroom(): void {
+  quotaCheckedAt = 0;
+}
+
 function idle(): Promise<void> {
   return new Promise((resolve) => {
     const ric = (window as Window & {
@@ -154,12 +179,26 @@ function dispatchProgress(detail: ArtworkPrefetchProgress): void {
   );
 }
 
-/** Artwork URLs currently referenced by the DOM, in document order. */
+/**
+ * Artwork URLs actually inside the viewport.
+ *
+ * The visibility test is the point: an infinite scroller leaves every row it has
+ * ever rendered in the document, so "every img in the DOM" degenerates into
+ * "almost everything" on a long list and collapses the two-stage design.
+ */
 function urlsOnScreen(): Set<string> {
   const urls = new Set<string>();
+  const viewportH = window.innerHeight || document.documentElement.clientHeight;
+  const viewportW = window.innerWidth || document.documentElement.clientWidth;
+
   document.querySelectorAll('img').forEach((img) => {
-    const src = (img as HTMLImageElement).currentSrc || (img as HTMLImageElement).src;
-    if (src && src.startsWith('http')) urls.add(src);
+    const src = img.currentSrc || img.src;
+    if (!src || !src.startsWith('http')) return;
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    if (rect.bottom <= 0 || rect.top >= viewportH) return;
+    if (rect.right <= 0 || rect.left >= viewportW) return;
+    urls.add(src);
   });
   return urls;
 }
@@ -171,7 +210,77 @@ async function cachedUrls(cache: Cache): Promise<Set<string>> {
 
 class QuotaExhausted extends Error {}
 
+/**
+ * `undefined` = not tried yet, `null` = unavailable, so the main-thread path is
+ * only ever a fallback for a browser that can't give us a module worker.
+ */
+let encoderWorker: Worker | null | undefined;
+let nextJobId = 1;
+const pendingJobs = new Map<number, (result: EncodeResult) => void>();
+
+function failPendingJobs(): void {
+  for (const [id, resolve] of pendingJobs) resolve({ id, written: 0 });
+  pendingJobs.clear();
+}
+
+function getEncoderWorker(): Worker | null {
+  if (encoderWorker !== undefined) return encoderWorker;
+
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+    encoderWorker = null;
+    return null;
+  }
+
+  try {
+    const worker = new Worker(new URL('./artworkEncode.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    worker.addEventListener('message', (event: MessageEvent<EncodeResult>) => {
+      const resolve = pendingJobs.get(event.data.id);
+      if (!resolve) return;
+      pendingJobs.delete(event.data.id);
+      resolve(event.data);
+    });
+    worker.addEventListener('error', (err) => {
+      console.warn('[ArtworkPrefetch] Encoder worker failed; falling back to main thread:', err);
+      encoderWorker = null;
+      failPendingJobs();
+      worker.terminate();
+    });
+    encoderWorker = worker;
+  } catch (err) {
+    console.warn('[ArtworkPrefetch] Encoder worker unavailable; encoding on main thread:', err);
+    encoderWorker = null;
+  }
+
+  return encoderWorker;
+}
+
+function warmInWorker(worker: Worker, group: WarmGroup): Promise<EncodeResult> {
+  const id = nextJobId++;
+  return new Promise<EncodeResult>((resolve) => {
+    pendingJobs.set(id, resolve);
+    worker.postMessage({
+      id,
+      cacheName: IMAGE_CACHE,
+      source: group.source,
+      targets: group.targets,
+    } satisfies EncodeRequest);
+  });
+}
+
 async function warmBatch(cache: Cache, groups: WarmGroup[]): Promise<number> {
+  const worker = getEncoderWorker();
+  if (worker) {
+    const results = await Promise.all(groups.map((group) => warmInWorker(worker, group)));
+    if (results.some((r) => r.quota)) throw new QuotaExhausted();
+    return results.reduce((sum, r) => sum + r.written, 0);
+  }
+  return warmBatchOnMainThread(cache, groups);
+}
+
+/** Used only where a module worker or OffscreenCanvas isn't available. */
+async function warmBatchOnMainThread(cache: Cache, groups: WarmGroup[]): Promise<number> {
   const results = await Promise.all(
     groups.map(async (group) => {
       try {
@@ -220,7 +329,7 @@ async function warmAll(
 
     // Re-checked as we go: opaque padding means headroom drops far faster than
     // the bytes actually downloaded would suggest.
-    if (await quotaHeadroomBytes() <= 0) {
+    if (await throttledQuotaHeadroom() <= 0) {
       dispatchProgress({ ...progress, stage: 'quota-limited' });
       return false;
     }
@@ -229,6 +338,7 @@ async function warmAll(
       progress.cached += await warmBatch(cache, groups.slice(i, i + concurrency));
     } catch (err) {
       if (err instanceof QuotaExhausted) {
+        invalidateQuotaHeadroom();
         dispatchProgress({ ...progress, stage: 'quota-limited' });
         return false;
       }
@@ -326,7 +436,7 @@ export async function upgradeHeroArtwork(url: string | null): Promise<void> {
   if (!source) return;
 
   try {
-    if ((await quotaHeadroomBytes()) <= 0) return;
+    if ((await throttledQuotaHeadroom()) <= 0) return;
 
     const response = await fetch(source, { mode: 'cors', cache: 'no-store' });
     if (!response.ok) return;

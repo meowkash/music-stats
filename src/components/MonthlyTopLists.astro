@@ -293,9 +293,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         root: root,
         rootMargin: "600px 0px",
         sentinelClass: "swipeable-scroll-sentinel",
-        onChunkRendered: () => {
-          initArtworkImages(container);
-          applyCountGlows(container);
+        onChunkRendered: (added) => {
+          initArtworkImages(added);
+          applyCountGlows(added);
         },
       });
     }

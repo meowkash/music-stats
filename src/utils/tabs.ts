@@ -1,4 +1,4 @@
-import { themeColorForTab } from './tabTheme';
+import { themeColorForTab, themeBottomColorForTab } from './tabTheme';
 
 export const TAB_ORDER = ['dashboard', 'rankings', 'recents', 'statistics'] as const;
 export type TabId = (typeof TAB_ORDER)[number];
@@ -39,10 +39,13 @@ export function getActiveTab(): TabId {
  * of framing it with a black band.
  */
 export function applyThemeColor(tab: string): void {
-  const color = themeColorForTab(tab);
+  const topColor = themeColorForTab(tab);
+  const bottomColor = themeBottomColorForTab(tab);
+  
   for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-    if (meta.content !== color) meta.content = color;
+    if (meta.content !== topColor) meta.content = topColor;
   }
+  document.documentElement.style.backgroundColor = bottomColor;
 }
 
 /** Drives the ambient background gradient crossfade. */
@@ -70,17 +73,4 @@ export function navigateToTab(tab: string): void {
   }
 
   window.dispatchEvent(new CustomEvent('tab-navigated', { detail: { tab } }));
-}
-
-export function restoreTabFromStorage(): void {
-  try {
-    const lastTab = localStorage.getItem('last-music-stats-tab');
-    if (lastTab && lastTab !== 'dashboard') {
-      applyPanelStates(lastTab);
-      applyNavButtonStates(lastTab);
-      applyTabAccent(lastTab);
-    }
-  } catch (err) {
-    console.warn('[Tabs] Failed to restore active tab from localStorage:', err);
-  }
 }

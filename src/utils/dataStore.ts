@@ -1,3 +1,4 @@
+import { FILE_STORE, idbKeys } from './persist/idb';
 import {
   MANIFEST_PATH,
   collectGarbage,
@@ -53,6 +54,17 @@ export function dataUrl(path: string): string {
   return `${path}${sep}v=${CACHE_VERSION}`;
 }
 
+/**
+ * Marks a read that must never be served a stale cached body: the manifest, and
+ * the hash-verified downloads that build a generation. Everything else is happy
+ * to take the service worker's cached copy if the network is slow, which is what
+ * the worker's data deadline is for — `v=` alone used to opt every single read
+ * out of it, leaving that path unreachable.
+ */
+function freshDataUrl(path: string): string {
+  return `${dataUrl(path)}&fresh=1`;
+}
+
 export function normalizeDataPath(path: string): string {
   return path.split('?')[0];
 }
@@ -81,10 +93,17 @@ function dispatch<T>(name: string, detail: T): void {
   window.dispatchEvent(new CustomEvent<T>(name, { detail }));
 }
 
+/** Rebuilt whenever the pointer moves; `manifestEntry` sits on every data read. */
+let activeHashByPath = new Map<string, string>();
+
+function setActiveManifest(manifest: Manifest | null): void {
+  activeManifest = manifest;
+  activeHashByPath = new Map(manifest?.files.map((f) => [f.path, f.hash]) ?? []);
+}
+
 function manifestEntry(path: string): ManifestEntryLookup {
   const normalized = normalizeDataPath(path);
-  const entry = activeManifest?.files.find((f) => f.path === normalized);
-  return { normalized, hash: entry?.hash };
+  return { normalized, hash: activeHashByPath.get(normalized) };
 }
 
 interface ManifestEntryLookup {
@@ -98,7 +117,7 @@ interface ManifestEntryLookup {
  * same store on demand via fetchAppJson, so first paint stays light.
  */
 export async function hydrateFromStore(): Promise<boolean> {
-  activeManifest = (await loadActiveManifest()) ?? null;
+  setActiveManifest((await loadActiveManifest()) ?? null);
   if (!activeManifest) return false;
 
   const critical = new Set<string>(CRITICAL_DATA_PATHS);
@@ -152,7 +171,7 @@ export async function fetchAppJson<T>(path: string): Promise<T> {
 async function downloadFile(
   file: { path: string; hash: string },
 ): Promise<[string, unknown] | null> {
-  const text = await fetchText(dataUrl(file.path));
+  const text = await fetchText(freshDataUrl(file.path));
 
   // The service worker is network-first with a 3s deadline, so a slow network
   // can hand back the *previous* body. Verifying against the manifest hash
@@ -202,7 +221,7 @@ export async function stageUpdate(): Promise<number> {
   staging = true;
 
   try {
-    const remote = await fetchNetwork<Manifest>(dataUrl(MANIFEST_PATH));
+    const remote = await fetchNetwork<Manifest>(freshDataUrl(MANIFEST_PATH));
     if (!remote?.files?.length) return 0;
 
     if (activeManifest && activeManifest.generation === remote.generation) {
@@ -214,14 +233,12 @@ export async function stageUpdate(): Promise<number> {
 
     console.info('[data] New deploy detected:', remote.generation, remote.builtAt);
 
-    const activeByPath = new Map(activeManifest?.files.map((f) => [f.path, f.hash]) ?? []);
-    const changed = remote.files.filter((f) => activeByPath.get(f.path) !== f.hash);
+    const changed = remote.files.filter((f) => activeHashByPath.get(f.path) !== f.hash);
 
-    const needed: Array<{ path: string; hash: string }> = [];
-    for (const file of changed) {
-      const stored = await readStoredFile<unknown>(file.hash);
-      if (stored === undefined) needed.push(file);
-    }
+    // One transaction for the whole presence test, rather than one read per
+    // file just to find out whether it is already on disk.
+    const stored = new Set(await idbKeys(FILE_STORE));
+    const needed = changed.filter((f) => !stored.has(f.hash));
 
     const downloaded = await downloadAll(needed);
     if (downloaded === null) return 0;
@@ -242,16 +259,15 @@ export async function stageUpdate(): Promise<number> {
 /** Flip the pointer, refresh memory, and announce the swap exactly once. */
 async function commitGeneration(manifest: Manifest, changedPaths: string[]): Promise<void> {
   await saveActiveManifest(manifest);
-  activeManifest = manifest;
+  setActiveManifest(manifest);
 
-  const byPath = new Map(manifest.files.map((f) => [f.path, f.hash]));
   const refreshed: string[] = [];
 
   for (const path of changedPaths) {
     // Only refresh what the app has actually read; anything else will pick up
     // the new hash on its next fetchAppJson.
     if (!memory.has(path)) continue;
-    const hash = byPath.get(path);
+    const hash = activeHashByPath.get(path);
     if (!hash) continue;
     const data = await readStoredFile<unknown>(hash);
     if (data === undefined) continue;
@@ -284,7 +300,7 @@ export async function ensureInitialGeneration(): Promise<void> {
   if (activeManifest || !navigator.onLine) return;
 
   try {
-    const remote = await fetchNetwork<Manifest>(dataUrl(MANIFEST_PATH));
+    const remote = await fetchNetwork<Manifest>(freshDataUrl(MANIFEST_PATH));
     if (!remote?.files?.length) return;
 
     const critical = new Set<string>(CRITICAL_DATA_PATHS);
@@ -303,7 +319,7 @@ export async function ensureInitialGeneration(): Promise<void> {
     // The manifest is recorded in full even though only the critical files were
     // downloaded; the rest resolve lazily and are backfilled by the next sweep.
     await saveActiveManifest(remote);
-    activeManifest = remote;
+    setActiveManifest(remote);
     writeBootHint({ generation: remote.generation, complete: true, artworkCached: 0 });
     dispatch<Manifest>('data-manifest-ready', remote);
   } catch (err) {
@@ -315,11 +331,8 @@ export async function ensureInitialGeneration(): Promise<void> {
 export async function backfillStoredFiles(): Promise<void> {
   if (!activeManifest || !navigator.onLine) return;
 
-  const missing: Array<{ path: string; hash: string }> = [];
-  for (const file of activeManifest.files) {
-    const stored = await readStoredFile<unknown>(file.hash);
-    if (stored === undefined) missing.push(file);
-  }
+  const stored = new Set(await idbKeys(FILE_STORE));
+  const missing = activeManifest.files.filter((f) => !stored.has(f.hash));
   if (!missing.length) return;
 
   const downloaded = await downloadAll(missing);

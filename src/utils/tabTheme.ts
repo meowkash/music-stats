@@ -86,8 +86,17 @@ export const TAB_THEME_COLORS: Record<TabId, string> = Object.fromEntries(
   Object.entries(TAB_SURFACES).map(([tab, surface]) => [tab, composite(surface.top)]),
 ) as Record<TabId, string>;
 
+export const TAB_BOTTOM_COLORS: Record<TabId, string> = Object.fromEntries(
+  Object.entries(TAB_SURFACES).map(([tab, surface]) => [tab, composite(surface.bottom)]),
+) as Record<TabId, string>;
+
 export const DEFAULT_THEME_COLOR = TAB_THEME_COLORS.dashboard;
+export const DEFAULT_BOTTOM_COLOR = TAB_BOTTOM_COLORS.dashboard;
 
 export function themeColorForTab(tab: string): string {
   return TAB_THEME_COLORS[tab as TabId] ?? DEFAULT_THEME_COLOR;
+}
+
+export function themeBottomColorForTab(tab: string): string {
+  return TAB_BOTTOM_COLORS[tab as TabId] ?? DEFAULT_BOTTOM_COLOR;
 }

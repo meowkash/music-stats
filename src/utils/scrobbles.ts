@@ -5,6 +5,35 @@ import { fetchAppJson, onPathsUpdated } from './dataStore';
 
 const yearCache: Record<string, YearData> = {};
 
+/** Fallback when meta.json carries no duration for a track. */
+const DEFAULT_DURATION_MS = 210000;
+
+interface ArtistTally { count: number; playtimeMs: number }
+interface AlbumTally { count: number; playtimeMs: number; artistId: number }
+
+export interface RollupItem {
+  id: number;
+  name: string;
+  subtitle?: string;
+  count: number;
+  playtimeMs: number;
+  artistId?: number;
+  albumId?: number;
+  artistName?: string;
+  albumName?: string;
+}
+
+/**
+ * One collator for every comparator in this module. A bare localeCompare call
+ * may construct a fresh ICU collator each time, and ties are common here
+ * because play counts cluster hard at low values.
+ */
+export const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
+function byCountThenName<T extends { count: number; name: string }>(a: T, b: T): number {
+  return b.count - a.count || nameCollator.compare(a.name, b.name);
+}
+
 export async function loadYearData(year: string): Promise<YearData | null> {
   if (yearCache[year]) return yearCache[year];
   try {
@@ -36,7 +65,7 @@ export function getYearsInRange(startStr: string, endStr: string): string[] {
 /** Lexical YYYY-MM-DD comparison matches chronological order. */
 
 function creditArtistRollup(
-  counts: Record<number, { count: number; playtimeMs: number }>,
+  counts: Map<number, ArtistTally>,
   trackId: number,
   rawArtistId: number,
   playCount: number,
@@ -44,27 +73,22 @@ function creditArtistRollup(
   meta: MetaData,
   mode: ArtistRollupMode = 'canonical',
 ): void {
-  if (mode === 'raw') {
-    if (!counts[rawArtistId]) counts[rawArtistId] = { count: 0, playtimeMs: 0 };
-    counts[rawArtistId].count += playCount;
-    counts[rawArtistId].playtimeMs += playtimeMs;
-    return;
-  }
-  const trackMap = meta.trackToCanonical;
-  const mapping = meta.rawToCanonical;
-  const canonical = meta.canonicalArtists;
-  if (canonical) {
-    const ids = trackMap?.[trackId] ?? mapping?.[rawArtistId] ?? [rawArtistId];
-    for (const cId of ids) {
-      if (!counts[cId]) counts[cId] = { count: 0, playtimeMs: 0 };
-      counts[cId].count += playCount;
-      counts[cId].playtimeMs += playtimeMs;
+  const credit = (id: number) => {
+    const tally = counts.get(id);
+    if (tally) {
+      tally.count += playCount;
+      tally.playtimeMs += playtimeMs;
+    } else {
+      counts.set(id, { count: playCount, playtimeMs });
     }
+  };
+
+  if (mode === 'raw' || !meta.canonicalArtists) {
+    credit(rawArtistId);
     return;
   }
-  if (!counts[rawArtistId]) counts[rawArtistId] = { count: 0, playtimeMs: 0 };
-  counts[rawArtistId].count += playCount;
-  counts[rawArtistId].playtimeMs += playtimeMs;
+  const ids = meta.trackToCanonical?.[trackId] ?? meta.rawToCanonical?.[rawArtistId] ?? [rawArtistId];
+  for (const cId of ids) credit(cId);
 }
 
 function isValidAlbum(meta: MetaData, albumId: number): boolean {
@@ -78,29 +102,58 @@ function artistDisplayName(meta: MetaData, artistId: number, mode: ArtistRollupM
   return meta.artists[artistId];
 }
 
-/** Raw scrobble artist strings that map to a canonical artist ID. */
-export function rawArtistNamesForCanonical(canonicalId: number, meta: MetaData): string[] {
-  const names: string[] = [];
-  const mapping = meta.rawToCanonical;
-  if (!mapping) return names;
+/**
+ * Reverse of meta.rawToCanonical, built once per MetaData object.
+ *
+ * This sits on the render path of every artist row, and the forward mapping has
+ * one entry per raw artist — scanning it per row made painting the leaderboard
+ * quadratic in the artist count.
+ */
+const rawNamesByCanonical = new WeakMap<MetaData, Map<number, string[]>>();
 
-  for (let rawId = 0; rawId < mapping.length; rawId++) {
-    const targets = mapping[rawId];
-    if (!targets?.includes(canonicalId)) continue;
-    const name = meta.artists[rawId];
-    if (name) names.push(name);
+function rawNameIndex(meta: MetaData): Map<number, string[]> {
+  let index = rawNamesByCanonical.get(meta);
+  if (index) return index;
+
+  index = new Map<number, string[]>();
+  const mapping = meta.rawToCanonical;
+  if (mapping) {
+    for (let rawId = 0; rawId < mapping.length; rawId++) {
+      const targets = mapping[rawId];
+      if (!targets) continue;
+      const name = meta.artists[rawId];
+      if (!name) continue;
+      for (const canonicalId of targets) {
+        const names = index.get(canonicalId);
+        if (names) names.push(name);
+        else index.set(canonicalId, [name]);
+      }
+    }
   }
 
-  return names;
+  rawNamesByCanonical.set(meta, index);
+  return index;
 }
 
+const NO_RAW_NAMES: string[] = [];
+
+/** Raw scrobble artist strings that map to a canonical artist ID. */
+export function rawArtistNamesForCanonical(canonicalId: number, meta: MetaData): string[] {
+  return rawNameIndex(meta).get(canonicalId) ?? NO_RAW_NAMES;
+}
+
+/**
+ * A Map rather than a plain object so track ids stay numeric end to end: an
+ * object forces every downstream rollup through Object.entries + parseInt,
+ * which on a full-history range is ~13k string allocations per rollup.
+ */
 export function aggregateTrackCounts(
   years: string[],
   startStr: string,
   endStr: string,
   cache: Record<string, YearData> = yearCache,
-): Record<number, number> {
-  const scrobbleCounts: Record<number, number> = {};
+): Map<number, number> {
+  const scrobbleCounts = new Map<number, number>();
 
   for (const year of years) {
     const yearData = cache[year];
@@ -111,7 +164,7 @@ export function aggregateTrackCounts(
     for (const dateStr in yearData) {
       if (dateStr < startStr || dateStr > endStr) continue;
       for (const [trackId, count] of yearData[dateStr]) {
-        scrobbleCounts[trackId] = (scrobbleCounts[trackId] || 0) + count;
+        scrobbleCounts.set(trackId, (scrobbleCounts.get(trackId) ?? 0) + count);
       }
     }
   }
@@ -120,20 +173,20 @@ export function aggregateTrackCounts(
 }
 
 export function rollupByCategory(
-  trackCounts: Record<number, number>,
+  trackCounts: Map<number, number>,
   meta: MetaData,
   category: 'tracks' | 'artists' | 'albums',
   options?: { artistMode?: ArtistRollupMode },
 ): Array<{ id: number; name: string; subtitle?: string; count: number; playtimeMs: number; artistId?: number; albumId?: number; artistName?: string; albumName?: string }> {
   if (category === 'tracks') {
-    return Object.entries(trackCounts).map(([tIdStr, count]) => {
-      const tId = parseInt(tIdStr, 10);
+    const tracks: RollupItem[] = [];
+    for (const [tId, count] of trackCounts) {
       const trackInfo = meta.tracks[tId];
-      const trackName = trackInfo[0];
-      const artistId = trackInfo[1];
-      const albumId = trackInfo[2];
-      const duration = trackInfo[3] ?? 210000;
-      return {
+      // A year file can reference a track id meta.json doesn't carry yet — that
+      // is what a partially-applied generation looks like. Skip rather than throw.
+      if (!trackInfo) continue;
+      const [trackName, artistId, albumId, duration = DEFAULT_DURATION_MS] = trackInfo;
+      tracks.push({
         id: tId,
         name: trackName,
         subtitle: `${meta.artists[artistId]} • ${meta.albums[albumId]}`,
@@ -143,118 +196,131 @@ export function rollupByCategory(
         albumName: meta.albums[albumId],
         count,
         playtimeMs: count * duration,
-      };
-    });
+      });
+    }
+    return tracks;
   }
 
   if (category === 'artists') {
     const artistMode = options?.artistMode ?? 'canonical';
-    const artistCounts: Record<number, { count: number; playtimeMs: number }> = {};
-    for (const [tIdStr, count] of Object.entries(trackCounts)) {
-      const tId = parseInt(tIdStr, 10);
+    const artistCounts = new Map<number, ArtistTally>();
+    for (const [tId, count] of trackCounts) {
       const trackInfo = meta.tracks[tId];
+      if (!trackInfo) continue;
       const artistId = trackInfo[1];
-      const duration = trackInfo[3] ?? 210000;
+      const duration = trackInfo[3] ?? DEFAULT_DURATION_MS;
       creditArtistRollup(artistCounts, tId, artistId, count, count * duration, meta, artistMode);
     }
-    return Object.entries(artistCounts).map(([artIdStr, data]) => ({
-      id: parseInt(artIdStr, 10),
-      name: artistDisplayName(meta, parseInt(artIdStr, 10), artistMode),
-      count: data.count,
-      playtimeMs: data.playtimeMs,
-    }));
+    const artists: RollupItem[] = [];
+    for (const [artistId, data] of artistCounts) {
+      artists.push({
+        id: artistId,
+        name: artistDisplayName(meta, artistId, artistMode),
+        count: data.count,
+        playtimeMs: data.playtimeMs,
+      });
+    }
+    return artists;
   }
 
-  const albumCounts: Record<number, { count: number; playtimeMs: number; artistId: number }> = {};
-  for (const [tIdStr, count] of Object.entries(trackCounts)) {
-    const tId = parseInt(tIdStr, 10);
+  const albumCounts = new Map<number, AlbumTally>();
+  for (const [tId, count] of trackCounts) {
     const trackInfo = meta.tracks[tId];
-    const albumId = trackInfo[2];
-    const artistId = trackInfo[1];
-    const duration = trackInfo[3] ?? 210000;
+    if (!trackInfo) continue;
+    const [, artistId, albumId, duration = DEFAULT_DURATION_MS] = trackInfo;
     if (!isValidAlbum(meta, albumId)) continue;
-    if (!albumCounts[albumId]) {
-      albumCounts[albumId] = { count: 0, playtimeMs: 0, artistId };
+    const tally = albumCounts.get(albumId);
+    if (tally) {
+      tally.count += count;
+      tally.playtimeMs += count * duration;
+    } else {
+      albumCounts.set(albumId, { count, playtimeMs: count * duration, artistId });
     }
-    albumCounts[albumId].count += count;
-    albumCounts[albumId].playtimeMs += count * duration;
   }
-  return Object.entries(albumCounts).map(([albIdStr, data]) => ({
-    id: parseInt(albIdStr, 10),
-    name: meta.albums[parseInt(albIdStr, 10)],
-    subtitle: meta.artists[data.artistId],
-    artistId: data.artistId,
-    count: data.count,
-    playtimeMs: data.playtimeMs,
-  }));
+  const albums: RollupItem[] = [];
+  for (const [albumId, data] of albumCounts) {
+    albums.push({
+      id: albumId,
+      name: meta.albums[albumId],
+      subtitle: meta.artists[data.artistId],
+      artistId: data.artistId,
+      count: data.count,
+      playtimeMs: data.playtimeMs,
+    });
+  }
+  return albums;
 }
 
 export function rollupTopCounts(
-  trackCounts: Record<number, number>,
+  trackCounts: Map<number, number>,
   meta: MetaData,
 ): {
   artists: Array<{ id: number; name: string; count: number; playtimeMs: number }>;
   tracks: Array<{ id: number; name: string; artistName: string; albumName: string; artistId: number; albumId: number; count: number; playtimeMs: number }>;
   albums: Array<{ id: number; name: string; artistName: string; artistId: number; count: number; playtimeMs: number }>;
 } {
-  const artistCounts: Record<number, { count: number; playtimeMs: number }> = {};
-  const albumCounts: Record<number, { count: number; playtimeMs: number; artistId: number }> = {};
-  const songCounts: Record<number, { count: number; playtimeMs: number }> = {};
+  const artistCounts = new Map<number, ArtistTally>();
+  const albumCounts = new Map<number, AlbumTally>();
+  const tracks: Array<{ id: number; name: string; artistName: string; albumName: string; artistId: number; albumId: number; count: number; playtimeMs: number }> = [];
 
-  for (const [trackIdStr, count] of Object.entries(trackCounts)) {
-    const trackId = parseInt(trackIdStr, 10);
+  // trackCounts is already keyed uniquely by track id, so the track list is a
+  // straight projection of it — no intermediate accumulator needed.
+  for (const [trackId, count] of trackCounts) {
     const trackInfo = meta.tracks[trackId];
     if (!trackInfo) continue;
-    const [, artistId, albumId, duration = 210000] = trackInfo;
+    const [trackName, artistId, albumId, duration = DEFAULT_DURATION_MS] = trackInfo;
     const playtimeMs = count * duration;
 
-    if (!songCounts[trackId]) songCounts[trackId] = { count: 0, playtimeMs: 0 };
-    songCounts[trackId].count += count;
-    songCounts[trackId].playtimeMs += playtimeMs;
+    tracks.push({
+      id: trackId,
+      name: trackName,
+      artistName: meta.artists[artistId] || 'Unknown Artist',
+      albumName: meta.albums[albumId] || 'Unknown Album',
+      artistId,
+      albumId,
+      count,
+      playtimeMs,
+    });
 
     creditArtistRollup(artistCounts, trackId, artistId, count, playtimeMs, meta);
-    
+
     if (isValidAlbum(meta, albumId)) {
-      if (!albumCounts[albumId]) {
-        albumCounts[albumId] = { count: 0, playtimeMs: 0, artistId };
+      const tally = albumCounts.get(albumId);
+      if (tally) {
+        tally.count += count;
+        tally.playtimeMs += playtimeMs;
+      } else {
+        albumCounts.set(albumId, { count, playtimeMs, artistId });
       }
-      albumCounts[albumId].count += count;
-      albumCounts[albumId].playtimeMs += playtimeMs;
     }
   }
 
+  const artists: Array<{ id: number; name: string; count: number; playtimeMs: number }> = [];
+  for (const [artistId, data] of artistCounts) {
+    artists.push({
+      id: artistId,
+      name: artistDisplayName(meta, artistId),
+      count: data.count,
+      playtimeMs: data.playtimeMs,
+    });
+  }
+
+  const albums: Array<{ id: number; name: string; artistName: string; artistId: number; count: number; playtimeMs: number }> = [];
+  for (const [albumId, data] of albumCounts) {
+    albums.push({
+      id: albumId,
+      name: meta.albums[albumId] || 'Unknown Album',
+      artistName: meta.artists[data.artistId] || 'Unknown Artist',
+      artistId: data.artistId,
+      count: data.count,
+      playtimeMs: data.playtimeMs,
+    });
+  }
+
   return {
-    artists: Object.entries(artistCounts)
-      .map(([id, data]) => ({ id: parseInt(id, 10), name: artistDisplayName(meta, parseInt(id, 10)), count: data.count, playtimeMs: data.playtimeMs }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    tracks: Object.entries(songCounts)
-      .map(([id, data]) => {
-        const track = meta.tracks[parseInt(id, 10)];
-        if (!track) return null;
-        const [trackName, artistId, albumId] = track;
-        return {
-          id: parseInt(id, 10),
-          name: trackName,
-          artistName: meta.artists[artistId] || 'Unknown Artist',
-          albumName: meta.albums[albumId] || 'Unknown Album',
-          artistId,
-          albumId,
-          count: data.count,
-          playtimeMs: data.playtimeMs,
-        };
-      })
-      .filter((t): t is NonNullable<typeof t> => t !== null)
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    albums: Object.entries(albumCounts)
-      .map(([id, data]) => ({
-        id: parseInt(id, 10),
-        name: meta.albums[parseInt(id, 10)] || 'Unknown Album',
-        artistName: meta.artists[data.artistId] || 'Unknown Artist',
-        artistId: data.artistId,
-        count: data.count,
-        playtimeMs: data.playtimeMs,
-      }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    artists: artists.sort(byCountThenName),
+    tracks: tracks.sort(byCountThenName),
+    albums: albums.sort(byCountThenName),
   };
 }
 
