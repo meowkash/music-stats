@@ -1,12 +1,12 @@
 import { rafTween } from './motion';
 import { bindWheelPan } from './wheelPan';
-
-/** Matches --duration-normal so pager slides feel like the rest of the UI. */
-const SETTLE_MS = 300;
-const DRAG_START_THRESHOLD = 8;
-const COMMIT_FRACTION = 0.18;
-const VELOCITY_COMMIT = 0.3;
-const EDGE_RESISTANCE = 0.2;
+import {
+  ENGAGE_DISTANCE,
+  SETTLE_MS,
+  commitIndex,
+  isAxisClaimed,
+  rubberBand,
+} from './gesture';
 
 export interface PagerSwipeOptions {
   /** Surface that listens for the gesture. */
@@ -95,14 +95,15 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     const absX = restingX(index) + value;
     const minX = restingX(pageCount - 1);
     const maxX = 0;
+    // width can still be 0 on the first gesture of a hidden panel; fall back to
+    // the viewport so the resistance curve has a sane scale either way.
+    const span = width || window.innerWidth;
 
     if (absX > maxX) {
-      const over = absX - maxX;
-      return (maxX + over * EDGE_RESISTANCE) - restingX(index);
+      return maxX + rubberBand(absX - maxX, span) - restingX(index);
     }
     if (absX < minX) {
-      const over = absX - minX;
-      return (minX + over * EDGE_RESISTANCE) - restingX(index);
+      return minX + rubberBand(absX - minX, span) - restingX(index);
     }
     return value;
   }
@@ -159,9 +160,9 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     const dy = e.touches[0].clientY - startY;
 
     if (!didDrag) {
-      if (Math.abs(dx) < DRAG_START_THRESHOLD && Math.abs(dy) < DRAG_START_THRESHOLD) return;
+      if (Math.abs(dx) < ENGAGE_DISTANCE && Math.abs(dy) < ENGAGE_DISTANCE) return;
       // Vertical bias means the user is scrolling the list, not paging.
-      if (Math.abs(dy) > Math.abs(dx) * 1.2) {
+      if (!isAxisClaimed(dx, dy)) {
         dragging = false;
         return;
       }
@@ -187,28 +188,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   function commit(endVelocity: number, moved: boolean) {
     const absX = restingX(index) + offset;
     const exactPage = -absX / (width || 1);
-
-    let target = Math.round(exactPage);
-
-    if (moved) {
-      const velocity = endVelocity;
-      if (velocity < -VELOCITY_COMMIT) {
-        target = Math.ceil(exactPage);
-      } else if (velocity > VELOCITY_COMMIT) {
-        target = Math.floor(exactPage);
-      } else {
-        let posFraction = exactPage % 1;
-        if (posFraction < 0) posFraction += 1;
-        
-        if (posFraction > COMMIT_FRACTION && posFraction <= 0.5) {
-          target = Math.ceil(exactPage);
-        } else if (posFraction < (1 - COMMIT_FRACTION) && posFraction > 0.5) {
-          target = Math.floor(exactPage);
-        }
-      }
-    }
-
-    goTo(target);
+    goTo(commitIndex(exactPage, endVelocity, moved));
   }
 
   const onEnd = () => {

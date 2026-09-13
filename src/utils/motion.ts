@@ -73,7 +73,14 @@ export function rafTween(
   const tick = (now: number) => {
     if (cancelled) return;
     const t = Math.min((now - start) / durationMs, 1);
-    onUpdate(from + (to - from) * easing(t));
+    // A throw from onUpdate must not skip the reschedule below — that would
+    // strand the animation mid-flight and never run onComplete, leaving the
+    // caller's state (index, offset, drag classes) permanently inconsistent.
+    try {
+      onUpdate(from + (to - from) * easing(t));
+    } catch (err) {
+      console.error('[Motion] rafTween onUpdate threw:', err);
+    }
     if (t < 1) {
       rafId = requestAnimationFrame(tick);
     } else {

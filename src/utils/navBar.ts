@@ -1,4 +1,6 @@
 import { createDeckSlider } from './deckSlider';
+import { isOverlayActive } from './overlayState';
+import { ENGAGE_DISTANCE, isAxisClaimed } from './gesture';
 import {
   colorToCss,
   createCssPaintCache,
@@ -13,7 +15,6 @@ import { TAB_ORDER, getActiveTab, navigateToTab, type TabId } from './tabs';
 
 /** Pill swells slightly while held, like the iOS tab bar. */
 const DRAG_SCALE = 1.08;
-const DRAG_START_THRESHOLD = 6;
 /** Distance over which an off-centre grab is pulled onto the finger. */
 const GRAB_DECAY_DISTANCE = 140;
 const MIN_SETTLE_MS = 200;
@@ -24,6 +25,7 @@ const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
 function isOverlayOpen(): boolean {
   return (
+    isOverlayActive() ||
     document.body.classList.contains('overlay-open') ||
     document.body.classList.contains('stats-sheet-open')
   );
@@ -300,8 +302,9 @@ export function initNavBar(): void {
     const vertical = isVerticalNav();
 
     if (!engaged) {
-      if (Math.abs(dx) < DRAG_START_THRESHOLD && Math.abs(dy) < DRAG_START_THRESHOLD) return;
-      if (vertical ? Math.abs(dx) > Math.abs(dy) : Math.abs(dy) > Math.abs(dx)) {
+      if (Math.abs(dx) < ENGAGE_DISTANCE && Math.abs(dy) < ENGAGE_DISTANCE) return;
+      // Claim only when the gesture runs along the bar's own axis.
+      if (!(vertical ? isAxisClaimed(dy, dx) : isAxisClaimed(dx, dy))) {
         dragging = false;
         return;
       }

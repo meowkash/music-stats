@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "My Music Stats",
+  "name": "Music Stats",
   "short_name": "Music Stats",
   "description": "A fun interactive tracker for my music listening history over the years.",
   "start_url": "/",

@@ -1,4 +1,5 @@
 import { bindSwipeDismiss } from './overlayGestures';
+import { setOverlayOpen } from './overlayState';
 
 export interface SheetOptions {
   /** Element id prefix passed to the BottomSheet component. */
@@ -50,6 +51,7 @@ export function createSheet(options: SheetOptions): SheetController | null {
     panelEl.classList.add('visible');
     backdropEl.classList.add('visible');
     document.body.classList.add(bodyClass);
+    setOverlayOpen(`sheet:${bodyClass}`, true);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => onOpen?.());
@@ -62,6 +64,7 @@ export function createSheet(options: SheetOptions): SheetController | null {
     panelEl.classList.remove('visible');
     backdropEl.classList.remove('visible');
     document.body.classList.remove(bodyClass);
+    setOverlayOpen(`sheet:${bodyClass}`, false);
     panelEl.style.transform = '';
     backdropEl.style.opacity = '';
     onClose?.();

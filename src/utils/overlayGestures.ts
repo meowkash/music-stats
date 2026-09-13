@@ -1,4 +1,5 @@
 import { bindWheelPan } from './wheelPan';
+import { ENGAGE_DISTANCE, FLICK_VELOCITY } from './gesture';
 
 export interface SwipeDismissOptions {
   panel: HTMLElement;
@@ -16,10 +17,6 @@ export interface SwipeDismissOptions {
   reserveRightEdgePx?: number | (() => number);
 }
 
-/** Distance the finger must travel before the sheet starts following it. */
-const ENGAGE_DISTANCE = 6;
-/** Flick speed (px/ms) that dismisses regardless of distance travelled. */
-const FLICK_VELOCITY = 0.55;
 
 export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   const {

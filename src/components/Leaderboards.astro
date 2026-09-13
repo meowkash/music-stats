@@ -146,13 +146,17 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     align-items: center;
     justify-content: flex-end;
     position: relative;
-    /* Isolate toggle-reveal geometry updates during 120Hz swipe gestures */
+    /* Isolate toggle-reveal geometry updates during 120Hz swipe gestures.
+       Deliberately not overflow: hidden — that clipped the search field's
+       focus glow. The one child that needs clipping (.artist-ranking-toggle,
+       whose max-width drives the reveal) already clips itself. */
     contain: layout style;
-    overflow: hidden;
     /* Gap is folded into the toggle's padding so width animates cleanly. */
     gap: 0;
     --toggle-reveal: 0;
     --search-accent: var(--accent-cat-songs);
+    /* Matches the 12px blur on the focus box-shadow, plus a pixel of slack. */
+    --search-glow-pad: 14px;
     --search-glow: var(--accent-cat-songs-glow);
     height: 40px;
     width: 100%;
@@ -453,8 +457,20 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   .search-container.is-searching {
-    clip-path: inset(0 0 0 0 round 20px);
-    pointer-events: auto;
+    /* --toggles-inset is the live width of .toggles-wrapper plus a gutter,
+       written by a ResizeObserver in the script below. It tracks the Unified
+       toggle's reveal transition frame for frame, so the field and the toggles
+       stay in lockstep on the way into and out of the Artists page.
+       The clip stops --search-glow-pad short of the toggles so the focus glow
+       around the field's right edge has somewhere to land; the field itself is
+       sized to end at the inset, so only the glow lives in that strip. */
+    clip-path: inset(
+      0 calc(var(--toggles-inset, 0px) - var(--search-glow-pad)) 0 0 round 20px
+    );
+  }
+
+  .search-container.is-searching .search-input {
+    width: calc(100% - var(--toggles-inset, 0px));
   }
 
   .search-btn {
@@ -520,11 +536,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     will-change: transform, opacity;
   }
 
-  .search-container.is-searching ~ .toggles-wrapper {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateX(30px);
-  }
+  /* Deliberately no rule hiding .toggles-wrapper while searching: the field
+     now expands into the space the toggles leave rather than over them. */
 
   .ranking-toggle {
     display: flex;
@@ -564,12 +577,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     .search-input {
       opacity: 1;
       pointer-events: auto;
-    }
-
-    .search-container.is-searching ~ .toggles-wrapper {
-      opacity: 1;
-      pointer-events: auto;
-      transform: none;
     }
 
     /*
@@ -691,6 +698,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   import { getCategoryAccent } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
   import { bindPagerSwipe } from "../utils/pagerSwipe";
+  import { captureRowPositions, playFlip } from "../utils/flip";
   import { colorToCss, lerpColor, parseColor, withAlpha, type Rgba } from "../utils/motion";
 
   const RANKING_TABS = ["songs", "albums", "artists"] as const;
@@ -958,6 +966,36 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       paintPage(tab, prepareTab(tab));
     }
 
+    /**
+     * Playtime and Unified change the order (and for Unified the membership) of
+     * a list that is already in memory. Routing them through updateLeaderboard()
+     * tore every page down to "Aggregating scrobbles..." and rebuilt it, which
+     * is why the change read as a flash rather than a transition. This re-sorts
+     * in place and plays the rows from their old positions to their new ones.
+     */
+    function resortLeaderboard() {
+      if (!rollupCounts) {
+        void updateLeaderboard();
+        return;
+      }
+
+      const tabs = isDesktopLayout() ? [...RANKING_TABS] : [activeTab()];
+      const captures = new Map<RankingTab, ReturnType<typeof captureRowPositions>>();
+      for (const tab of tabs) {
+        if (renderedTabs.has(tab)) captures.set(tab, captureRowPositions(listEl(tab)));
+      }
+
+      // Drop the sorted snapshots but keep the rollup — that is the expensive part.
+      renderedTabs.clear();
+      for (const tab of RANKING_TABS) delete itemsByTab[tab];
+
+      for (const tab of tabs) {
+        paintPage(tab, prepareTab(tab));
+        const before = captures.get(tab);
+        if (before) playFlip(listEl(tab), before, { viewport: pageEl(tab) });
+      }
+    }
+
     async function updateLeaderboard() {
       const epoch = ++dataEpoch;
 
@@ -1002,7 +1040,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         await loadYearsData(yearsToLoad);
         if (epoch !== dataEpoch) return;
 
-        const key = `${startStr}|${endStr}|${artistRankingMode}`;
+        const key = `${startStr}|${endStr}`;
         if (key !== rollupKey) {
           rollupKey = key;
           rollupCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
@@ -1049,7 +1087,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     const rangeHighlightCtrl = createSlidingHighlight({
       highlightEl: rangeHighlight,
-      buttons: document.querySelectorAll(".range-btn"),
+      buttons: document.querySelectorAll(".quick-ranges .range-btn"),
     });
 
     const tabGroup = document.querySelector(".leaderboard-tab-group") as HTMLElement;
@@ -1111,9 +1149,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
             ? `0 0 12px ${withAlpha(tabAccentRgba[i], 0.4 * activeness)}`
             : "none";
       }
-      const i0 = Math.floor(fraction);
+      // fraction goes out of range whenever the pager is rubber-banding past an
+      // edge. tabAccentRgba[-1] is undefined, and the resulting throw used to
+      // travel up through paint() into rafTween's tick — killing the settle
+      // animation before it could reschedule, so the bounce never played back.
+      const i0 = Math.min(Math.max(Math.floor(fraction), 0), tabAccentRgba.length - 1);
       const i1 = Math.min(i0 + 1, tabAccentRgba.length - 1);
-      const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], fraction - i0);
+      const mix = Math.min(Math.max(fraction - i0, 0), 1);
+      const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], mix);
       const mixedCss = colorToCss(mixed);
       const mixedGlow = withAlpha(mixed, 0.4);
       rangeHighlight.style.setProperty("--range-color", mixedCss);
@@ -1250,12 +1293,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       pager?.goTo(index, animate);
     }
 
-    document.querySelectorAll(".range-btn").forEach((btn) => {
+    document.querySelectorAll(".quick-ranges .range-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const range = btn.getAttribute("data-range");
         if (!range) return;
 
-        document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+        document
+          .querySelectorAll(".quick-ranges .range-btn")
+          .forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         rangeHighlightCtrl.sync(btn as HTMLElement);
 
@@ -1283,7 +1328,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       syncArtistRankingToggle();
       // Desktop shows all three columns — artists list must refresh even when
       // activeIndex is still on Songs (mobile pager sets activeTab to artists).
-      if (isDesktopLayout() || activeTab() === "artists") updateLeaderboard();
+      if (isDesktopLayout() || activeTab() === "artists") resortLeaderboard();
     }
 
     artistRankingSwitch.addEventListener("click", () => {
@@ -1294,10 +1339,32 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       playtimeMode = !playtimeMode;
       localStorage.setItem(PLAYTIME_MODE_KEY, String(playtimeMode));
       syncArtistRankingToggle();
-      updateLeaderboard();
+      resortLeaderboard();
     });
 
+    /*
+     * The open field stops where the toggles begin. Their width is not static —
+     * Unified reveals itself across the Artists page transition — so the inset
+     * is measured rather than hardcoded, and the observer keeps it correct for
+     * every frame of that reveal as well as on resize and font load.
+     */
+    const togglesWrapper = document.getElementById("leaderboardToggles") as HTMLElement;
+    let lastTogglesInset = -1;
+
+    function syncTogglesInset() {
+      // Desktop lays the field out in flow, so the clip path is off entirely.
+      const inset = isDesktopLayout() ? 0 : Math.round(togglesWrapper.offsetWidth);
+      if (inset === lastTogglesInset) return;
+      lastTogglesInset = inset;
+      searchBarRow.style.setProperty("--toggles-inset", `${inset}px`);
+    }
+
+    syncTogglesInset();
+    new ResizeObserver(syncTogglesInset).observe(togglesWrapper);
+    desktopQuery.addEventListener("change", syncTogglesInset);
+
     searchBtn.addEventListener("click", () => {
+      syncTogglesInset();
       searchContainer.classList.add("is-searching");
       searchInput.focus();
     });

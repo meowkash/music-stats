@@ -34,7 +34,11 @@ const STATIC_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
 
+// Network-first paths. /manifest.json is here because it no longer carries a
+// ?v= cache-buster: the generic cache-first branch below would otherwise pin
+// the copy pre-cached at install time and never pick up a redeploy.
 const PWA_ICON_PATHS = new Set([
+  '/manifest.json',
   '/favicon.svg',
   '/favicon.ico',
   '/apple-touch-icon.png',

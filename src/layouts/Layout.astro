@@ -45,15 +45,24 @@ const washStyles = [
 		<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href={`/favicon.ico?v=${cacheData.version}`} />
 		<link rel="icon" type="image/png" sizes="32x32" href={`/icons/icon-32.png?v=${cacheData.version}`} />
 		<link rel="icon" type="image/png" sizes="192x192" href={`/icons/icon-192.png?v=${cacheData.version}`} />
-		<link rel="apple-touch-icon" sizes="180x180" href={`/apple-touch-icon.png?v=${cacheData.version}`} />
-		<link rel="manifest" href={`/manifest.json?v=${cacheData.version}`} />
+		{/* No ?v= cache-buster on these two: the home-screen icon and the manifest
+		    are fetched by WebKit's out-of-process icon loader and by Chrome's
+		    installability checker, neither of which reliably follows a
+		    query-stringed apple-touch-icon. public/_headers revalidates both on
+		    every request instead, which is what the buster was there for. */}
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		{/* use-credentials so the manifest fetch carries cookies. Without it the
+		    request is credential-less and a Cloudflare managed challenge answers
+		    it with a 403 HTML page — the manifest then fails to parse and Chrome
+		    never offers to install. */}
+		<link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta
 			name="apple-mobile-web-app-status-bar-style"
 			content="black-translucent"
 		/>
-		<meta name="apple-mobile-web-app-title" content="My Music Stats" />
+		<meta name="apple-mobile-web-app-title" content="Music Stats" />
 		<!-- Repainted per tab by applyThemeColor() in src/utils/tabs.ts. -->
 		<meta name="theme-color" content={TAB_THEME_COLORS.dashboard} />
 		<style is:inline set:html={washStyles}></style>
@@ -70,7 +79,7 @@ const washStyles = [
 		<meta property="og:image" content={ogImageUrl} />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
-		<meta property="og:image:alt" content="My Music Stats app icon" />
+		<meta property="og:image:alt" content="Music Stats app icon" />
 
 		<!-- Twitter / X Card -->
 		<meta name="twitter:card" content="summary_large_image" />
@@ -382,7 +391,7 @@ const washStyles = [
 		</div>
 
 		<div id="pwa-install-banner" class="hidden" role="dialog" aria-labelledby="pwa-install-title">
-			<div class="pwa-install-title" id="pwa-install-title">Install My Music Stats</div>
+			<div class="pwa-install-title" id="pwa-install-title">Install Music Stats</div>
 			<p class="pwa-install-hint">Install for offline access and faster launch.</p>
 			<div class="pwa-install-actions">
 				<button type="button" id="pwa-install-dismiss">Not now</button>
@@ -690,8 +699,8 @@ const washStyles = [
 			top: auto;
 			/* Sheets opt into a shorter height with `--sheet-height`; the cap keeps
 			   any value clear of the status bar. */
-			height: var(--sheet-height, 92dvh);
-			max-height: calc(100dvh - env(safe-area-inset-top) - 24px);
+			height: var(--sheet-height, 92lvh);
+			max-height: calc(100lvh - env(safe-area-inset-top) - 24px);
 			border-top-left-radius: var(--radius-sheet);
 			border-top-right-radius: var(--radius-sheet);
 			border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -755,8 +764,12 @@ const washStyles = [
 		height: 100%;
 		color: var(--text-primary);
 		font-family: var(--font-body);
+		/* Deliberately NOT position: fixed. A fixed root element resolves its
+		   height: 100% against the safe-area-adjusted viewport in an iOS
+		   standalone PWA, so the page laid out 62pt (one status-bar height)
+		   short of the screen and left a black band under the nav bar.
+		   overflow: hidden already stops the elastic bounce on its own. */
 		overflow: hidden;
-		position: fixed; /* Stop elastic bounce on body itself */
 		/* Must stay on html/body: on a descendant this does nothing for the
 		   viewport, which re-enables Android Chrome's native pull-to-refresh
 		   and lets it fight the custom one in dataRefresh.ts. */

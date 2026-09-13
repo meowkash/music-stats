@@ -53,7 +53,7 @@
     width: 100%;
     height: 100%;
     max-width: 520px;
-    max-height: 100dvh;
+    max-height: 100lvh;
     overflow: hidden;
     background: #08080f;
     touch-action: pan-y;
@@ -65,7 +65,7 @@
 
   @media (min-width: 768px) {
     .story-stage {
-      max-height: min(100dvh - 48px, 940px);
+      max-height: min(100lvh - 48px, 940px);
       border-radius: 22px;
       border: 1px solid var(--panel-border-hover);
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
@@ -966,6 +966,7 @@
   import { createStoryPlayer, type StoryPlayer } from "../utils/storyPlayer";
   import { applyRecapTheme } from "../utils/recapTheme";
   import { RECAP_OPEN_EVENT, buildStories, type Recap } from "../utils/recapStories";
+  import { setOverlayOpen } from "../utils/overlayState";
 
   const STORY_DURATION_MS = 20_000;
   const COUNT_UP_MS = 1100;
@@ -1019,6 +1020,7 @@
       viewer.hidden = true;
       stage.style.transform = "";
       stage.style.opacity = "";
+      setOverlayOpen("story", false);
     }
 
     async function openYear(year: number) {
@@ -1049,6 +1051,9 @@
       // Every slide's gradients, chart colours and accents read off these.
       applyRecapTheme(viewer, year);
       viewer.hidden = false;
+      // Stories set no body class, so pull-to-refresh and the nav drag only
+      // learn about them through the shared overlay state.
+      setOverlayOpen("story", true);
 
       player?.destroy();
       player = createStoryPlayer({

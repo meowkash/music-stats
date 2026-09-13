@@ -4,6 +4,7 @@ import {
   type GenerationSwappedDetail,
 } from './dataStore';
 import { isStandalonePwa } from './pwaInstall';
+import { isOverlayActive, isOverlaySurface } from './overlayState';
 
 let initialized = false;
 let splashHidden = false;
@@ -17,16 +18,17 @@ const MIN_PULL_SHOW = 28;
 const PULL_DAMPING = 0.32;
 
 function isOverlayOpen(): boolean {
+  // isOverlayActive() also covers the recap story (which sets no body class)
+  // and holds through a close animation, so a dismiss gesture can't hand the
+  // rest of itself to pull-to-refresh the moment the sheet starts sliding away.
   return (
+    isOverlayActive() ||
     document.body.classList.contains('overlay-open') ||
     document.body.classList.contains('stats-sheet-open')
   );
 }
 
-function isOverlayTouch(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return !!target.closest('.app-sheet-panel, .app-sheet-backdrop');
-}
+const isOverlayTouch = isOverlaySurface;
 
 export function hideSplashScreen(): void {
   if (splashHidden) return;

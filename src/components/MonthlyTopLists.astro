@@ -348,8 +348,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         pageCount: CATEGORIES.length,
         onProgress: (fraction) => {
           // Safety net if idle warmup has not finished before the finger moves.
-          const lo = Math.floor(fraction);
-          const hi = Math.ceil(fraction);
+          const last = CATEGORIES.length - 1;
+          const lo = Math.min(Math.max(Math.floor(fraction), 0), last);
+          const hi = Math.min(Math.max(Math.ceil(fraction), 0), last);
           if (!renderedPages.has(CATEGORIES[lo])) renderCategoryPage(CATEGORIES[lo]);
           if (!renderedPages.has(CATEGORIES[hi])) renderCategoryPage(CATEGORIES[hi]);
           renderCategoryPill(fraction);

@@ -13,7 +13,7 @@ import { TAB_ORDER } from "../utils/tabs";
 import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
 ---
 
-<Layout title="My Music Stats">
+<Layout title="Music Stats">
   <div id="app-shell">
     <main class="view-deck">
       <section class="panel-section active" id="view-dashboard">
@@ -71,11 +71,14 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
 <style>
   #app-shell {
     position: fixed;
+    /* inset:0 alone sizes this to the initial containing block. An explicit
+       height: 100dvh used to be here and fought it: WebKit resolves dvh
+       against the safe-area-adjusted viewport in an iOS standalone PWA, so
+       the shell came out a status-bar height short of the screen. */
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    height: 100dvh;
     width: 100%;
     display: flex;
     flex-direction: column;

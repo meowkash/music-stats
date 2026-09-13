@@ -1,3 +1,4 @@
+import { setOverlayOpen } from './overlayState';
 import type { MetaData } from '../types/music';
 import {
   getArtworkCacheSync,
@@ -153,6 +154,7 @@ export function initDetailOverlay(): void {
     panel.classList.remove('visible');
     backdrop.classList.remove('visible');
     document.body.classList.remove('overlay-open');
+    setOverlayOpen('detail', false);
     currentEntity = null;
     navHistory.length = 0;
     forwardStack.length = 0;
@@ -204,6 +206,7 @@ export function initDetailOverlay(): void {
     const fromEdgeSwipe = Boolean(opts?.fromEdgeSwipe);
 
     document.body.classList.add('overlay-open');
+    setOverlayOpen('detail', true);
 
     if (!isSwitchingEntity) {
       // Paint the off-screen state, then add .visible so the CSS transition

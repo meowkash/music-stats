@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1789090131';
-const DATA_CACHE = 'music-stats-data-1789090131';
+const SHELL_CACHE = 'music-stats-shell-1789138531';
+const DATA_CACHE = 'music-stats-data-1789138531';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1789090131';
+const CACHE_VERSION = '1789138531';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -21,7 +21,11 @@ const STATIC_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
 
+// Network-first paths. /manifest.json is here because it no longer carries a
+// ?v= cache-buster: the generic cache-first branch below would otherwise pin
+// the copy pre-cached at install time and never pick up a redeploy.
 const PWA_ICON_PATHS = new Set([
+  '/manifest.json',
   '/favicon.svg',
   '/favicon.ico',
   '/apple-touch-icon.png',

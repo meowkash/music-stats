@@ -41,7 +41,7 @@ function showInstallUi(mode: 'native' | 'manual'): void {
     hint.textContent =
       mode === 'native'
         ? 'Install for offline access and faster launch.'
-        : 'Use your browser\'s Install or "Add to Dock" option (address bar menu).';
+        : 'Tap Share, then "Add to Home Screen".';
   }
 
   btn.textContent = mode === 'native' ? 'Install app' : 'Got it';
@@ -70,8 +70,23 @@ function setInstallDismissed(): void {
   }
 }
 
+/**
+ * The banner is a mobile affordance only. Desktop Chromium already puts an
+ * install control in the address bar, and desktop Safari's "Add to Dock" lives
+ * in the share menu — a dialog over the top of either is just noise. Matches
+ * the app's own 768px mobile breakpoint, with a coarse-pointer check so a
+ * narrow desktop window doesn't count as a phone.
+ */
+function isMobileViewport(): boolean {
+  return (
+    window.matchMedia('(max-width: 767px)').matches &&
+    window.matchMedia('(pointer: coarse)').matches
+  );
+}
+
 function shouldOfferInstall(): boolean {
   if (isStandalonePwa()) return false;
+  if (!isMobileViewport()) return false;
   return !isInstallDismissed();
 }
 
@@ -109,7 +124,7 @@ export function initPwaInstall(): void {
     hideInstallUi();
   });
 
-  // Desktop Safari/Firefox won't fire beforeinstallprompt — show manual hint once SW is ready.
+  // iOS Safari never fires beforeinstallprompt — show the manual hint once the SW is ready.
   if (!shouldOfferInstall()) return;
 
   const showManualHint = () => {
