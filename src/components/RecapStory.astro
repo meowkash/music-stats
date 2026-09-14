@@ -26,7 +26,10 @@
   /* ── Story viewer ──────────────────────────────────────────────────── */
   .story-viewer {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
     z-index: var(--z-story);
     background: #05050a;
     display: flex;
@@ -337,7 +340,7 @@
 
   .story-hint {
     position: absolute;
-    bottom: calc(env(safe-area-inset-bottom) + 22px);
+    bottom: calc(var(--standalone-bottom-offset, 0px) + env(safe-area-inset-bottom) + 22px);
     font-size: 12.5px;
     letter-spacing: 0.14em;
     text-transform: uppercase;

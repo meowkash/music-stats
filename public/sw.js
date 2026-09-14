@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1789138531';
-const DATA_CACHE = 'music-stats-data-1789138531';
+const SHELL_CACHE = 'music-stats-shell-1789428367';
+const DATA_CACHE = 'music-stats-data-1789428367';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1789138531';
+const CACHE_VERSION = '1789428367';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;

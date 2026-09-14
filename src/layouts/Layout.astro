@@ -1,7 +1,7 @@
 ---
 import appleSplashTags from "./splash-tags.html?raw";
 import { TAB_ORDER } from "../utils/tabs";
-import { TAB_SURFACES, TAB_THEME_COLORS, cssWash } from "../utils/tabTheme";
+import { TAB_SURFACES, TAB_THEME_COLORS, TAB_BOTTOM_COLORS, cssWash } from "../utils/tabTheme";
 import cacheData from "../../public/cache-version.json";
 
 interface Props {
@@ -33,7 +33,7 @@ const washStyles = [
 ---
 
 <!doctype html>
-<html lang="en" style="color-scheme: dark;">
+<html lang="en" style={`color-scheme: dark; background-color: ${TAB_BOTTOM_COLORS.dashboard};`}>
 	<head>
 		<meta charset="UTF-8" />
 		<meta
@@ -50,12 +50,20 @@ const washStyles = [
 		    installability checker, neither of which reliably follows a
 		    query-stringed apple-touch-icon. public/_headers revalidates both on
 		    every request instead, which is what the buster was there for. */}
+		<script is:inline>
+			(function () {
+				if (
+					(typeof window !== "undefined" && window.navigator && window.navigator.standalone === true) ||
+					(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+				) {
+					document.documentElement.classList.add("is-standalone-pwa");
+				}
+			})();
+		</script>
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-		{/* use-credentials so the manifest fetch carries cookies. Without it the
-		    request is credential-less and a Cloudflare managed challenge answers
-		    it with a 403 HTML page — the manifest then fails to parse and Chrome
-		    never offers to install. */}
-		<link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+		<link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
+		<link rel="manifest" href="/manifest.json" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta
@@ -124,8 +132,8 @@ const washStyles = [
 				position: fixed;
 				top: 0;
 				left: 0;
-				width: 100%;
-				height: 100%;
+				right: 0;
+				bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
 				background-color: #000000;
 				z-index: 9999;
 				display: flex;
@@ -401,6 +409,136 @@ const washStyles = [
 
 		<slot />
 
+		{/* The shell is entirely position:fixed with overflow:hidden, so the
+		    document should never hold a scroll offset. iOS breaks that: opening
+		    the keyboard in a standalone PWA scrolls the document to reveal the
+		    focused field and does not reliably restore it on dismiss, stranding
+		    the whole page one offset up with a band of html background below.
+		    Nothing in CSS can undo it — the offset has to be cleared here. */}
+		<script is:inline>
+			(function () {
+				function isEditable(el) {
+					if (!el) return false;
+					return (
+						el.tagName === "INPUT" ||
+						el.tagName === "TEXTAREA" ||
+						el.isContentEditable === true
+					);
+				}
+
+				function resetScroll() {
+					// Still typing — the offset is the keyboard's and is legitimate.
+					if (isEditable(document.activeElement)) return;
+					if (window.scrollY !== 0 || window.pageYOffset !== 0) window.scrollTo(0, 0);
+					if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+					if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+				}
+
+				// Deferred: iOS settles the viewport after the blur event, so an
+				// immediate reset is overwritten by the keyboard teardown.
+				function resetSoon(delay) {
+					setTimeout(resetScroll, delay);
+				}
+
+				document.addEventListener("focusout", function () { resetSoon(50); });
+				window.addEventListener("orientationchange", function () { resetSoon(300); });
+				if (window.visualViewport) {
+					window.visualViewport.addEventListener("resize", function () { resetSoon(50); });
+				}
+			})();
+		</script>
+
+		{/* TEMPORARY layout diagnostic — remove once the safe-area question is
+		    settled. Hidden by default; triple-tap the top-left corner to show
+		    (a launched PWA has no URL bar), or load with ?debug=layout. */}
+		<div id="layout-debug" style="display:none"></div>
+		<script is:inline>
+			(function () {
+				var box = document.getElementById("layout-debug");
+				if (!box) return;
+				box.setAttribute(
+					"style",
+					"display:none;position:fixed;left:0;right:0;top:0;z-index:99999;" +
+						"background:rgba(0,0,0,.88);color:#0f0;font:11px/1.35 ui-monospace,Menlo,monospace;" +
+						"padding:6px 8px;white-space:pre;pointer-events:none;max-height:100%;overflow:auto"
+				);
+
+				var probe = document.createElement("div");
+				probe.style.cssText =
+					"position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;" +
+					"padding:env(safe-area-inset-top) env(safe-area-inset-right) " +
+					"env(safe-area-inset-bottom) env(safe-area-inset-left)";
+				document.body.appendChild(probe);
+
+				function rect(sel) {
+					var el = document.querySelector(sel);
+					if (!el) return sel + ": (missing)";
+					var r = el.getBoundingClientRect();
+					return (
+						sel + ": top=" + Math.round(r.top) + " bottom=" + Math.round(r.bottom) +
+						" h=" + Math.round(r.height)
+					);
+				}
+
+				function dump() {
+					var cs = getComputedStyle(probe);
+					var vv = window.visualViewport;
+					var html = document.documentElement;
+					box.textContent = [
+						"scrollY     " + window.scrollY + "  docEl.scrollTop=" + html.scrollTop +
+							"  body.scrollTop=" + document.body.scrollTop,
+						"vv.offsetTop " + (vv ? Math.round(vv.offsetTop) : "n/a") +
+							"  vv.pageTop=" + (vv ? Math.round(vv.pageTop) : "n/a"),
+						"scrollHeight " + html.scrollHeight + " vs client " + html.clientHeight,
+						"activeEl    " + (document.activeElement ? document.activeElement.tagName : "-"),
+						"screen      " + screen.width + "x" + screen.height,
+						"inner       " + window.innerWidth + "x" + window.innerHeight,
+						"visualVP    " + (vv ? Math.round(vv.width) + "x" + Math.round(vv.height) : "n/a"),
+						"docEl.client" + html.clientWidth + "x" + html.clientHeight,
+						"safe-area   top=" + cs.paddingTop + " bottom=" + cs.paddingBottom,
+						"standalone  nav=" + (navigator.standalone === true) +
+							" mq=" + (matchMedia("(display-mode: standalone)").matches),
+						"is-std-class " + html.classList.contains("is-standalone-pwa"),
+						"--offset    '" +
+							getComputedStyle(html).getPropertyValue("--standalone-bottom-offset").trim() + "'",
+						"html bg     " + getComputedStyle(html).backgroundColor,
+						"body bg     " + getComputedStyle(document.body).backgroundColor,
+						"activeTab   " + document.body.dataset.activeTab,
+						rect("#app-shell"),
+						rect("#app-bg-gradient"),
+						rect(".bottom-nav-container"),
+						rect(".main-tab-bar"),
+					].join("\n");
+				}
+
+				var shown = /[?&]debug=layout/.test(location.search);
+				function apply() {
+					box.style.display = shown ? "block" : "none";
+					if (shown) dump();
+				}
+				apply();
+
+				var taps = 0, timer = null;
+				document.addEventListener(
+					"touchstart",
+					function (e) {
+						var t = e.touches[0];
+						if (!t || t.clientX > 60 || t.clientY > 60) return;
+						taps++;
+						clearTimeout(timer);
+						timer = setTimeout(function () { taps = 0; }, 600);
+						if (taps >= 3) { taps = 0; shown = !shown; apply(); }
+					},
+					{ passive: true }
+				);
+
+				addEventListener("resize", function () { if (shown) dump(); });
+				addEventListener("orientationchange", function () {
+					setTimeout(function () { if (shown) dump(); }, 300);
+				});
+			})();
+		</script>
+
 		<script>
 			import { initDataRefreshUI, initServiceWorker } from "../utils/dataRefresh";
 			import { initPwaInstall } from "../utils/pwaInstall";
@@ -494,8 +632,14 @@ const washStyles = [
 		--nav-bar-height: 64px;
 		/* Distance from the physical bottom — smaller = nav sits a bit lower. */
 		--nav-bar-gap: 4px;
-		/* Extra air between panel content and the top of the nav bar. */
-		--nav-content-gap: 0px;
+		/* Extra air between panel content and the top of the nav bar. This is
+		   the *only* thing separating them: the nav's top edge sits at
+		   nav-bar-height + nav-bar-gap + safe-area-inset-bottom off the floor,
+		   and --nav-zone-height (the panel's bottom padding) is that same sum
+		   plus this. At 0 the content butts straight against the bar, which is
+		   what standalone used to do while the browser got 8px. */
+		--nav-content-gap: 8px;
+		--standalone-bottom-offset: 0px;
 		--nav-zone-height: calc(
 			var(--nav-bar-height) + var(--nav-bar-gap) + env(safe-area-inset-bottom) +
 				var(--nav-content-gap)
@@ -510,12 +654,21 @@ const washStyles = [
 		--duration-overlay: var(--duration-normal);
 	}
 
-	/* Clearances for mobile browser toolbars when not in standalone PWA mode */
+	/* Clearances for mobile browser toolbars when not in standalone PWA mode.
+	   Only --nav-bar-gap differs by mode now: the browser needs the bar to
+	   float a little higher to clear Safari's toolbar. --nav-content-gap is
+	   uniform so the bar looks equally seated in both. */
 	@media not all and (display-mode: standalone) {
 		:root {
 			--nav-bar-gap: 10px;
-			--nav-content-gap: 8px;
 		}
+	}
+
+	/* iOS versions where the display-mode media query is unreliable still
+	   report navigator.standalone, so the class re-asserts the PWA value the
+	   query above would otherwise have flipped to the browser one. */
+	html.is-standalone-pwa {
+		--nav-bar-gap: 4px;
 	}
 
 	.panel-container {
@@ -569,7 +722,10 @@ const washStyles = [
 	   colour shift stays on the compositor. */
 	#app-bg-gradient {
 		position: fixed;
-		inset: 0;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
 		z-index: 0;
 		pointer-events: none;
 		overflow: hidden;
@@ -644,7 +800,10 @@ const washStyles = [
 
 	.app-sheet-backdrop {
 		position: fixed;
-		inset: 0;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
 		z-index: var(--z-overlay-backdrop);
 		/* Dim background without backdrop-filter to prevent animation hitching */
 		background: rgba(0, 0, 0, 0.55);
@@ -695,8 +854,9 @@ const washStyles = [
 		.app-sheet-panel {
 			left: 0;
 			right: 0;
-			bottom: 0;
+			bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
 			top: auto;
+			padding-bottom: calc(var(--standalone-bottom-offset, 0px) + env(safe-area-inset-bottom));
 			/* Sheets opt into a shorter height with `--sheet-height`; the cap keeps
 			   any value clear of the status bar. */
 			height: var(--sheet-height, 92lvh);
@@ -751,7 +911,7 @@ const washStyles = [
 		   so the chrome blends into the foot of the wash rather than a black
 		   band. Must not be re-declared by the `html, body` rule below, which
 		   would out-order it at equal specificity. */
-		background-color: #000000;
+		background-color: #07050d;
 		transition: background-color var(--duration-normal) var(--ios-spring);
 		/* Prevent iOS Safari text autosizing from inflating fonts on rotation */
 		-webkit-text-size-adjust: 100%;
@@ -761,14 +921,19 @@ const washStyles = [
 	html,
 	body {
 		width: 100%;
-		height: 100%;
+		/* lvh, not 100%. A percentage height resolves against the
+		   safe-area-adjusted viewport in an iOS standalone PWA, so the page came
+		   out one status-bar height short and iOS stranded the whole thing
+		   shifted up — a black band of html background under the nav bar and no
+		   wash left behind the status bar. lvh is the *large* viewport, which
+		   is the full screen in both standalone and browser.
+		   Also deliberately NOT position: fixed here: a fixed root reintroduces
+		   the same short measurement. overflow: hidden alone stops the elastic
+		   bounce. See the focusout scroll reset near the end of <body> for the
+		   other half of the shifted-page problem. */
+		height: 100lvh;
 		color: var(--text-primary);
 		font-family: var(--font-body);
-		/* Deliberately NOT position: fixed. A fixed root element resolves its
-		   height: 100% against the safe-area-adjusted viewport in an iOS
-		   standalone PWA, so the page laid out 62pt (one status-bar height)
-		   short of the screen and left a black band under the nav bar.
-		   overflow: hidden already stops the elastic bounce on its own. */
 		overflow: hidden;
 		/* Must stay on html/body: on a descendant this does nothing for the
 		   viewport, which re-enables Android Chrome's native pull-to-refresh

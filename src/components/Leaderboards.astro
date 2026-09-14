@@ -37,7 +37,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   <!-- Sub-Tabs (Songs, Albums, Artists) -->
   <div class="leaderboard-tabs shrink-0">
     <div class="leaderboard-tab-group" style="position: relative;">
-      <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight"></div>
+      <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight">
+      </div>
       <button class="sub-tab-btn active" data-tab="songs">Songs</button>
       <button class="sub-tab-btn" data-tab="albums">Albums</button>
       <button class="sub-tab-btn" data-tab="artists">Artists</button>
@@ -68,10 +69,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         placeholder="Search entries..."
       />
     </div>
-    
+
     <div class="toggles-wrapper" id="leaderboardToggles">
       <!-- Unified Artist Toggle -->
-      <div class="ranking-toggle artist-ranking-toggle" id="artistRankingToggle">
+      <div
+        class="ranking-toggle artist-ranking-toggle"
+        id="artistRankingToggle"
+      >
         <span class="unified-label">Unified</span>
         <button
           type="button"
@@ -103,16 +107,20 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   </div>
 
   <!-- Swipeable Songs / Albums / Artists lists -->
-  <SwipeableDeck tabs={['Songs', 'Albums', 'Artists']} idPrefix="leaderboard">
+  <SwipeableDeck tabs={["Songs", "Albums", "Artists"]} idPrefix="leaderboard">
     <Fragment slot="header-songs">Songs</Fragment>
     <Fragment slot="header-albums">Albums</Fragment>
     <Fragment slot="header-artists">Artists</Fragment>
   </SwipeableDeck>
 
-  {/* Desktop shows all three columns at once, so an empty range is one fact
-      about the whole board rather than the same sentence in each column. */}
+  {
+    /* Desktop shows all three columns at once, so an empty range is one fact
+      about the whole board rather than the same sentence in each column. */
+  }
   <div class="leaderboard-empty">
-    <div class="no-data-message">Huh, I did not listen to anything in this time. Awkward...</div>
+    <div class="no-data-message">
+      Huh, I did not listen to anything in this time. Awkward...
+    </div>
   </div>
 </div>
 
@@ -279,7 +287,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
   }
 
-
   /* Quick date ranges */
   .date-selector-section {
     display: flex;
@@ -335,7 +342,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     grid-template-rows: 0fr;
     transition: grid-template-rows var(--duration-normal) var(--ios-spring);
   }
-  
+
   .custom-date-wrapper.is-open {
     grid-template-rows: 1fr;
   }
@@ -348,9 +355,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     border: 1px solid transparent;
     padding: 0 12px;
     border-radius: 12px;
-    transition: padding var(--duration-normal) var(--ios-spring), 
-                border-color var(--duration-normal) var(--ios-spring),
-                background var(--duration-normal) var(--ios-spring);
+    transition:
+      padding var(--duration-normal) var(--ios-spring),
+      border-color var(--duration-normal) var(--ios-spring),
+      background var(--duration-normal) var(--ios-spring);
   }
 
   .custom-date-wrapper.is-open .custom-date-inputs {
@@ -434,9 +442,20 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .sub-tab-highlight {
     border-radius: 8px;
-    background: color-mix(in srgb, var(--hl-color, rgba(255, 255, 255, 0.25)) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--hl-color, rgba(255, 255, 255, 0.4)) 40%, transparent);
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
+    background: color-mix(
+      in srgb,
+      var(--hl-color, rgba(255, 255, 255, 0.25)) 15%,
+      transparent
+    );
+    border: 1px solid
+      color-mix(
+        in srgb,
+        var(--hl-color, rgba(255, 255, 255, 0.4)) 40%,
+        transparent
+      );
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.3),
+      0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
   }
 
   /* Search bar */
@@ -487,11 +506,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     justify-content: center;
     cursor: pointer;
     z-index: 2;
-    transition: background var(--duration-normal) var(--ios-spring), border-color var(--duration-normal) var(--ios-spring), color var(--duration-normal) var(--ios-spring);
+    transition:
+      background var(--duration-normal) var(--ios-spring),
+      border-color var(--duration-normal) var(--ios-spring),
+      color var(--duration-normal) var(--ios-spring);
     color: var(--text-muted);
     pointer-events: auto; /* Always clickable since container has pointer-events: none */
   }
-  
+
   .search-container.is-searching .search-btn {
     background: transparent;
     border-color: transparent;
@@ -532,7 +554,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     align-items: center;
     justify-content: flex-end;
     white-space: nowrap;
-    transition: transform var(--duration-normal) var(--ios-spring), opacity var(--duration-normal) var(--ios-spring);
+    transition:
+      transform var(--duration-normal) var(--ios-spring),
+      opacity var(--duration-normal) var(--ios-spring);
     will-change: transform, opacity;
   }
 
@@ -602,13 +626,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       border-color: rgb(from var(--accent-pink) r g b / 0.65);
     }
 
-    .leaderboard-container :global(.swipeable-list-column[data-tab="songs"] .swipeable-column-header) {
+    .leaderboard-container
+      :global(
+        .swipeable-list-column[data-tab="songs"] .swipeable-column-header
+      ) {
       color: var(--accent-cat-songs);
     }
-    .leaderboard-container :global(.swipeable-list-column[data-tab="albums"] .swipeable-column-header) {
+    .leaderboard-container
+      :global(
+        .swipeable-list-column[data-tab="albums"] .swipeable-column-header
+      ) {
       color: var(--accent-cat-albums);
     }
-    .leaderboard-container :global(.swipeable-list-column[data-tab="artists"] .swipeable-column-header) {
+    .leaderboard-container
+      :global(
+        .swipeable-list-column[data-tab="artists"] .swipeable-column-header
+      ) {
       color: var(--accent-cat-artists);
     }
 
@@ -629,7 +662,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       margin: 0;
     }
   }
-
 
   /* Clickable entity links inside leaderboards */
   .leaderboard-container :global(.clickable-entity) {
@@ -693,13 +725,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     type ArtistRollupMode,
     type RollupItem,
   } from "../utils/scrobbles";
-  import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
+  import {
+    createInfiniteScroll,
+    type InfiniteScrollController,
+  } from "../utils/infiniteScroll";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
   import { getCategoryAccent } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
   import { bindPagerSwipe } from "../utils/pagerSwipe";
   import { captureRowPositions, playFlip } from "../utils/flip";
-  import { colorToCss, lerpColor, parseColor, withAlpha, type Rgba } from "../utils/motion";
+  import {
+    colorToCss,
+    lerpColor,
+    parseColor,
+    withAlpha,
+    type Rgba,
+  } from "../utils/motion";
 
   const RANKING_TABS = ["songs", "albums", "artists"] as const;
   type RankingTab = (typeof RANKING_TABS)[number];
@@ -723,7 +764,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     let activeRange = "7d";
     const ARTIST_MODE_KEY = "artistRankingMode";
     let artistRankingMode: ArtistRollupMode =
-      (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw" ? "raw" : "canonical";
+      (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw"
+        ? "raw"
+        : "canonical";
     const PLAYTIME_MODE_KEY = "playtimeRankingMode";
     let playtimeMode = localStorage.getItem(PLAYTIME_MODE_KEY) === "true";
     const CHUNK_SIZE = 50;
@@ -731,7 +774,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     /** Items keyed by tab for the current range/search snapshot. */
     const itemsByTab: Partial<Record<RankingTab, RankItem[]>> = {};
     const renderedTabs = new Set<RankingTab>();
-    const scrollControllers: Partial<Record<RankingTab, InfiniteScrollController>> = {};
+    const scrollControllers: Partial<
+      Record<RankingTab, InfiniteScrollController>
+    > = {};
     let dataEpoch = 0;
 
     const CATEGORY_FOR_TAB = {
@@ -771,7 +816,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     function compareItems(a: RankItem, b: RankItem): number {
-      const primary = playtimeMode ? b.playtimeMs - a.playtimeMs : b.count - a.count;
+      const primary = playtimeMode
+        ? b.playtimeMs - a.playtimeMs
+        : b.count - a.count;
       return primary || nameCollator.compare(a.name, b.name);
     }
 
@@ -794,19 +841,43 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       return items;
     }
 
-    const rootEl = document.querySelector(".leaderboard-container") as HTMLElement;
-    const viewportEl = document.getElementById("leaderboardViewport") as HTMLDivElement;
-    const trackEl = document.getElementById("leaderboardListTrack") as HTMLDivElement;
-    const customDateWrapper = document.getElementById("customDateWrapper") as HTMLDivElement;
-    const startDateInput = document.getElementById("startDate") as HTMLInputElement;
+    const rootEl = document.querySelector(
+      ".leaderboard-container",
+    ) as HTMLElement;
+    const viewportEl = document.getElementById(
+      "leaderboardViewport",
+    ) as HTMLDivElement;
+    const trackEl = document.getElementById(
+      "leaderboardListTrack",
+    ) as HTMLDivElement;
+    const customDateWrapper = document.getElementById(
+      "customDateWrapper",
+    ) as HTMLDivElement;
+    const startDateInput = document.getElementById(
+      "startDate",
+    ) as HTMLInputElement;
     const endDateInput = document.getElementById("endDate") as HTMLInputElement;
-    const searchContainer = document.getElementById("searchContainer") as HTMLDivElement;
-    const searchBtn = document.getElementById("leaderboardSearchBtn") as HTMLButtonElement;
-    const searchInput = document.getElementById("leaderboardSearch") as HTMLInputElement;
-    const searchBarRow = document.querySelector(".search-bar-row") as HTMLElement;
-    const playtimeRankingSwitch = document.getElementById("playtimeRankingSwitch") as HTMLButtonElement;
-    const artistRankingToggle = document.getElementById("artistRankingToggle") as HTMLDivElement;
-    const artistRankingSwitch = document.getElementById("artistRankingSwitch") as HTMLButtonElement;
+    const searchContainer = document.getElementById(
+      "searchContainer",
+    ) as HTMLDivElement;
+    const searchBtn = document.getElementById(
+      "leaderboardSearchBtn",
+    ) as HTMLButtonElement;
+    const searchInput = document.getElementById(
+      "leaderboardSearch",
+    ) as HTMLInputElement;
+    const searchBarRow = document.querySelector(
+      ".search-bar-row",
+    ) as HTMLElement;
+    const playtimeRankingSwitch = document.getElementById(
+      "playtimeRankingSwitch",
+    ) as HTMLButtonElement;
+    const artistRankingToggle = document.getElementById(
+      "artistRankingToggle",
+    ) as HTMLDivElement;
+    const artistRankingSwitch = document.getElementById(
+      "artistRankingSwitch",
+    ) as HTMLButtonElement;
     const ARTISTS_TAB_INDEX = RANKING_TABS.indexOf("artists");
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -825,7 +896,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     function pageEl(tab: RankingTab): HTMLDivElement {
       return document.getElementById(
-        tab === "songs" ? "leaderboardPageSongs" : tab === "albums" ? "leaderboardPageAlbums" : "leaderboardPageArtists",
+        tab === "songs"
+          ? "leaderboardPageSongs"
+          : tab === "albums"
+            ? "leaderboardPageAlbums"
+            : "leaderboardPageArtists",
       ) as HTMLDivElement;
     }
 
@@ -834,7 +909,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       try {
         const [metaResult, totals] = await Promise.all([
           loadMetaCache(),
-          fetchAppJson<Record<string, number[]>>("/data/yearly-totals.json").catch(() => null),
+          fetchAppJson<Record<string, number[]>>(
+            "/data/yearly-totals.json",
+          ).catch(() => null),
         ]);
         meta = metaResult;
         artworkCache = await loadArtworkCache();
@@ -854,7 +931,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     function formatPlaytime(ms: number): string {
       const hrs = ms / 3600000;
-      return `${hrs.toFixed(1).replace(/\.0$/, '')} hrs`;
+      return `${hrs.toFixed(1).replace(/\.0$/, "")} hrs`;
     }
 
     function renderRow(tab: RankingTab, item: RankItem, index: number): string {
@@ -864,7 +941,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       let rowId = 0;
 
       if (tab === "songs") {
-        imgUrl = getArtworkUrl("track", item.name, item.artistName || "", item.albumName || "", artworkCache);
+        imgUrl = getArtworkUrl(
+          "track",
+          item.name,
+          item.artistName || "",
+          item.albumName || "",
+          artworkCache,
+        );
         rowType = "track";
         rowId = item.id;
         infoHtml = `
@@ -875,7 +958,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
               <span class="clickable-entity" data-type="artist" data-id="${item.artistId}" data-artist-catalog="artists">${escapeHTML(item.artistName || "")}</span>
             </span>`;
       } else if (tab === "albums") {
-        imgUrl = getArtworkUrl("album", item.name, item.subtitle || "", item.name, artworkCache);
+        imgUrl = getArtworkUrl(
+          "album",
+          item.name,
+          item.subtitle || "",
+          item.name,
+          artworkCache,
+        );
         rowType = "album";
         rowId = item.id;
         infoHtml = `
@@ -980,9 +1069,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
 
       const tabs = isDesktopLayout() ? [...RANKING_TABS] : [activeTab()];
-      const captures = new Map<RankingTab, ReturnType<typeof captureRowPositions>>();
+      const captures = new Map<
+        RankingTab,
+        ReturnType<typeof captureRowPositions>
+      >();
       for (const tab of tabs) {
-        if (renderedTabs.has(tab)) captures.set(tab, captureRowPositions(listEl(tab)));
+        if (renderedTabs.has(tab))
+          captures.set(tab, captureRowPositions(listEl(tab)));
       }
 
       // Drop the sorted snapshots but keep the rollup — that is the expensive part.
@@ -1001,7 +1094,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
       rootEl.classList.remove("is-empty");
       for (const tab of RANKING_TABS) {
-        listEl(tab).innerHTML = '<div class="no-data-message">Aggregating scrobbles...</div>';
+        listEl(tab).innerHTML =
+          '<div class="no-data-message">Aggregating scrobbles...</div>';
       }
 
       try {
@@ -1009,7 +1103,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         if (epoch !== dataEpoch) return;
         if (!dictionary) {
           for (const tab of RANKING_TABS) {
-            listEl(tab).innerHTML = '<div class="no-data-message">Failed to load metadata</div>';
+            listEl(tab).innerHTML =
+              '<div class="no-data-message">Failed to load metadata</div>';
           }
           return;
         }
@@ -1026,7 +1121,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           else if (activeRange === "90d") start.setDate(end.getDate() - 90);
           else if (activeRange === "year") start.setMonth(0, 1);
           else if (activeRange === "all") {
-            const minYear = availableYears.length > 0 ? Math.min(...availableYears) : 2000;
+            const minYear =
+              availableYears.length > 0 ? Math.min(...availableYears) : 2000;
             start.setFullYear(minYear, 0, 1);
           }
 
@@ -1071,26 +1167,34 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         // Active page + neighbours so a swipe never lands on an empty pane.
         const tabsToPaint = new Set<RankingTab>([activeTab()]);
         if (activeIndex > 0) tabsToPaint.add(RANKING_TABS[activeIndex - 1]);
-        if (activeIndex < RANKING_TABS.length - 1) tabsToPaint.add(RANKING_TABS[activeIndex + 1]);
+        if (activeIndex < RANKING_TABS.length - 1)
+          tabsToPaint.add(RANKING_TABS[activeIndex + 1]);
         for (const tab of tabsToPaint) paintPage(tab, prepareTab(tab));
       } catch (err) {
         if (epoch !== dataEpoch) return;
         console.error("Failed to aggregate data:", err);
         for (const tab of RANKING_TABS) {
-          listEl(tab).innerHTML = '<div class="no-data-message">Failed to aggregate data</div>';
+          listEl(tab).innerHTML =
+            '<div class="no-data-message">Failed to aggregate data</div>';
         }
       }
     }
 
-    const rangeHighlight = document.getElementById("rangeHighlight") as HTMLDivElement;
-    const subTabHighlight = document.getElementById("subTabHighlight") as HTMLDivElement;
+    const rangeHighlight = document.getElementById(
+      "rangeHighlight",
+    ) as HTMLDivElement;
+    const subTabHighlight = document.getElementById(
+      "subTabHighlight",
+    ) as HTMLDivElement;
 
     const rangeHighlightCtrl = createSlidingHighlight({
       highlightEl: rangeHighlight,
       buttons: document.querySelectorAll(".quick-ranges .range-btn"),
     });
 
-    const tabGroup = document.querySelector(".leaderboard-tab-group") as HTMLElement;
+    const tabGroup = document.querySelector(
+      ".leaderboard-tab-group",
+    ) as HTMLElement;
     const subTabButtons = [
       ...document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
     ] as HTMLElement[];
@@ -1132,7 +1236,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     function paintUnifiedToggle(fraction: number, paging: boolean) {
       const t = artistsReveal(fraction);
       searchBarRow.classList.toggle("toggle-paging", paging);
-      searchBarRow.style.setProperty("--toggle-reveal", String(Math.round(t * 1000) / 1000));
+      searchBarRow.style.setProperty(
+        "--toggle-reveal",
+        String(Math.round(t * 1000) / 1000),
+      );
       artistRankingToggle.classList.toggle("is-open", t > 0.95);
     }
 
@@ -1153,7 +1260,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       // edge. tabAccentRgba[-1] is undefined, and the resulting throw used to
       // travel up through paint() into rafTween's tick — killing the settle
       // animation before it could reschedule, so the bounce never played back.
-      const i0 = Math.min(Math.max(Math.floor(fraction), 0), tabAccentRgba.length - 1);
+      const i0 = Math.min(
+        Math.max(Math.floor(fraction), 0),
+        tabAccentRgba.length - 1,
+      );
       const i1 = Math.min(i0 + 1, tabAccentRgba.length - 1);
       const mix = Math.min(Math.max(fraction - i0, 0), 1);
       const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], mix);
@@ -1176,7 +1286,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     function syncArtistRankingToggle() {
       if (!isDesktopLayout()) {
         // Settle reveal at 0 (Songs/Albums) or 1 (Artists) with CSS spring.
-        paintUnifiedToggle(activeTab() === "artists" ? ARTISTS_TAB_INDEX : ARTISTS_TAB_INDEX - 1, false);
+        paintUnifiedToggle(
+          activeTab() === "artists" ? ARTISTS_TAB_INDEX : ARTISTS_TAB_INDEX - 1,
+          false,
+        );
       }
       const isUnified = artistRankingMode === "canonical";
       artistRankingSwitch.classList.toggle("active", isUnified);
@@ -1212,8 +1325,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
       if (!isDesktopLayout()) {
         if (opts?.syncHighlight !== false) {
-          const btn = subTabButtons.find((b) => b.getAttribute("data-tab") === tab);
-          if (btn) subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
+          const btn = subTabButtons.find(
+            (b) => b.getAttribute("data-tab") === tab,
+          );
+          if (btn)
+            subTabHighlightCtrl.sync(btn, opts?.animateHighlight ?? false);
         }
       }
 
@@ -1332,7 +1448,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     artistRankingSwitch.addEventListener("click", () => {
-      setArtistRankingMode(artistRankingMode === "canonical" ? "raw" : "canonical");
+      setArtistRankingMode(
+        artistRankingMode === "canonical" ? "raw" : "canonical",
+      );
     });
 
     playtimeRankingSwitch.addEventListener("click", () => {
@@ -1348,12 +1466,16 @@ import SwipeableDeck from "./SwipeableDeck.astro";
      * is measured rather than hardcoded, and the observer keeps it correct for
      * every frame of that reveal as well as on resize and font load.
      */
-    const togglesWrapper = document.getElementById("leaderboardToggles") as HTMLElement;
+    const togglesWrapper = document.getElementById(
+      "leaderboardToggles",
+    ) as HTMLElement;
     let lastTogglesInset = -1;
 
     function syncTogglesInset() {
       // Desktop lays the field out in flow, so the clip path is off entirely.
-      const inset = isDesktopLayout() ? 0 : Math.round(togglesWrapper.offsetWidth);
+      const inset = isDesktopLayout()
+        ? 0
+        : Math.round(togglesWrapper.offsetWidth);
       if (inset === lastTogglesInset) return;
       lastTogglesInset = inset;
       searchBarRow.style.setProperty("--toggles-inset", `${inset}px`);
@@ -1366,7 +1488,12 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     searchBtn.addEventListener("click", () => {
       syncTogglesInset();
       searchContainer.classList.add("is-searching");
-      searchInput.focus();
+      // preventScroll: the app shell is entirely position:fixed, so there is
+      // nothing legitimate to scroll into view — but iOS still scrolls the
+      // document to make room for the keyboard and does not always undo it,
+      // which strands the whole page one offset up. See the focusout reset in
+      // Layout.astro for the other half of this.
+      searchInput.focus({ preventScroll: true });
     });
 
     searchInput.addEventListener("blur", () => {
@@ -1375,12 +1502,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
     });
 
-    document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const tab = btn.getAttribute("data-tab");
-        if (tab) selectRankingTab(tab, true);
+    document
+      .querySelectorAll(".leaderboard-tab-group .sub-tab-btn")
+      .forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = btn.getAttribute("data-tab");
+          if (tab) selectRankingTab(tab, true);
+        });
       });
-    });
 
     let searchDebounce: ReturnType<typeof setTimeout>;
     searchInput.addEventListener("input", (e) => {
@@ -1401,17 +1530,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
     updateLeaderboard();
 
-    onPathsUpdated(["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/], () => {
-      // The window key is unchanged but the underlying scrobbles are not.
-      invalidateRollups();
-      void loadMeta().then(() => updateLeaderboard());
-    });
+    onPathsUpdated(
+      ["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/],
+      () => {
+        // The window key is unchanged but the underlying scrobbles are not.
+        invalidateRollups();
+        void loadMeta().then(() => updateLeaderboard());
+      },
+    );
 
     rangeHighlightCtrl.observe();
     subTabHighlightCtrl.observe();
 
     function placeHighlights(animate = false) {
-      const rangeBtn = document.querySelector(".range-btn.active") as HTMLElement | null;
+      const rangeBtn = document.querySelector(
+        ".range-btn.active",
+      ) as HTMLElement | null;
       if (rangeBtn) rangeHighlightCtrl.sync(rangeBtn, animate);
       const tabBtn = document.querySelector(
         ".leaderboard-tab-group .sub-tab-btn.active",
@@ -1421,7 +1555,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     placeHighlights(false);
 
-    window.addEventListener("tab-navigated", ((e: CustomEvent<{ tab: string }>) => {
+    window.addEventListener("tab-navigated", ((
+      e: CustomEvent<{ tab: string }>,
+    ) => {
       if (e.detail?.tab === "rankings") {
         requestAnimationFrame(() => {
           placeHighlights(false);
