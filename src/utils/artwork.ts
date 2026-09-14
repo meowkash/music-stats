@@ -50,10 +50,8 @@ export function getStaticArtworkSources(url: string): string[] {
   return high === low ? [high] : [high, low];
 }
 
-/**
- * Same sources, smallest first — for list thumbnails, which are ~44px and have
- * no use for a 500px or 1000px bitmap. Retries escalate instead of starting big.
- */
+// Smallest first for ~44px list thumbnails, which have no use for a 500px
+// bitmap. Retries escalate instead of starting big.
 export function getThumbArtworkSources(url: string): string[] {
   return getStaticArtworkSources(url).reverse();
 }
@@ -66,10 +64,8 @@ export function artworkIdentity(url: string | null): string {
     .replace('/500x500/', '/300x300/');
 }
 
-/**
- * Content hash for artwork comparison — same image across song/album/artist
- * or different CDN URLs resolves to the same hash.
- */
+// Content hash: the same image across song/album/artist, or across different
+// CDN URLs, resolves to one hash.
 export function artworkContentHash(url: string | null): string {
   if (!url) return '';
 
@@ -150,15 +146,8 @@ export function resolveArtistArtworkFromCandidates(
   return null;
 }
 
-/**
- * Fallback indexes for one artwork cache: album-art-by-artist and
- * album-art-by-album-name.
- *
- * Without these, a cache miss meant scanning all ~10k entries — twice, via
- * `Object.entries`, which also allocated a 10k-pair array per call. A row whose
- * track, album and artist all miss did that four times. The index is built once
- * per cache object and reused for every lookup.
- */
+// Built once per cache object: without them a miss scanned all ~10k entries
+// twice via Object.entries, and a row missing on all three fields did it 4x.
 interface ArtworkFallbackIndex {
   byArtist: Map<string, string>;
   /** Keyed by normalized `album|artist` — never album alone (see resolveAlbumArtwork). */
@@ -218,14 +207,8 @@ export function resolveArtistArtwork(
   return getFallbackIndex(cache).byArtist.get(name) ?? null;
 }
 
-/**
- * Album artwork: exact key, then a case/punctuation-tolerant match on the same
- * album *and* artist.
- *
- * This used to fall back to any cached album sharing the title, regardless of
- * artist — so a generically-named release ("Greatest Hits", "Legacy") could
- * take a completely unrelated artist's cover.
- */
+// Exact key, then a tolerant match on album *and* artist. Matching on title
+// alone let "Greatest Hits" take an unrelated artist's cover.
 export function resolveAlbumArtwork(
   albumName: string,
   artistName: string,

@@ -318,13 +318,8 @@
       };
     }
 
-    /**
-     * chart.js/auto registers every controller and scale the library ships —
-     * ~211 KB, about half of all the JS on the page, downloaded and parsed on
-     * first paint for a visitor who may never open this tab. Registering only
-     * the pieces a filled line chart needs, behind a dynamic import that fires
-     * when the tab is first shown, takes both costs off the boot path.
-     */
+    // chart.js/auto registers everything it ships (~211 KB, half the page's JS)
+    // on first paint. Register only what a filled line chart needs, on demand.
     let chartLibrary: Promise<typeof ChartType> | null = null;
 
     function loadChartLibrary(): Promise<typeof ChartType> {

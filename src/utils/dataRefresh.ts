@@ -4,7 +4,7 @@ import {
   type GenerationSwappedDetail,
 } from './dataStore';
 import { isStandalonePwa } from './pwaInstall';
-import { isOverlayActive, isOverlaySurface } from './overlayState';
+import { isOverlayOpen, isOverlaySurface } from './overlayState';
 
 let initialized = false;
 let splashHidden = false;
@@ -16,17 +16,6 @@ const PULL_THRESHOLD = 108;
 const MAX_PULL = 150;
 const MIN_PULL_SHOW = 28;
 const PULL_DAMPING = 0.32;
-
-function isOverlayOpen(): boolean {
-  // isOverlayActive() also covers the recap story (which sets no body class)
-  // and holds through a close animation, so a dismiss gesture can't hand the
-  // rest of itself to pull-to-refresh the moment the sheet starts sliding away.
-  return (
-    isOverlayActive() ||
-    document.body.classList.contains('overlay-open') ||
-    document.body.classList.contains('stats-sheet-open')
-  );
-}
 
 const isOverlayTouch = isOverlaySurface;
 
@@ -57,10 +46,8 @@ export function pulseRefreshAnimation(): void {
   shell.classList.add('data-refresh-pulse');
 }
 
-/**
- * Fires once per generation swap rather than once per file, so an update that
- * touches six files still reads as a single "data updated" beat.
- */
+// Once per generation swap, not per file, so a six-file update still reads as
+// a single "data updated" beat.
 function handleGenerationSwapped(event: Event): void {
   if (suppressUpdateToasts) return;
   const detail = (event as CustomEvent<GenerationSwappedDetail>).detail;

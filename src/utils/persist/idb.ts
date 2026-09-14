@@ -1,12 +1,5 @@
-/**
- * Minimal promise wrapper over IndexedDB — no dependency, no schema migrations
- * beyond creating the two stores.
- *
- * IndexedDB rather than localStorage because the payload is ~1.4 MB of JSON:
- * localStorage is synchronous (a main-thread parse on every boot), string-only,
- * and capped around 5 MB. IDB stores structured clones, so reads come back as
- * objects with no JSON.parse cost at all.
- */
+// IDB, not localStorage: the payload is ~1.4 MB of JSON and localStorage is
+// synchronous, string-only and ~5 MB capped. Structured clones skip JSON.parse.
 
 const DB_NAME = 'music-stats';
 const DB_VERSION = 1;

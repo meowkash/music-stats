@@ -1,11 +1,5 @@
-/**
- * Instagram/Wrapped-style story playback.
- *
- * Progress is a CSS animation on each segment rather than a JS timer: the fill
- * stays on the compositor, `animationend` advances the story so timing can't
- * drift, and hold-to-pause is one property change instead of bookkeeping
- * against Date.now().
- */
+// Progress is a CSS animation per segment, not a JS timer: the fill stays on the
+// compositor, `animationend` advances so timing can't drift, pause is one property.
 
 export interface StoryPlayerOptions {
   /** Receives pointer/keyboard input and hosts the slides. */

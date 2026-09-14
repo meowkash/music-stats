@@ -24,15 +24,8 @@ export interface TabSurface {
   bottom: Wash;
 }
 
-/**
- * The per-tab ambient background wash. This is the single source of truth:
- * Layout.astro renders the `.bg-layer` custom properties from it at build time,
- * and `themeColorForTab` derives the browser theme-color from the same numbers.
- *
- * Keeping both off one record is what makes the desktop PWA title bar blend
- * into the page — previously theme-color was a hardcoded #000 that matched no
- * tab, so the title bar read as a black band above a tinted UI.
- */
+// Single source for the wash: Layout.astro renders .bg-layer properties from it
+// and theme-color derives from the same numbers, so chrome can't drift from page.
 export const TAB_SURFACES: Record<TabId, TabSurface> = {
   dashboard: {
     top: [255, 45, 85, 0.12],
@@ -67,21 +60,15 @@ function toHex(value: number): string {
   return Math.round(value).toString(16).padStart(2, '0');
 }
 
-/**
- * Flattens a wash onto the page background. The browser paints theme-color as
- * an opaque fill, so it has to be the *composited* result, not the wash itself.
- */
+// theme-color is painted as an opaque fill, so it needs the *composited* result
+// rather than the translucent wash itself.
 function composite([r, g, b, a]: Wash): string {
   const blend = (channel: number) => channel * a + PAGE_BASE * (1 - a);
   return `#${toHex(blend(r))}${toHex(blend(g))}${toHex(blend(b))}`;
 }
 
-/**
- * theme-color matches the *top* of the wash specifically: that is the edge the
- * browser chrome (desktop PWA title bar, mobile status bar) sits against.
- */
-// Derived from TAB_SURFACES rather than TAB_ORDER: tabs.ts imports this module,
-// so importing a runtime value back from it would be a cycle.
+// Matches the *top* of the wash — the edge browser chrome sits against. Derived
+// from TAB_SURFACES, not TAB_ORDER: tabs.ts imports this, so that would cycle.
 export const TAB_THEME_COLORS: Record<TabId, string> = Object.fromEntries(
   Object.entries(TAB_SURFACES).map(([tab, surface]) => [tab, composite(surface.top)]),
 ) as Record<TabId, string>;

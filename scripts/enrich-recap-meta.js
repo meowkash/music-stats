@@ -1,17 +1,5 @@
-/**
- * Fetches track durations and artist/track genre tags from Last.fm.
- *
- * Writes src/data/recap-meta-cache.json — a build-time artifact only. Nothing
- * here is shipped to the client: scripts/generate-recaps.js folds it into the
- * small per-year recap payloads, so the ~1 MB of raw tag data never crosses the
- * network.
- *
- * Entries are keyed by name (and artist), never by meta.json's numeric ids —
- * those are array positions that shift whenever the CSV is reprocessed.
- *
- * Resumable: re-running only fetches what the cache is missing, and progress is
- * checkpointed so an interrupted run keeps everything it already pulled.
- */
+// Build-time only: generate-recaps.js folds this ~1 MB of tags into small per-year
+// payloads. Keyed by name, not meta.json ids (array positions shift). Resumable.
 import fs from 'fs';
 import path from 'path';
 import { createLastfmClient, loadEnv, LastfmNotFound } from './lastfm-client.js';
@@ -33,11 +21,8 @@ const CACHE_PATH = path.resolve('src/data/recap-meta-cache.json');
 const CHECKPOINT_EVERY = 150;
 const CACHE_FORMAT = 2;
 
-/**
- * Per-run fetch budget. Unbounded by default so a local run completes the whole
- * catalogue in one go; CI sets a cap so a cold cache converges over a few daily
- * runs instead of producing one hour-long build.
- */
+// Unbounded locally so one run does the whole catalogue; CI caps it so a cold
+// cache converges over a few daily runs instead of one hour-long build.
 function limitFor(flag, envVar) {
   const arg = process.argv.find((a) => a.startsWith(`${flag}=`));
   if (arg) return Number(arg.slice(flag.length + 1));

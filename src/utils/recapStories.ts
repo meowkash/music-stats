@@ -1,20 +1,9 @@
-/**
- * Turns a recap payload into the ordered list of story slides.
- *
- * Slides are plain HTML strings built once and kept in the DOM; the player only
- * toggles `.is-active`. Entry animations are CSS-driven off that class, so
- * replaying a slide costs a class toggle rather than a re-render.
- *
- * Voice: this is a personal site with one listener, so slides speak as "my" or
- * "the" — never "your".
- */
+// Slides are HTML strings built once; the player only toggles `.is-active`, so a
+// replay costs a class toggle. Voice is "my"/"the" — one listener, never "your".
 import { escapeHTML, getArtistArtworkUrl, getArtworkThumbHTML, getArtworkUrl } from './ui';
 
-/**
- * The year picker lives inside a panel; the story viewer has to live outside
- * `#app-shell` because `.panel-section` is transformed, which would make it the
- * containing block for the viewer's `position: fixed`. They coordinate here.
- */
+// The viewer must live outside `#app-shell`: `.panel-section` is transformed and
+// would become the containing block for the viewer's `position: fixed`.
 export const RECAP_OPEN_EVENT = 'recap-open';
 
 export interface RecapArtist {
@@ -111,19 +100,14 @@ function ordinalHour(hour: number): string {
   return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
 }
 
-/**
- * A counting number the CSS reveal can animate. The value is stashed on the
- * element so one shared observer can run the count-up.
- */
+// A counting number the CSS reveal animates; the value is stashed on the element
+// so one shared observer runs the count-up.
 function counter(value: number, formatted = formatNumber(value)): string {
   return `<span class="story-counter" data-count-to="${value}" data-count-text="${escapeHTML(formatted)}">0</span>`;
 }
 
-/**
- * Blurred cover art behind a slide, with a scrim over it. The scrim is not
- * decoration: it is what keeps body text at contrast on top of an arbitrary
- * album cover, so it stays even when the image fails to load.
- */
+// The scrim is not decoration — it holds body text at contrast over an arbitrary
+// cover, so it stays even when the image fails to load.
 function backdrop(url: string | null): string {
   if (!url) return '';
   return `<div class="story-backdrop" aria-hidden="true">
@@ -143,10 +127,8 @@ function bars(values: number[], labels: string[], peak: number): string {
     .join('')}</div>`;
 }
 
-/**
- * Polar chart of listening by hour. A clock face maps the "when do you listen"
- * question onto a shape people already read as time.
- */
+// Polar chart of listening by hour: a clock face maps "when do you listen" onto
+// a shape already read as time.
 function clockDial(byHour: number[], peakHour: number): string {
   const max = Math.max(...byHour, 1);
   const cx = 100;
@@ -173,11 +155,8 @@ function clockDial(byHour: number[], peakHour: number): string {
   </svg>`;
 }
 
-/**
- * Stacked area of how the genre mix moved month to month. Shares are
- * renormalised per month so the band always fills the plot — the story is the
- * changing proportion, not the changing volume (which its own slide covers).
- */
+// Shares are renormalised per month so the band fills the plot: the story is the
+// changing proportion, not the volume (which has its own slide).
 function genreStream(trend: Recap['genreTrend']): string {
   const { names, months } = trend;
   if (!names.length) return '';
@@ -189,9 +168,8 @@ function genreStream(trend: Recap['genreTrend']): string {
     months.reduce((sum, series) => sum + (series[m] ?? 0), 0),
   );
 
-  // The current year stops partway through. Plotting all twelve months anyway
-  // drew the band collapsing to nothing over the months that have not happened
-  // yet, which read as a crash in listening rather than as missing data.
+  // The current year stops partway through; plotting all twelve drew the band
+  // collapsing to nothing, which read as a crash rather than missing data.
   const lastMonth = allTotals.reduce((last, total, m) => (total > 0 ? m : last), 0);
   const span = lastMonth + 1;
   if (span < 2) return '';
@@ -232,10 +210,8 @@ function genreStream(trend: Recap['genreTrend']): string {
   </div>`;
 }
 
-/**
- * Line-art marks for each season. Drawn rather than emoji so they inherit the
- * season's colour and the slide's stroke language.
- */
+// Drawn rather than emoji so each season's mark inherits its colour and the
+// slide's stroke language.
 const SEASON_GLYPHS: Record<string, string> = {
   winter: `<path d="M32 6v52M9 19l46 26M55 19L9 45" />
     <path d="M32 16l-6 6M32 16l6 6M32 48l-6-6M32 48l6-6" />
@@ -385,9 +361,8 @@ export function buildStories(recap: Recap): Story[] {
   }
 
   if (topGenres.length) {
-    // Top genres rarely clear 20% of a mixed year, so a 0–100% axis left every
-    // bar looking like a stub. The axis runs to the leader instead; the printed
-    // percentage is still the real share of the year.
+    // Top genres rarely clear 20%, so a 0–100% axis left every bar a stub. The
+    // axis runs to the leader; the printed percentage is still the real share.
     const topShare = Math.max(...topGenres.map((g) => g.share), 1);
     stories.push({
       tone: 'genre',

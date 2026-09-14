@@ -1,26 +1,11 @@
-/**
- * One place that knows whether a modal surface is on top of the app.
- *
- * Pull-to-refresh and the nav-bar drag both need this and both used to read
- * body classes directly, which gets it wrong twice: the recap story sets no
- * body class at all, and every class is dropped synchronously at the *start*
- * of a close — so for the length of the dismiss animation the app looked idle
- * while a sheet was still sliding away under the user's finger.
- *
- * Closing therefore keeps the surface "active" for a settle window rather than
- * releasing it immediately.
- */
+// Body classes get this wrong twice: the recap story sets none, and classes drop
+// at the *start* of a close. So closing stays "active" for a settle window.
 
 /** Covers --duration-sheet (380ms) plus a frame of slack. */
 const CLOSE_SETTLE_MS = 420;
 
-/**
- * Keyed rather than counted. The detail overlay calls its open path again on
- * every entity switch without an intervening close, so a counter drifted up
- * and never came back down — leaving the app permanently "overlay open" and
- * pull-to-refresh dead for the rest of the session. A set is idempotent, so
- * repeat opens of the same surface are free.
- */
+// Keyed, not counted: the detail overlay re-opens on every entity switch with no
+// close between, which drifted a counter up permanently and killed pull-to-refresh.
 const openSurfaces = new Set<string>();
 let settledAt = 0;
 
@@ -38,6 +23,16 @@ export function setOverlayOpen(key: string, open: boolean, settleMs = CLOSE_SETT
 export function isOverlayActive(): boolean {
   if (openSurfaces.size > 0) return true;
   return settledAt > 0 && performance.now() < settledAt;
+}
+
+// isOverlayActive() covers the recap story (no body class) and holds through the
+// close, so a dismiss gesture can't leak into whatever is watching next.
+export function isOverlayOpen(): boolean {
+  return (
+    isOverlayActive() ||
+    document.body.classList.contains('overlay-open') ||
+    document.body.classList.contains('stats-sheet-open')
+  );
 }
 
 /** Selector for every surface that should swallow a gesture rather than pass it through. */

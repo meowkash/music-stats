@@ -117,9 +117,7 @@ export function parseScrobbleCredits(artistName, trackName, overrides = loadOver
   return merged;
 }
 
-/**
- * Parse a raw Last.fm artist string into credited artist name segments.
- */
+// Parse a raw Last.fm artist string into credited artist name segments.
 export function parseArtistCredits(rawName, overrides = loadOverrides()) {
   const singleSet = new Set(overrides.singleEntities);
   let name = applyAlias(rawName, overrides.aliases);
@@ -182,9 +180,7 @@ function pickDisplayName(names, { segmentWeights, soloRawNames }) {
   })[0];
 }
 
-/**
- * Build canonical artist attribution for all raw artist strings.
- */
+// Build canonical artist attribution for all raw artist strings.
 export function buildArtistAttribution(rawArtists, overrides = loadOverrides(), artistCounts = [], tracks = [], trackCounts = []) {
   const aliases = overrides.aliases ?? {};
   const uf = new UnionFind();

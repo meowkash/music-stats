@@ -1,3 +1,5 @@
+import { readLocal, writeLocal } from './storage';
+
 let deferredPrompt: Event | null = null;
 
 export function isStandalonePwa(): boolean {
@@ -53,30 +55,11 @@ function hideInstallUi(): void {
 
 const PWA_DISMISSED_KEY = 'pwa-install-dismissed';
 
-function isInstallDismissed(): boolean {
-  try {
-    return localStorage.getItem(PWA_DISMISSED_KEY) === '1';
-  } catch (err) {
-    console.warn('[PWA] Failed to read install dismissed state:', err);
-    return false;
-  }
-}
+const isInstallDismissed = () => readLocal(PWA_DISMISSED_KEY) === '1';
+const setInstallDismissed = () => writeLocal(PWA_DISMISSED_KEY, '1');
 
-function setInstallDismissed(): void {
-  try {
-    localStorage.setItem(PWA_DISMISSED_KEY, '1');
-  } catch (err) {
-    console.warn('[PWA] Failed to persist install dismissed state:', err);
-  }
-}
-
-/**
- * The banner is a mobile affordance only. Desktop Chromium already puts an
- * install control in the address bar, and desktop Safari's "Add to Dock" lives
- * in the share menu — a dialog over the top of either is just noise. Matches
- * the app's own 768px mobile breakpoint, with a coarse-pointer check so a
- * narrow desktop window doesn't count as a phone.
- */
+// Mobile-only: desktop already has an address-bar control / "Add to Dock".
+// Coarse pointer so a narrow desktop window doesn't count as a phone.
 function isMobileViewport(): boolean {
   return (
     window.matchMedia('(max-width: 767px)').matches &&

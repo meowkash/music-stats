@@ -28,42 +28,32 @@ export function onEntityDetails(handler: (detail: EntityDetailsDetail) => void):
   }) as EventListener);
 }
 
-export function bindEntityClicks(
-  container: HTMLElement,
-  options?: { nested?: boolean },
-): void {
+// id "0" is the placeholder for an entity that never resolved, so it opens nothing.
+function emitFrom(el: Element): void {
+  const type = el.getAttribute('data-type');
+  const idStr = el.getAttribute('data-id');
+  if (!type || !idStr || idStr === '0') return;
+  const catalog = el.getAttribute('data-artist-catalog');
+  openEntityDetails(
+    type,
+    parseInt(idStr, 10),
+    catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined,
+  );
+}
+
+export function bindEntityClicks(container: HTMLElement, options?: { nested?: boolean }): void {
   container.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
 
     if (options?.nested !== false) {
       const entityEl = target.closest('.clickable-entity');
       if (entityEl && container.contains(entityEl)) {
-        const type = entityEl.getAttribute('data-type');
-        const idStr = entityEl.getAttribute('data-id');
-        if (type && idStr && idStr !== '0') {
-          const catalog = entityEl.getAttribute('data-artist-catalog');
-          openEntityDetails(
-            type,
-            parseInt(idStr, 10),
-            catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined,
-          );
-        }
+        emitFrom(entityEl);
         return;
       }
     }
 
     const row = target.closest('.scrobble-row.clickable-entity, .carousel-item.clickable-entity');
-    if (!row || !container.contains(row)) return;
-
-    const type = row.getAttribute('data-type');
-    const idStr = row.getAttribute('data-id');
-    if (type && idStr && idStr !== '0') {
-      const catalog = row.getAttribute('data-artist-catalog');
-      openEntityDetails(
-        type,
-        parseInt(idStr, 10),
-        catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined,
-      );
-    }
+    if (row && container.contains(row)) emitFrom(row);
   });
 }

@@ -1,7 +1,5 @@
-/**
- * Shared Last.fm access: .env loading, a paced GET, and error classification.
- * Used by enrich-recap-meta.js (and safe for any other build-time fetcher).
- */
+// Shared Last.fm access: .env loading, a paced GET, error classification.
+// Safe for any build-time fetcher.
 import fs from 'fs';
 import path from 'path';
 
@@ -29,10 +27,8 @@ export class LastfmNotFound extends Error {}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Last.fm's published ceiling is 5 requests/second/key. One shared gate keeps
- * every caller under it regardless of how many request sites there are.
- */
+// Last.fm's ceiling is 5 req/s/key, so one shared gate keeps every caller under
+// it regardless of how many request sites exist.
 export function createLastfmClient({ apiKey, minIntervalMs = 210, maxRetries = 4 }) {
   let nextSlot = 0;
 

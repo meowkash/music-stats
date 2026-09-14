@@ -1,11 +1,5 @@
-/**
- * Artwork sources, each normalized to a common candidate shape:
- *   { name, artistName, url, source }
- *
- * iTunes, Deezer and MusicBrainz/Cover Art Archive all need no API key.
- * Last.fm is last: it's the origin of the problem (its database genuinely has
- * no image for one-off episodic releases), so it only fills gaps.
- */
+// Sources normalized to { name, artistName, url, source }. iTunes/Deezer/MusicBrainz
+// need no key; Last.fm is last since it genuinely lacks episodic-release images.
 
 const USER_AGENT = 'music-stats/1.0 (+https://music.aakashkap.com)';
 
@@ -22,10 +16,8 @@ function upscaleItunes(url) {
     .replace(/\/\d+x\d+\.(jpg|png)$/, '/1000x1000bb.jpg');
 }
 
-/**
- * `limit=25` and `media=music` rather than the old `limit=1`: the caller scores
- * the whole candidate list instead of trusting position one.
- */
+// `limit=25` and `media=music` rather than `limit=1`: the caller scores the whole
+// candidate list instead of trusting position one.
 export async function searchItunes(term, entity) {
   const url =
     `https://itunes.apple.com/search?term=${encodeURIComponent(term)}` +
@@ -33,9 +25,8 @@ export async function searchItunes(term, entity) {
 
   const data = await getJson(url);
 
-  // The field to compare against depends on the entity: for a song search
-  // collectionName is the *album*, so scoring a track title against it fails
-  // every time (that's what made "Black Room Boy" unmatchable).
+  // For a song search collectionName is the *album*, so scoring a track title
+  // against it fails every time.
   const nameFor = (result) => {
     if (entity === 'song') return result.trackName ?? result.collectionName ?? '';
     if (entity === 'musicArtist') return result.artistName ?? '';
@@ -67,10 +58,8 @@ export async function searchDeezer(term, type) {
     .filter((candidate) => candidate.url);
 }
 
-/**
- * MusicBrainz release-groups + Cover Art Archive. Strong on compilations and DJ
- * mixes that the commercial stores never listed.
- */
+// MusicBrainz release-groups + Cover Art Archive. Strong on compilations and DJ
+// mixes the commercial stores never listed.
 export async function searchMusicBrainz(term, artistName) {
   const query = artistName
     ? `releasegroup:"${term}" AND artist:"${artistName}"`

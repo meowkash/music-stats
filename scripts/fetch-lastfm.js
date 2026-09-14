@@ -117,9 +117,8 @@ async function main() {
     } catch(e) {}
   }
 
-  // Calculate "from" timestamp.
-  // Last.FM allows retroactive edits/scrobbles within 14 days, so we refetch from 14 days before the latest scrobble,
-  // or 0 if starting fresh.
+  // Last.fm allows retroactive edits within 14 days, so refetch from 14 days
+  // before the latest scrobble, or 0 when starting fresh.
   const FOURTEEN_DAYS_IN_SEC = 14 * 24 * 60 * 60;
   let fromUts = 0;
   if (latestUts > 0) {

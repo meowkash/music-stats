@@ -21,9 +21,8 @@ const STATIC_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
 
-// Network-first paths. /manifest.json is here because it no longer carries a
-// ?v= cache-buster: the generic cache-first branch below would otherwise pin
-// the copy pre-cached at install time and never pick up a redeploy.
+// Network-first. /manifest.json is here because without its ?v= buster the
+// cache-first branch would pin the install-time copy and never see a redeploy.
 const PWA_ICON_PATHS = new Set([
   '/manifest.json',
   '/favicon.svg',
@@ -64,16 +63,12 @@ function jsonUnavailable() {
   });
 }
 
-/**
- * Network-first with a deadline. The network write always completes via
- * waitUntil even when the cached copy is what got served, so a slow response
- * still refreshes the store for next launch.
- */
+// Network-first with a deadline. The write completes via waitUntil even when the
+// cached copy was served, so a slow response still refreshes for next launch.
 function respondWithDataJson(event, dataPath) {
   const cacheKey = cacheKeyForPath(dataPath);
-  // 'fresh' is set only by the manifest read and the hash-verified generation
-  // downloads. Keying off 'v' instead matched every request the app makes,
-  // which made the deadline below unreachable.
+  // 'fresh' is set only by the manifest read and hash-verified downloads; keying
+  // off 'v' matched every request and made the deadline below unreachable.
   const mustBeFresh = new URL(event.request.url).searchParams.has('fresh');
 
   const network = fetch(event.request).then(async (response) => {
@@ -119,11 +114,8 @@ function respondWithDataJson(event, dataPath) {
   })();
 }
 
-/**
- * Cache-first, in a cache that deploys never clear. Builds before the
- * data/image split wrote artwork into DATA_CACHE, so a legacy hit is promoted
- * into IMAGE_CACHE rather than re-downloaded.
- */
+// Cache-first, in a cache deploys never clear. Pre-split builds wrote artwork
+// into DATA_CACHE, so a legacy hit is promoted rather than re-downloaded.
 async function respondWithArtwork(event) {
   const cache = await caches.open(IMAGE_CACHE);
   const cached = await cache.match(event.request);
@@ -136,11 +128,8 @@ async function respondWithArtwork(event) {
     return legacy;
   }
 
-  // Deliberately does NOT write to the cache. src/utils/artworkPrefetch.ts owns
-  // IMAGE_CACHE: it refetches with CORS, downscales to the size actually
-  // rendered, and stores a non-opaque entry (~3.6 KB instead of a ~20 KB
-  // original, or a ~32 MB padded opaque one). Caching here would race that and
-  // win, leaving full-size originals in the cache instead.
+  // Deliberately does NOT cache: artworkPrefetch.ts owns IMAGE_CACHE and stores a
+  // ~3.6 KB non-opaque entry. Writing here would race it and win with originals.
   return fetch(event.request);
 }
 

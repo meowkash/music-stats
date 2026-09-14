@@ -160,11 +160,8 @@ export function getArtworkThumbHTML(
   `;
 }
 
-/**
- * Stall detection is swept from one shared interval rather than a setTimeout
- * per image: a fully scrolled leaderboard binds hundreds of images at once, and
- * a live timer each was pure overhead for a case that almost never fires.
- */
+// One shared sweep rather than a setTimeout per image: a scrolled leaderboard
+// binds hundreds at once and a timer each was overhead for a rare case.
 const ARTWORK_STALL_MS = 8000;
 const ARTWORK_STALL_SWEEP_MS = 1000;
 const ARTWORK_MAX_RETRIES = 2;
@@ -262,11 +259,8 @@ interface ArtworkLoadCallbacks {
   beforeRetry?: () => void;
 }
 
-/**
- * The first attempt runs immediately and leans on the browser's own error
- * handling; only retries queue behind the concurrency cap, and only a genuinely
- * stalled request — no load, no error — is timed out.
- */
+// First attempt runs immediately on the browser's own error handling; only
+// retries queue behind the cap, and only a no-load/no-error request times out.
 function loadArtworkWithRetry(
   img: HTMLImageElement,
   sources: string[],
@@ -421,11 +415,8 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
   };
 }
 
-/**
- * Either a container to search, or the exact nodes to act on. Passing the nodes
- * lets an infinite-scroll chunk touch only its own rows instead of re-querying
- * everything already rendered.
- */
+// Either a container to search or the exact nodes, so an infinite-scroll chunk
+// can touch only its own rows instead of re-querying everything rendered.
 export type RenderScope = ParentNode | Iterable<Element>;
 
 function eachMatch(scope: RenderScope, selector: string, fn: (el: Element) => void): void {
@@ -527,7 +518,7 @@ function urlVariants(url: string): string[] {
   if (URL.canParse(url)) {
     const parsed = new URL(url);
     cleanUrl = parsed.origin + parsed.pathname;
-  } else if (typeof window !== 'undefined' && URL.canParse(url, window.location.href)) {
+  } else if (URL.canParse(url, window.location.href)) {
     const parsed = new URL(url, window.location.href);
     cleanUrl = parsed.origin === window.location.origin ? parsed.pathname : parsed.origin + parsed.pathname;
   }
@@ -545,12 +536,8 @@ function urlVariants(url: string): string[] {
   return [...variants];
 }
 
-/**
- * Memoised because this sits on the render path of every row: a list of a few
- * thousand entries would otherwise build a URL object, a Set and eight string
- * variants per row, and repaintPendingGlows() re-runs the whole sweep whenever
- * colours arrive. Cleared whenever colorsCache is replaced.
- */
+// On the render path of every row: unmemoised this built a URL, a Set and eight
+// string variants per row, re-run by repaintPendingGlows on every colour arrival.
 const resolvedColorEntries = new Map<string, ColorEntry | null>();
 
 function resolveColorEntryFromCache(url: string): ColorEntry | null {
@@ -597,12 +584,8 @@ export function getDominantColor(
 
 const ROW_THUMB_SELECTOR = '.scrobble-row-thumb img.artwork-img, .scrobble-row-thumb img';
 
-/**
- * Only a real cache hit latches. A row painted before colors.json resolved gets
- * the white fallback and stays `pending`, so `repaintPendingGlows` can finish it
- * once the cache lands — previously it latched on the fallback and stayed white
- * for the rest of the session.
- */
+// Only a real cache hit latches: a row painted before colors.json lands keeps the
+// white fallback and stays `pending`, so repaintPendingGlows can finish it.
 function paintRowGlow(row: Element): void {
   const imgEl = row.querySelector(ROW_THUMB_SELECTOR) as HTMLImageElement | null;
   const countEl = row.querySelector('.scrobble-count-val');

@@ -1,7 +1,5 @@
-/**
- * Reads and parses src/data/scrobbles.csv. Shared by process-data.js and
- * generate-recaps.js so the two can never disagree about how a row is decoded.
- */
+// Reads src/data/scrobbles.csv. Shared by process-data.js and generate-recaps.js
+// so the two can never disagree about how a row is decoded.
 import fs from 'fs';
 import path from 'path';
 
@@ -34,11 +32,8 @@ export function parseCSVLine(line) {
   return parts;
 }
 
-/**
- * Yields `{ uts, artist, album, track }` for every valid row, skipping the
- * header. Streaming as a generator keeps peak memory to one row rather than
- * ~150k parsed arrays.
- */
+// Yields `{ uts, artist, album, track }` per valid row. Streaming as a generator
+// keeps peak memory at one row rather than ~150k parsed arrays.
 export function* readScrobbles(csvPath = CSV_PATH) {
   if (!fs.existsSync(csvPath)) {
     throw new Error(`Raw scrobbles file not found at ${csvPath}. Fetch data first.`);

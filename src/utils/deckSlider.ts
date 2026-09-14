@@ -21,9 +21,7 @@ export interface DeckSlider {
   isActive: () => boolean;
 }
 
-/**
- * Reveal destination panels as soon as a gesture begins to prevent mid-frame paint spikes.
- */
+// Reveal destination panels as the gesture begins, to avoid mid-frame paint spikes.
 export function createDeckSlider(): DeckSlider | null {
   const deck = document.querySelector('.view-deck') as HTMLElement | null;
   if (!deck) return null;

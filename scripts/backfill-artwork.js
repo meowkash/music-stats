@@ -81,11 +81,8 @@ function loadJson(file, fallback) {
   }
 }
 
-/**
- * Manual overrides win over every source, always — the escape hatch for the
- * handful of releases no catalog indexes correctly.
- * Keyed exactly like the artwork cache: "album:Name|Artist", "artist:Name".
- */
+// Overrides always win — the escape hatch for releases no catalog indexes.
+// Keyed like the artwork cache: "album:Name|Artist", "artist:Name".
 function applyOverrides(artworkCache) {
   const overrides = loadJson(OVERRIDES_PATH, {});
   let applied = 0;
@@ -107,14 +104,8 @@ function applyOverrides(artworkCache) {
   return applied;
 }
 
-/**
- * Drop cache entries whose URL no longer resolves.
- *
- * CDN images do disappear — a cached URL is not proof of a working image, and a
- * dead entry otherwise looks "covered" forever because hasCached() only checks
- * that a key exists. Pruning turns them back into ordinary gaps that the normal
- * backfill pass below re-resolves.
- */
+// CDN images disappear, and hasCached() only checks a key exists — so a dead
+// entry looks "covered" forever. Pruning turns it back into an ordinary gap.
 async function pruneDeadUrls(artworkCache) {
   const urls = [...new Set(Object.values(artworkCache).filter((u) => typeof u === 'string' && u.startsWith('http')))];
   console.log(`\n=== Checking ${urls.length} cached artwork URLs ===`);
@@ -313,9 +304,8 @@ async function main() {
   total += await backfillType(artworkCache, 'artist', artists, 'artists');
   total += await backfillCanonicalArtists(artworkCache, catalog, meta);
 
-  // Tracks come last and skip anything the UI would already cover via album or
-  // artist fallback — that's what keeps a full run bounded now the old
-  // top-200 cap is gone.
+  // Tracks come last and skip anything album/artist fallback already covers,
+  // which is what keeps a full run bounded without the old top-200 cap.
   const tracks = Object.entries(catalog.tracks || {})
     .map(([id, count]) => {
       const trackMeta = meta.tracks[parseInt(id, 10)];

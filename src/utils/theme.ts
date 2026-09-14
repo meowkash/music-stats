@@ -1,7 +1,5 @@
-/**
- * Absolute colours (not `var()`) so animations can interpolate them.
- * Keep in sync with the --accent-cat-* tokens in Layout.astro.
- */
+// Absolute colours (not `var()`) so animations can interpolate them.
+// Keep in sync with the --accent-cat-* tokens in Layout.astro.
 export function getCategoryAccent(category: string): { color: string; glow: string } {
   switch (category) {
     case 'artists':

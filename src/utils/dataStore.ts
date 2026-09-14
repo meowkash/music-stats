@@ -54,13 +54,8 @@ export function dataUrl(path: string): string {
   return `${path}${sep}v=${CACHE_VERSION}`;
 }
 
-/**
- * Marks a read that must never be served a stale cached body: the manifest, and
- * the hash-verified downloads that build a generation. Everything else is happy
- * to take the service worker's cached copy if the network is slow, which is what
- * the worker's data deadline is for — `v=` alone used to opt every single read
- * out of it, leaving that path unreachable.
- */
+// Marks a read that must never get a stale body (manifest, hash-verified
+// downloads). `v=` alone opted every read out and made the SW deadline dead code.
 function freshDataUrl(path: string): string {
   return `${dataUrl(path)}&fresh=1`;
 }
@@ -111,11 +106,8 @@ interface ManifestEntryLookup {
   hash: string | undefined;
 }
 
-/**
- * Phase 1 of boot: populate memory from IndexedDB with no network access at
- * all. Only the critical set is awaited — everything else resolves from the
- * same store on demand via fetchAppJson, so first paint stays light.
- */
+// Boot phase 1: fill memory from IndexedDB, no network. Only the critical set
+// is awaited; the rest resolves on demand so first paint stays light.
 export async function hydrateFromStore(): Promise<boolean> {
   setActiveManifest((await loadActiveManifest()) ?? null);
   if (!activeManifest) return false;
@@ -133,11 +125,8 @@ export async function hydrateFromStore(): Promise<boolean> {
   return memory.size > 0;
 }
 
-/**
- * Read a data file. Memory, then the active generation in IndexedDB, then the
- * network as a genuine last resort (first ever run, or a path the manifest
- * doesn't know about).
- */
+// Memory, then the active generation in IndexedDB, then the network as a last
+// resort (first run, or a path the manifest doesn't know).
 export async function fetchAppJson<T>(path: string): Promise<T> {
   const { normalized, hash } = manifestEntry(path);
 
@@ -173,9 +162,8 @@ async function downloadFile(
 ): Promise<[string, unknown] | null> {
   const text = await fetchText(freshDataUrl(file.path));
 
-  // The service worker is network-first with a 3s deadline, so a slow network
-  // can hand back the *previous* body. Verifying against the manifest hash
-  // stops stale bytes being filed under the new hash.
+  // The SW is network-first with a 3s deadline, so a slow network can return the
+  // *previous* body; the hash check stops stale bytes filed under the new hash.
   const actual = await hashText(text);
   if (actual !== null && actual !== file.hash) return null;
 
@@ -206,16 +194,8 @@ async function downloadAll(
   return results;
 }
 
-/**
- * Phase 2 of boot: reconcile against the server.
- *
- * Downloads land in the content-addressed file store but stay invisible until
- * every one of them has arrived; only then does the manifest pointer move. An
- * interrupted update therefore leaves the previous generation fully intact
- * rather than a half-updated mix.
- *
- * @returns the number of data files that changed.
- */
+// Boot phase 2. Downloads stay invisible until all have landed, then the manifest
+// pointer moves — so an interrupted update leaves the old generation intact.
 export async function stageUpdate(): Promise<number> {
   if (staging || !navigator.onLine) return 0;
   staging = true;

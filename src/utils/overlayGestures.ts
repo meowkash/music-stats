@@ -8,11 +8,8 @@ export interface SwipeDismissOptions {
   /** Backdrop faded out in step with the drag, if provided. */
   backdrop?: HTMLElement | null;
   threshold?: number;
-  /**
-   * Touches that begin this many px from the left/right edge are reserved for
-   * in-sheet edge navigation. Pass a function when the width depends on
-   * runtime state (e.g. only while the overlay has back/forward history).
-   */
+  // Touches starting this many px from an edge are reserved for in-sheet edge
+  // navigation. Pass a function when the width depends on runtime state.
   reserveLeftEdgePx?: number | (() => number);
   reserveRightEdgePx?: number | (() => number);
 }
@@ -186,9 +183,8 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   panel.addEventListener('touchcancel', cancelDrag);
   window.addEventListener('orientationchange', cancelDrag);
 
-  // Trackpad equivalent: pulling down from the top of the sheet drags it the
-  // same way. Only downward pans at the top are claimed, so scrolling the
-  // sheet's content is never intercepted.
+  // Trackpad equivalent. Only downward pans at the top are claimed, so the
+  // sheet's own content scrolling is never intercepted.
   bindWheelPan({
     element: panel,
     axis: 'y',
@@ -226,21 +222,15 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
 export interface EdgeSwipeNavOptions {
   /** Listens for the edge gesture — typically the sheet panel. */
   gestureEl: HTMLElement;
-  /**
-   * In-sheet content regions that slide during navigation (header + body).
-   * The sheet panel itself must not move.
-   */
+  // In-sheet regions that slide during navigation (header + body). The sheet
+  // panel itself must not move.
   contentEls: HTMLElement[];
-  /**
-   * `back` — left edge, swipe right (pop history).
-   * `forward` — right edge, swipe left (redo).
-   */
+  // `back` — left edge, swipe right (pop history).
+  // `forward` — right edge, swipe left (redo).
   direction: 'back' | 'forward';
   canNavigate: () => boolean;
-  /**
-   * Called after a committed swipe with content already at the "out" end
-   * state for this direction, so the incoming slide can continue seamlessly.
-   */
+  // Called after a committed swipe with content already at the "out" end state,
+  // so the incoming slide continues seamlessly.
   onNavigate: () => void;
   edgeWidth?: number;
   /** Max slide distance in px — keep in sync with OVERLAY_SLIDE_PX. */
@@ -253,10 +243,8 @@ const EDGE_COMMIT = 0.28;
 /** Finger travel that maps to a full content slide-out. */
 const EDGE_FULL_DX = 120;
 
-/**
- * iOS-style interactive edge swipe for in-sheet navigation. Content slides
- * under the finger; the sheet stays put. Pull-down still dismisses.
- */
+// iOS-style interactive edge swipe: content slides under the finger, the sheet
+// stays put, pull-down still dismisses.
 export function bindEdgeSwipeNav(options: EdgeSwipeNavOptions): void {
   const {
     gestureEl,

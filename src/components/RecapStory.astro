@@ -20,10 +20,8 @@
 </div>
 
 <style is:global>
-  /* Global rather than scoped: slides and progress segments are built at
-     runtime via innerHTML, so they never carry the component's scoping
-     attribute. Every class here is prefixed `story-` to keep that safe. */
-  /* ── Story viewer ──────────────────────────────────────────────────── */
+  /* Global, not scoped: slides are built at runtime via innerHTML and never
+     carry the scoping attribute. Every class here is `story-` prefixed. */
   .story-viewer {
     position: fixed;
     top: 0;
@@ -189,12 +187,8 @@
     position: absolute;
   }
 
-  /* Per-story palette, all of it derived from the year's own hue so a recap is
-     recognisable by colour alone (see utils/recapTheme.ts). Each tone only
-     picks its own offset around that hue — never an absolute colour — which is
-     what keeps thirteen slides varied without leaving the year's family.
-     Painted on the slide itself rather than a z-index:-1 pseudo-element, which
-     would fall behind the stage's own background. */
+  /* Every tone is an offset around the year's hue, never an absolute colour, so
+     thirteen slides vary without leaving the family (utils/recapTheme.ts). */
   .story-slide {
     --tone-a: hsl(calc(var(--year-hue) + var(--shift-a, 0)) 88% var(--lit-a, 54%) / var(--alpha-a, 0.34));
     --tone-b: hsl(calc(var(--year-hue) + var(--shift-b, 34)) 85% var(--lit-b, 50%) / var(--alpha-b, 0.24));
@@ -218,11 +212,8 @@
   .story-slide[data-tone='style'] { --shift-a: -14; --shift-b: 62; }
   .story-slide[data-tone='finale'] { --shift-a: 0; --shift-b: 40; --alpha-a: 0.46; --alpha-b: 0.32; }
 
-  /* ── Artwork backdrop ──────────────────────────────────────────────────
-     Slides that name a record show its cover behind them, blurred past
-     recognition. The scrim is load-bearing, not decoration: it is what holds
-     text contrast over an arbitrary cover, so it is painted by the container
-     and survives the image failing to load. */
+  /* Artwork backdrop. The scrim is load-bearing, not decoration: it holds text
+     contrast over an arbitrary cover, so it survives the image failing. */
   .story-backdrop {
     position: absolute;
     inset: 0;
@@ -240,10 +231,8 @@
     filter: blur(44px) saturate(150%) brightness(0.6);
   }
 
-  /* Scrim plus the year's own wash. The wash has to be re-applied here rather
-     than left on the slide underneath: the scrim needed to hold text contrast
-     over a cover is opaque enough to bury it otherwise, which made every
-     artwork slide read as plain black. */
+  /* The wash is re-applied over the scrim: a scrim opaque enough for text
+     contrast buries it otherwise, leaving every artwork slide plain black. */
   .story-backdrop::after {
     content: '';
     position: absolute;
@@ -353,9 +342,8 @@
     50% { opacity: 0.8; }
   }
 
-  /* ── Entry animations ──────────────────────────────────────────────
-     Driven off .is-active so replaying a slide re-runs them. Everything
-     animates transform/opacity only. */
+  /* Entry animations, driven off .is-active so replaying a slide re-runs them.
+     Everything animates transform/opacity only. */
   .story-slide.is-active > *:not(.story-backdrop) {
     animation: story-rise 0.62s var(--ios-spring) both;
   }
@@ -399,9 +387,8 @@
     to { opacity: 1; transform: scale(1) translate3d(0, 0, 0); }
   }
 
-  /* ── Runner-up lists ───────────────────────────────────────────────── */
-  /* flex:1 + space-evenly is the pattern every list and chart on these slides
-     uses to claim the leftover height rather than huddling in the middle. */
+  /* flex:1 + space-evenly is how every list and chart here claims the leftover
+     height rather than huddling in the middle. */
   .story-runners {
     display: flex;
     flex: 1 1 auto;
@@ -673,9 +660,8 @@
     background: rgba(255, 255, 255, 0.04);
   }
 
-  /* Categorical, so the five layers must stay distinguishable — but they are
-     spaced around the year's own hue rather than fixed brand colours, so the
-     chart belongs to the same palette as everything else in the recap. */
+  /* Categorical, so the five layers must stay distinguishable — but spaced
+     around the year's hue rather than fixed colours, to stay in palette. */
   .story-stream-layer {
     --layer-color: var(--year-base);
     fill: var(--layer-color);

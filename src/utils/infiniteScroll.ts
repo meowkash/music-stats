@@ -6,11 +6,8 @@ export interface InfiniteScrollOptions<T> {
   root?: Element | null;
   rootMargin?: string;
   sentinelClass?: string;
-  /**
-   * Receives only the rows this chunk inserted. Scoping matters: passing the
-   * whole container made post-render work triangular — chunk 20 of a 1,000-row
-   * list re-queried the 950 rows already handled.
-   */
+  // Only the rows this chunk inserted: passing the whole container made
+  // post-render work triangular (chunk 20 re-queried 950 handled rows).
   onChunkRendered?: (added: Element[]) => void;
 }
 
@@ -107,11 +104,8 @@ export function createInfiniteScroll<T>(options: InfiniteScrollOptions<T>): Infi
     renderNextChunk();
   }
 
-  /**
-   * Callers churn controllers (a new one per search keystroke), so the observer
-   * needs an explicit release rather than being left watching a detached
-   * sentinel until GC gets round to it.
-   */
+  // Callers churn controllers (one per search keystroke), so the observer needs
+  // an explicit release rather than watching a detached sentinel until GC.
   function destroy() {
     destroyed = true;
     hideSentinel();

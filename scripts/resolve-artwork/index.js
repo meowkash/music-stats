@@ -2,19 +2,8 @@ import { parseEpisodic, primaryArtist, stripDecorations } from './normalize.js';
 import { pickBest } from './score.js';
 import { searchDeezer, searchItunes, searchLastfm, searchMusicBrainz } from './sources.js';
 
-/**
- * Artwork resolution for entities whose titles don't appear verbatim in any
- * catalog — DJ mixes, episodic radio shows, decorated remix titles.
- *
- * Two ideas do most of the work:
- *
- *  1. A query *ladder*. Rather than one search, try progressively looser forms
- *     (exact -> undecorated -> series -> artist), and stop at the first result
- *     that actually scores as a match.
- *  2. Series memoization. "A State of Trance 1234" has no cover anywhere, but
- *     the series does. Resolving the series once gives every episode a sensible
- *     cover and collapses hundreds of lookups into one.
- */
+// For titles no catalog lists verbatim (DJ mixes, episodic shows). A query ladder
+// (exact→undecorated→series→artist) plus series memoization collapses the lookups.
 
 const REQUEST_PAUSE_MS = 150;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,12 +11,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ITUNES_ENTITY = { album: 'album', artist: 'musicArtist', track: 'song' };
 const DEEZER_TYPE = { album: 'album', artist: 'artist', track: 'track' };
 
-/**
- * Build the ordered list of attempts for one entity.
- * Each rung carries the query it should be *scored* against, which is not
- * always the query it searches with — a series lookup searches for the series
- * but must still be judged against the series name, not the episode title.
- */
+// Each rung carries the query it is *scored* against, which differs from what it
+// searches: a series lookup is judged against the series, not the episode title.
 export function buildLadder({ type, name, artistName }) {
   const rungs = [];
   const bareArtist = primaryArtist(artistName);
@@ -119,13 +104,7 @@ async function gatherCandidates(rung, { lastfmKey, artistName, name }) {
   return candidates;
 }
 
-/**
- * Resolve one entity to an artwork URL.
- *
- * @param entity {{type: 'album'|'artist'|'track', name: string, artistName?: string}}
- * @param options {{lastfmKey?: string, seriesCache?: Map, onAttempt?: Function}}
- * @returns {Promise<{url: string, via: string, source: string, score: number} | null>}
- */
+// Resolve one entity to an artwork URL, or null when nothing scores as a match.
 export async function resolveArtwork(entity, options = {}) {
   const { lastfmKey, seriesCache, onAttempt } = options;
   const { type, name, artistName = '' } = entity;

@@ -40,10 +40,8 @@
 </style>
 
 <style is:global>
-  /* Global rather than scoped: the year cards, story slides and progress
-     segments are all built at runtime via innerHTML, so they never carry the
-     component's scoping attribute. Every class here is prefixed `recap-` or
-     `story-` to keep that safe. */
+  /* Global, not scoped: cards and slides are built at runtime via innerHTML and
+     never carry the scoping attribute. Classes are `recap-`/`story-` prefixed. */
 
   /* One horizontal lane of year cards. Rendered in chunks as it scrolls, so a
      long listening history does not build every card up front. */
@@ -75,7 +73,6 @@
     align-self: stretch;
   }
 
-  /* ── Year picker cards ─────────────────────────────────────────────── */
   /* Each card carries its year's palette as inline custom properties (see
      utils/recapTheme.ts), so the rail reads as a colour ladder across years. */
   .recap-card {

@@ -1,9 +1,7 @@
 export type Easing = (t: number) => number;
 
-/**
- * Single source of truth for the app's motion feel. Mirrors the CSS
- * `--ios-spring` curve so JS-driven and CSS-driven animations match exactly.
- */
+// Single source of truth for motion feel. Mirrors the CSS `--ios-spring` curve
+// so JS- and CSS-driven animations match exactly.
 export const IOS_SPRING_POINTS = [0.16, 1, 0.3, 1] as const;
 
 function bezierAxis(t: number, p1: number, p2: number): number {
@@ -73,9 +71,8 @@ export function rafTween(
   const tick = (now: number) => {
     if (cancelled) return;
     const t = Math.min((now - start) / durationMs, 1);
-    // A throw from onUpdate must not skip the reschedule below — that would
-    // strand the animation mid-flight and never run onComplete, leaving the
-    // caller's state (index, offset, drag classes) permanently inconsistent.
+    // A throw from onUpdate must not skip the reschedule: that strands the
+    // animation, skips onComplete and leaves caller state inconsistent.
     try {
       onUpdate(from + (to - from) * easing(t));
     } catch (err) {
@@ -155,10 +152,8 @@ export function withAlpha(color: Rgba, alpha: number): string {
   return `rgba(${(color.r + 0.5) | 0}, ${(color.g + 0.5) | 0}, ${(color.b + 0.5) | 0}, ${ai / 1000})`;
 }
 
-/**
- * Reusable string builders for the gesture hot path. Callers that paint every
- * frame should keep one of these and avoid allocating on quiet ticks.
- */
+// Reusable string builders for the gesture hot path: callers painting every
+// frame keep one and avoid allocating on quiet ticks.
 export function createCssPaintCache() {
   const scratch: Rgba = { r: 0, g: 0, b: 0, a: 0 };
   let lastColorKey = '';

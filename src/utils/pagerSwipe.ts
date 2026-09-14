@@ -18,10 +18,8 @@ export interface PagerSwipeOptions {
   pageCount: number;
   /** Fired once the slide has settled on `index`. */
   onSettled: (index: number) => void;
-  /**
-   * Fractional page position, on every drag and settle frame. Use it to keep
-   * accompanying UI (labels, accents) in step with the slide.
-   */
+  // Fractional page position on every drag and settle frame, to keep labels
+  // and accents in step with the slide.
   onProgress?: (fraction: number) => void;
 }
 
@@ -31,10 +29,8 @@ export interface PagerSwipe {
   measure: () => void;
 }
 
-/**
- * Finger-tracking horizontal pager. All writes are transform-only and the
- * settle uses the shared easing, so it matches the nav and sheet animations.
- */
+// Finger-tracking horizontal pager. Transform-only writes and shared easing,
+// so it matches the nav and sheet animations.
 export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   const { gestureEl, trackEl, viewportEl, pageCount, onSettled, onProgress } = options;
 

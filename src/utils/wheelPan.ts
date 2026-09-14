@@ -1,10 +1,5 @@
-/**
- * Trackpad two-finger pans arrive as `wheel` events, not touches, so laptops
- * would otherwise miss every swipe gesture in the app. This turns a burst of
- * wheel events into the same start/move/end shape a finger drag produces:
- * `delta` is cumulative travel in the finger's direction (px) and `velocity`
- * is px/ms, matching the touch handlers' units.
- */
+// Turns a burst of trackpad `wheel` events into the start/move/end shape a finger
+// drag produces, in the same units (px, px/ms), so laptops get every gesture.
 
 /** Wheel bursts have no "up" event — this much quiet ends the gesture. */
 const IDLE_END_MS = 110;
@@ -16,11 +11,8 @@ export interface WheelPanOptions {
   /** Gesture axis. Cross-axis-dominant wheels are left alone (normal scroll). */
   axis: 'x' | 'y';
   enabled?: () => boolean;
-  /**
-   * Extra gate applied to the first event of a burst, given travel in the
-   * finger's direction. Use it to claim only one direction so panning the
-   * other way still scrolls normally.
-   */
+  // Extra gate on the first event of a burst, to claim only one direction so
+  // panning the other way still scrolls normally.
   shouldClaim?: (primary: number) => boolean;
   onStart?: () => void;
   onMove?: (delta: number, velocity: number) => void;

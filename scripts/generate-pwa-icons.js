@@ -18,11 +18,8 @@ const SIZES = [
 /** Sizes packed into favicon.ico — covers tab, bookmark bar and Windows taskbar. */
 const ICO_SIZES = [16, 32, 48];
 
-/**
- * CSS points → device media query (width/height in CSS px, DPR).
- * Without a matching apple-touch-startup-image, iOS shows a white screen +
- * the apple-touch-icon — including as the snapshot when swiping to Home.
- */
+// CSS points → device media query. Without a matching apple-touch-startup-image
+// iOS shows a white screen, including as the swipe-to-Home snapshot.
 const SPLASH_MEDIA = [
   { w: 320, h: 568, dpr: 2 },
   { w: 375, h: 667, dpr: 2 },
@@ -49,12 +46,8 @@ const SPLASH_MEDIA = [
   { w: 1032, h: 1376, dpr: 2 },
 ];
 
-/**
- * Apple (and iOS 26 home/multitasking transitions) composite transparent
- * pixels onto white. Our favicon.svg bakes in a squircle (`rx`) which leaves
- * the four corners transparent — that reads as a white plate behind the icon.
- * Provide a full-bleed opaque square; iOS applies its own mask.
- */
+// Apple composites transparent pixels onto white, and favicon.svg's squircle
+// leaves the corners clear. Ship a full-bleed opaque square; iOS masks it.
 function fullBleedIconSvg(svg) {
   // Only drop the baked-in squircle on the background rect — keep ellipse rx/ry.
   return Buffer.from(
@@ -91,24 +84,15 @@ async function generateAppIcons(svg) {
   fs.copyFileSync(path.join(iconsDir, 'apple-touch-icon.png'), rootTouchIcon);
   console.log(`Wrote ${path.relative(process.cwd(), rootTouchIcon)}`);
 
-  // Older iOS prefers the -precomposed name when probing by convention. It used
-  // to be a hand-committed copy, so the two would silently diverge the first
-  // time the logo changed and some devices would keep the old mark.
+  // Older iOS probes the -precomposed name by convention. As a hand-committed
+  // copy the two diverged the first time the logo changed.
   const precomposed = path.join(publicDir, 'apple-touch-icon-precomposed.png');
   fs.copyFileSync(rootTouchIcon, precomposed);
   console.log(`Wrote ${path.relative(process.cwd(), precomposed)}`);
 }
 
-/**
- * Packs PNGs into an ICO container. Browsers request /favicon.ico by path
- * whether or not the document links it, so leaving the Astro template's default
- * there means every surface that ignores our <link rel="icon"> tags — tab
- * fallback, bookmarks, Windows taskbar, installed-PWA title bar — shows Astro's
- * logo instead of ours.
- *
- * PNG-in-ICO (rather than BMP) is understood by every browser we target and
- * keeps the file small.
- */
+// Browsers request /favicon.ico by path regardless of <link rel="icon">, so the
+// template default leaks Astro's logo into tabs, bookmarks and the PWA title bar.
 function packIco(images) {
   const HEADER = 6;
   const ENTRY = 16;
@@ -148,11 +132,8 @@ async function generateFavicon(svg) {
   console.log(`Wrote ${path.relative(process.cwd(), out)} (${ICO_SIZES.join(', ')}px)`);
 }
 
-/**
- * Share sheets (iMessage, iOS Share → Add to Home Screen preview, Slack, etc.)
- * use og:image — keep it in sync with the app icon, not a stale brand mark.
- * Background matches favicon.svg / splash-icon-bg radial gradient.
- */
+// Share sheets use og:image, so it tracks the app icon rather than a stale mark.
+// Background matches the favicon.svg / splash-icon-bg radial gradient.
 async function generateOgImage(svg) {
   const width = 1200;
   const height = 630;

@@ -1,16 +1,5 @@
-/**
- * Per-year recap palette.
- *
- * Every year gets its own base colour, and consecutive years step around the
- * wheel by a fixed angle so the set reads as one family that keeps moving
- * rather than as a random assortment. 47° is coprime with the wheel in the
- * range that matters here: it takes eight years before a hue comes close to
- * repeating, and no two adjacent years land in the same band.
- *
- * The whole recap surface — picker card, story backgrounds, chart accents —
- * derives from these four values, so a year is recognisable before you read
- * the number on it.
- */
+// Consecutive years step 47° around the wheel: coprime enough that no hue nears
+// a repeat for eight years and no two adjacent years share a band.
 
 const HUE_STEP = 47;
 const HUE_ANCHOR = 20;
@@ -24,11 +13,8 @@ export interface RecapTheme {
   glow: string;
 }
 
-/**
- * Yellows read far lighter than blues at the same HSL lightness, so each band
- * gets a correction. Without it the yellow years looked washed out next to the
- * blue ones at identical numbers.
- */
+// Yellows read far lighter than blues at equal HSL lightness, so each band gets
+// a correction; without it the yellow years looked washed out.
 function lightnessFor(hue: number): number {
   if (hue >= 40 && hue < 75) return 47; // yellow / gold
   if (hue >= 75 && hue < 160) return 45; // green

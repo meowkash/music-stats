@@ -1,19 +1,10 @@
+import { encodeBitmap } from './encodeBitmap';
 import type { Manifest } from './persist/generations';
 import { readBootHint, writeBootHint } from './persist/generations';
 import type { EncodeRequest, EncodeResult } from './artworkEncode.worker';
 
-/**
- * Staged artwork warming.
- *
- * Stage 1 covers what's on screen so the current view settles immediately;
- * stage 2 sweeps the rest in the background while the app is in use, which is
- * what makes a later offline launch complete rather than partial.
- *
- * Invalidation rides on the URL. mzstatic and Last.fm URLs are content
- * addresses, so a changed cover is a changed URL: anything in the manifest but
- * not in the cache needs fetching, and anything cached but no longer in the
- * manifest is dead and gets evicted. No separate image hashing required.
- */
+// Stage 1 warms what's on screen, stage 2 sweeps the rest so a later offline
+// launch is complete. CDN URLs are content addresses, so they are the invalidation.
 
 /** Must match IMAGE_CACHE in scripts/generate-sw.js. */
 const IMAGE_CACHE = 'music-stats-images-v1';
@@ -23,34 +14,15 @@ const BACKGROUND_CONCURRENCY = 6;
 /** Breathing room between background batches so the sweep never fights the UI. */
 const BACKGROUND_BATCH_PAUSE_MS = 120;
 
-/**
- * Why the images are re-encoded instead of cached as they arrive.
- *
- * A no-cors fetch yields an *opaque* response, and browsers pad opaque cache
- * entries by a flat ~32 MB each in quota accounting — a privacy measure so a
- * site can't infer cross-origin resource sizes by watching its own quota. It's
- * charged per entry regardless of the real file size, so the full library would
- * have needed ~24 GB against a ~3 GB quota.
- *
- * lastfm.freetls.fastly.net does send `access-control-allow-origin: *`, so the
- * bytes are readable. Fetching with CORS, downscaling to the size actually
- * displayed, and storing a Response we construct ourselves makes the entry
- * non-opaque: measured 8.7 KB instead of ~32 MB, ~3700x smaller.
- */
+// Opaque (no-cors) cache entries are charged a flat ~32 MB each against quota,
+// so the library needed ~24 GB of ~3 GB. Re-encoding with CORS gives 8.7 KB.
 const MAX_QUOTA_FRACTION = 0.5;
 
 const THUMB_PX = 160;
 /** Sized-variant source is 500x500, so the sweep can't usefully exceed it. */
 const HERO_PX = 512;
-/**
- * The detail hero is full-bleed, where 512 upscaled on a 3x screen looks soft.
- * Last.fm also serves the unresized upload (measured 1000-1946px) at a URL with
- * no size segment, so an opened overlay can be upgraded to a genuine 768.
- *
- * Not part of the background sweep on purpose: pulling originals for all 732
- * covers is ~220 MB of transfer and ~56 MB stored, versus ~9 MB for the whole
- * sweep today. On demand, it's one ~300 KB fetch for something you're looking at.
- */
+// On-demand only: the full-bleed hero wants a real 768, but sweeping originals
+// for all 732 covers is ~220 MB transferred versus ~9 MB for the whole sweep.
 const HERO_UPGRADE_PX = 768;
 
 /** One cache entry to produce: `url` is the key the UI will request. */
@@ -65,16 +37,8 @@ interface WarmGroup {
   targets: WarmTarget[];
 }
 
-/**
- * The UI requests two URL variants per image (getThumbArtworkSources and
- * getStaticArtworkSources), so both need a cache entry — but both are derived
- * from a single download.
- *
- * The thumb is rendered from the 500x500 source rather than fetched from the
- * /300x300/ URL: Last.fm doesn't publish that variant for every image, so
- * requesting it 404s for a handful. Deriving locally halves the request count
- * and removes that failure mode entirely.
- */
+// Both URL variants the UI asks for are derived from one download. The thumb
+// comes off the 500x500 source because /300x300/ 404s for some Last.fm images.
 function warmGroupFor(url: string): WarmGroup {
   const thumbUrl = url.replace('/500x500/', '/300x300/');
   const targets: WarmTarget[] = [{ url, px: HERO_PX }];
@@ -82,35 +46,15 @@ function warmGroupFor(url: string): WarmGroup {
   return { source: url, targets };
 }
 
-/** Downscale a decoded bitmap into a non-opaque Response. */
-async function encodeAt(bitmap: ImageBitmap, px: number): Promise<Response | null> {
-  try {
-    const size = Math.min(px, Math.max(bitmap.width, bitmap.height));
-    const canvas = new OffscreenCanvas(size, size);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(bitmap, 0, 0, size, size);
-
-    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.8 });
-    return new Response(blob, { headers: { 'Content-Type': 'image/webp' } });
-  } catch (err) {
-    console.warn('[ArtworkPrefetch] Failed to encode bitmap at size', px, err);
-    return null;
-  }
-}
-
-/**
- * Downscale to `px` and hand back a same-origin-style Response.
- * Falls back to the untouched (still non-opaque) response if the browser lacks
- * OffscreenCanvas encoding.
- */
+// Downscale to `px` and return a same-origin-style Response, falling back to
+// the untouched (still non-opaque) one without OffscreenCanvas encoding.
 async function reencode(response: Response, px: number): Promise<Response> {
   if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
     return response;
   }
   try {
     const bitmap = await createImageBitmap(await response.blob());
-    const encoded = await encodeAt(bitmap, px);
+    const encoded = await encodeBitmap(bitmap, px);
     bitmap.close();
     return encoded ?? response;
   } catch (err) {
@@ -144,12 +88,8 @@ const QUOTA_RECHECK_MS = 5000;
 let quotaCheckedAt = 0;
 let quotaHeadroom = Number.POSITIVE_INFINITY;
 
-/**
- * estimate() walks the whole origin's storage accounting, so calling it once per
- * six-image batch cost ~120 walks over a full sweep. Time-based instead: the
- * reading only has to be fresh enough to catch the approach to the ceiling, and
- * a genuine QuotaExceededError still forces an immediate re-read.
- */
+// estimate() walks the origin's whole storage accounting (~120 walks per sweep
+// if called per batch), so it is time-throttled; a real quota error re-reads.
 async function throttledQuotaHeadroom(): Promise<number> {
   const now = Date.now();
   if (now - quotaCheckedAt < QUOTA_RECHECK_MS) return quotaHeadroom;
@@ -179,13 +119,8 @@ function dispatchProgress(detail: ArtworkPrefetchProgress): void {
   );
 }
 
-/**
- * Artwork URLs actually inside the viewport.
- *
- * The visibility test is the point: an infinite scroller leaves every row it has
- * ever rendered in the document, so "every img in the DOM" degenerates into
- * "almost everything" on a long list and collapses the two-stage design.
- */
+// The visibility test is the point: an infinite scroller keeps every rendered
+// row in the DOM, so "every img" degenerates to "almost everything".
 function urlsOnScreen(): Set<string> {
   const urls = new Set<string>();
   const viewportH = window.innerHeight || document.documentElement.clientHeight;
@@ -210,10 +145,8 @@ async function cachedUrls(cache: Cache): Promise<Set<string>> {
 
 class QuotaExhausted extends Error {}
 
-/**
- * `undefined` = not tried yet, `null` = unavailable, so the main-thread path is
- * only ever a fallback for a browser that can't give us a module worker.
- */
+// `undefined` = not tried yet, `null` = unavailable, so the main-thread path
+// is only ever a fallback for a browser without module workers.
 let encoderWorker: Worker | null | undefined;
 let nextJobId = 1;
 const pendingJobs = new Map<number, (result: EncodeResult) => void>();
@@ -298,7 +231,7 @@ async function warmBatchOnMainThread(cache: Cache, groups: WarmGroup[]): Promise
         const bitmap = await createImageBitmap(await response.blob());
         let written = 0;
         for (const target of group.targets) {
-          const encoded = await encodeAt(bitmap, target.px);
+          const encoded = await encodeBitmap(bitmap, target.px);
           if (!encoded) continue;
           await cache.put(target.url, encoded);
           written++;
@@ -352,10 +285,8 @@ async function warmAll(
   return true;
 }
 
-/**
- * Warm every artwork URL in the manifest, on-screen images first.
- * Safe to call repeatedly — already-cached URLs are skipped.
- */
+// Warm every artwork URL in the manifest, on-screen first. Safe to call
+// repeatedly: already-cached URLs are skipped.
 export async function prefetchArtwork(manifest: Manifest): Promise<void> {
   if (running || !('caches' in window) || !manifest.artwork?.length) return;
   running = true;
@@ -423,11 +354,8 @@ function originalSourceUrl(url: string): string | null {
 
 const upgraded = new Set<string>();
 
-/**
- * Re-cache one hero at 768 from the original upload. Idempotent per session and
- * safe to call on every overlay open; stores under the same URL the UI already
- * requests, so nothing downstream needs to know.
- */
+// Re-cache one hero at 768 from the original upload, under the URL the UI
+// already requests. Idempotent per session; safe on every overlay open.
 export async function upgradeHeroArtwork(url: string | null): Promise<void> {
   if (!url || upgraded.has(url) || !('caches' in window) || !navigator.onLine) return;
   upgraded.add(url);

@@ -1,17 +1,9 @@
 /// <reference lib="webworker" />
 
-/**
- * Fetch → decode → downscale → cache, off the main thread.
- *
- * The sweep is ~730 covers at two sizes each, so ~1,500 decodes and WebP
- * encodes. An individual encode isn't interruptible, so running them on the
- * main thread meant the background sweep competed with scrolling for the whole
- * first session no matter how much idle time was left between batches.
- *
- * createImageBitmap, OffscreenCanvas and the Cache API are all available here,
- * so the entire pipeline moves across and the main thread keeps only the
- * batching, quota accounting and progress reporting.
- */
+// Fetch → decode → downscale → cache, off the main thread: ~1,500 uninterruptible
+// encodes otherwise compete with scrolling for the whole first session.
+
+import { encodeBitmap } from './encodeBitmap';
 
 export interface EncodeTarget {
   url: string;
@@ -34,22 +26,6 @@ export interface EncodeResult {
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-async function encodeAt(bitmap: ImageBitmap, px: number): Promise<Response | null> {
-  try {
-    const size = Math.min(px, Math.max(bitmap.width, bitmap.height));
-    const canvas = new OffscreenCanvas(size, size);
-    const canvasCtx = canvas.getContext('2d');
-    if (!canvasCtx) return null;
-    canvasCtx.drawImage(bitmap, 0, 0, size, size);
-
-    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.8 });
-    return new Response(blob, { headers: { 'Content-Type': 'image/webp' } });
-  } catch (err) {
-    console.warn('[ArtworkEncoder] Failed to encode bitmap at size', px, err);
-    return null;
-  }
-}
-
 async function warm(request: EncodeRequest): Promise<EncodeResult> {
   try {
     // no-store keeps the full-size original out of the HTTP disk cache —
@@ -64,7 +40,7 @@ async function warm(request: EncodeRequest): Promise<EncodeResult> {
     let written = 0;
     try {
       for (const target of request.targets) {
-        const encoded = await encodeAt(bitmap, target.px);
+        const encoded = await encodeBitmap(bitmap, target.px);
         if (!encoded) continue;
         await cache.put(target.url, encoded);
         written++;

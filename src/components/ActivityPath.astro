@@ -310,9 +310,8 @@
         const length = line.getTotalLength();
         line.style.setProperty("--path-length", String(length));
         line.style.strokeDasharray = String(length);
-        // The class goes on *after* --path-length exists. Emitting it in the
-        // markup started the keyframes against an unset custom property, so
-        // stroke-dashoffset resolved to 0 and the path simply appeared.
+        // Must go on *after* --path-length exists: in the markup the keyframes
+        // started against an unset property and the path simply appeared.
         if (animate) line.classList.add("is-animating");
       }
 

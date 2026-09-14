@@ -1,11 +1,5 @@
-/**
- * App-like press feedback for touch / pen.
- *
- * CSS :hover and :active stick on mobile (and WebKit even "hovers" rows as
- * content scrolls under a lingering touch). Hover stays behind
- * `(hover: hover) and (pointer: fine)`; this helper adds a short-lived
- * `.is-pressed` that clears as soon as the finger moves, scrolls, or lifts.
- */
+// :hover and :active stick on mobile (WebKit even "hovers" rows scrolling under a
+// lingering touch), so touch/pen get an .is-pressed that clears on move or lift.
 
 const PRESS_SELECTOR = [
   '.scrobble-row.clickable-entity',

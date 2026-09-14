@@ -233,10 +233,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       pillLabelIndex = CATEGORIES.indexOf(cat);
     }
 
-    /**
-     * Keeps the category pill in step with the slide: the label swaps at the
-     * halfway point while the accent colour interpolates continuously.
-     */
+    // Keeps the category pill in step with the slide: the label swaps at the
+    // halfway point while the accent colour interpolates continuously.
     function renderCategoryPill(fraction: number) {
       const clamped = Math.min(Math.max(fraction, 0), CATEGORIES.length - 1);
       const nearest = Math.round(clamped);

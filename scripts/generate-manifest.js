@@ -2,15 +2,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-/**
- * Emits public/data/manifest.json — the contract the client uses to decide what
- * it actually needs to download.
- *
- * Files are content-hashed so a deploy that doesn't change a file costs nothing
- * to "update". Artwork URLs are listed because the CDNs we use (mzstatic,
- * Last.fm) are content-addressed: a changed cover means a changed URL, so the
- * URL set *is* the invalidation signal — no separate image hashing needed.
- */
+// The contract the client downloads against. Files are content-hashed; artwork
+// CDN URLs are content addresses, so the URL set *is* the invalidation signal.
 
 const DATA_DIR = path.resolve('public/data');
 const MANIFEST_PATH = path.join(DATA_DIR, 'manifest.json');
@@ -46,11 +39,8 @@ function readJson(file) {
   }
 }
 
-/**
- * Weight each artwork key by how much it's actually listened to, so the client
- * warms the covers you're most likely to see first. This matters because the
- * cache may be bounded: a partial sweep should still cover your top albums.
- */
+// Weighted by play count so the client warms likely covers first: the cache may
+// be bounded, and a partial sweep should still cover the top albums.
 function artworkWeights() {
   const catalog = readJson('catalog.json');
   const meta = readJson('meta.json');

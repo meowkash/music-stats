@@ -23,11 +23,8 @@ export interface RollupItem {
   albumName?: string;
 }
 
-/**
- * One collator for every comparator in this module. A bare localeCompare call
- * may construct a fresh ICU collator each time, and ties are common here
- * because play counts cluster hard at low values.
- */
+// One collator for every comparator here: bare localeCompare may build a fresh
+// ICU collator per call, and ties are common since play counts cluster low.
 export const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
 
 function byCountThenName<T extends { count: number; name: string }>(a: T, b: T): number {
@@ -102,13 +99,8 @@ function artistDisplayName(meta: MetaData, artistId: number, mode: ArtistRollupM
   return meta.artists[artistId];
 }
 
-/**
- * Reverse of meta.rawToCanonical, built once per MetaData object.
- *
- * This sits on the render path of every artist row, and the forward mapping has
- * one entry per raw artist — scanning it per row made painting the leaderboard
- * quadratic in the artist count.
- */
+// Reverse of meta.rawToCanonical, built once per MetaData. Scanning the forward
+// map per row made painting the leaderboard quadratic in artist count.
 const rawNamesByCanonical = new WeakMap<MetaData, Map<number, string[]>>();
 
 function rawNameIndex(meta: MetaData): Map<number, string[]> {
@@ -142,11 +134,8 @@ export function rawArtistNamesForCanonical(canonicalId: number, meta: MetaData):
   return rawNameIndex(meta).get(canonicalId) ?? NO_RAW_NAMES;
 }
 
-/**
- * A Map rather than a plain object so track ids stay numeric end to end: an
- * object forces every downstream rollup through Object.entries + parseInt,
- * which on a full-history range is ~13k string allocations per rollup.
- */
+// A Map so track ids stay numeric: an object forces rollups through
+// Object.entries + parseInt, ~13k string allocations per rollup.
 export function aggregateTrackCounts(
   years: string[],
   startStr: string,

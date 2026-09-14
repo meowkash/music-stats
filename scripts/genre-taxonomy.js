@@ -1,10 +1,5 @@
-/**
- * Last.fm's top tags are folksonomy, not a genre list: alongside "nu metal" you
- * get "seen live", "american", "2017", "albums i own" and the artist's own name.
- * Left raw, a recap would proudly announce that your top genre of the year was
- * "male vocalists". This module filters tags down to things that are actually
- * genres and merges the obvious spelling variants.
- */
+// Last.fm top tags are folksonomy: "seen live", "2017", "male vocalists" sit
+// beside real genres. This filters to actual genres and merges spelling variants.
 
 /** Tags that are never a genre, matched exactly after lowercasing/trimming. */
 const NON_GENRE_TAGS = new Set([
@@ -124,10 +119,8 @@ const DISPLAY_OVERRIDES = new Map(Object.entries({
 /** A bare year ("2017") or a decade ("80s", "1990s") is metadata, not a genre. */
 const YEARISH = /^(19|20)\d{2}s?$|^'?\d0s$|^\d{4}-\d{4}$/;
 
-/**
- * Normalises one raw tag to a canonical genre slug, or null if it isn't a genre.
- * `artistName` is excluded because self-tagging ("eminem" on Eminem) is rampant.
- */
+// Returns a canonical genre slug, or null if the tag isn't a genre. `artistName`
+// is excluded because self-tagging ("eminem" on Eminem) is rampant.
 export function canonicalizeTag(raw, artistName = '') {
   if (!raw) return null;
   const tag = raw.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -151,11 +144,8 @@ export function genreDisplayName(slug) {
     .join(' ');
 }
 
-/**
- * Tags are returned by Last.fm in popularity order, so earlier tags describe the
- * artist better. Weighting by rank stops a long tail of loosely-related tags
- * from outvoting the one tag that actually names the genre.
- */
+// Last.fm returns tags in popularity order, so rank-weighting stops a long tail
+// of loose tags outvoting the one that actually names the genre.
 export function tagWeight(index) {
   return 1 / (index + 1);
 }

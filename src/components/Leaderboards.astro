@@ -154,10 +154,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     align-items: center;
     justify-content: flex-end;
     position: relative;
-    /* Isolate toggle-reveal geometry updates during 120Hz swipe gestures.
-       Deliberately not overflow: hidden — that clipped the search field's
-       focus glow. The one child that needs clipping (.artist-ranking-toggle,
-       whose max-width drives the reveal) already clips itself. */
+    /* Isolates toggle-reveal geometry during 120Hz swipes. Not overflow:hidden
+       — that clipped the search focus glow; the one child needing it self-clips. */
     contain: layout style;
     /* Gap is folded into the toggle's padding so width animates cleanly. */
     gap: 0;
@@ -170,10 +168,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     width: 100%;
   }
 
-  /*
-   * Unified toggle slides in with the Artists page. --toggle-reveal is 0..1,
-   * driven by the pager fraction so search width + toggle stay in lockstep.
-   */
+  /* Unified slides in with the Artists page: --toggle-reveal is 0..1 off the
+     pager fraction, so search width and toggle stay in lockstep. */
   .artist-ranking-toggle {
     display: flex;
     align-items: center;
@@ -476,13 +472,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   .search-container.is-searching {
-    /* --toggles-inset is the live width of .toggles-wrapper plus a gutter,
-       written by a ResizeObserver in the script below. It tracks the Unified
-       toggle's reveal transition frame for frame, so the field and the toggles
-       stay in lockstep on the way into and out of the Artists page.
-       The clip stops --search-glow-pad short of the toggles so the focus glow
-       around the field's right edge has somewhere to land; the field itself is
-       sized to end at the inset, so only the glow lives in that strip. */
+    /* --toggles-inset is .toggles-wrapper's live width plus a gutter, tracked by
+       a ResizeObserver. The clip stops short so the focus glow has somewhere to land. */
     clip-path: inset(
       0 calc(var(--toggles-inset, 0px) - var(--search-glow-pad)) 0 0 round 20px
     );
@@ -576,11 +567,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       display: none;
     }
 
-    /*
-     * The collapse-to-a-circle search is a mobile affordance: at this width the
-     * row has room for the field and both toggles at once, so the field simply
-     * stays open and nothing has to be hidden to make space for it.
-     */
+    /* Collapse-to-a-circle is a mobile affordance: at this width the row fits
+       the field and both toggles, so the field just stays open. */
     .search-container {
       position: relative;
       flex: 0 1 360px;
@@ -603,12 +591,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       pointer-events: auto;
     }
 
-    /*
-     * Unified sits beside Playtime in the toolbar. On mobile it belongs to the
-     * Artists page and slides in with it, which is what --toggle-reveal drives;
-     * with all three columns on screen it is not a property of one column, so
-     * the reveal geometry is overridden back to a plain static control.
-     */
+    /* With all three columns on screen Unified is no longer a property of one
+       column, so the reveal geometry drops back to a static control. */
     .search-bar-row .artist-ranking-toggle {
       display: flex;
       max-width: none;
@@ -732,6 +716,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
   import { getCategoryAccent } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
+  import { readLocal, writeLocal } from "../utils/storage";
   import { bindPagerSwipe } from "../utils/pagerSwipe";
   import { captureRowPositions, playFlip } from "../utils/flip";
   import {
@@ -764,11 +749,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     let activeRange = "7d";
     const ARTIST_MODE_KEY = "artistRankingMode";
     let artistRankingMode: ArtistRollupMode =
-      (localStorage.getItem(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw"
+      (readLocal(ARTIST_MODE_KEY) as ArtistRollupMode) === "raw"
         ? "raw"
         : "canonical";
     const PLAYTIME_MODE_KEY = "playtimeRankingMode";
-    let playtimeMode = localStorage.getItem(PLAYTIME_MODE_KEY) === "true";
+    let playtimeMode = readLocal(PLAYTIME_MODE_KEY) === "true";
     const CHUNK_SIZE = 50;
     let searchQuery = "";
     /** Items keyed by tab for the current range/search snapshot. */
@@ -785,13 +770,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       artists: "artists",
     } as const;
 
-    /**
-     * The rollup is the expensive step — three passes over ~13k tracks on an
-     * "All time" range — and it depends only on the date window and the artist
-     * mode, never on the search query. Cached under that key so typing costs a
-     * filter and a sort instead of a full re-aggregation per keystroke, and
-     * computed per tab so a mobile pager only pays for the panes it paints.
-     */
+    // The rollup (three passes over ~13k tracks) depends only on window + artist
+    // mode, so it is cached under that key and typing costs a filter and a sort.
     let rollupKey = "";
     let rollupCounts: Map<number, number> | null = null;
     let rollupMeta: MetaData | null = null;
@@ -1055,13 +1035,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       paintPage(tab, prepareTab(tab));
     }
 
-    /**
-     * Playtime and Unified change the order (and for Unified the membership) of
-     * a list that is already in memory. Routing them through updateLeaderboard()
-     * tore every page down to "Aggregating scrobbles..." and rebuilt it, which
-     * is why the change read as a flash rather than a transition. This re-sorts
-     * in place and plays the rows from their old positions to their new ones.
-     */
+    // Re-sorts in place and plays rows old position → new. Routing these through
+    // updateLeaderboard() tore the page down to a spinner and read as a flash.
     function resortLeaderboard() {
       if (!rollupCounts) {
         void updateLeaderboard();
@@ -1256,10 +1231,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
             ? `0 0 12px ${withAlpha(tabAccentRgba[i], 0.4 * activeness)}`
             : "none";
       }
-      // fraction goes out of range whenever the pager is rubber-banding past an
-      // edge. tabAccentRgba[-1] is undefined, and the resulting throw used to
-      // travel up through paint() into rafTween's tick — killing the settle
-      // animation before it could reschedule, so the bounce never played back.
+      // fraction goes out of range while rubber-banding past an edge; the throw
+      // from tabAccentRgba[-1] used to kill rafTween's settle mid-bounce.
       const i0 = Math.min(
         Math.max(Math.floor(fraction), 0),
         tabAccentRgba.length - 1,
@@ -1394,9 +1367,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       const index = RANKING_TABS.indexOf(tab as RankingTab);
       if (index === -1 || index === activeIndex) return;
       const from = activeIndex;
-      // Keep .active / CSS colours off until settle so JS can interpolate them
-      // in lockstep with the pager + pill. Chrome (search accent + Unified)
-      // stays on the outgoing tab until onProgress takes over.
+      // .active / CSS colours stay off until settle so JS can interpolate in
+      // lockstep with the pager and pill.
       applyActiveTab(index, {
         syncHighlight: !animate,
         animateHighlight: false,
@@ -1440,7 +1412,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     function setArtistRankingMode(mode: ArtistRollupMode) {
       artistRankingMode = mode;
       delete baseByTab.artists;
-      localStorage.setItem(ARTIST_MODE_KEY, mode);
+      writeLocal(ARTIST_MODE_KEY, mode);
       syncArtistRankingToggle();
       // Desktop shows all three columns — artists list must refresh even when
       // activeIndex is still on Songs (mobile pager sets activeTab to artists).
@@ -1455,17 +1427,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     playtimeRankingSwitch.addEventListener("click", () => {
       playtimeMode = !playtimeMode;
-      localStorage.setItem(PLAYTIME_MODE_KEY, String(playtimeMode));
+      writeLocal(PLAYTIME_MODE_KEY, String(playtimeMode));
       syncArtistRankingToggle();
       resortLeaderboard();
     });
 
-    /*
-     * The open field stops where the toggles begin. Their width is not static —
-     * Unified reveals itself across the Artists page transition — so the inset
-     * is measured rather than hardcoded, and the observer keeps it correct for
-     * every frame of that reveal as well as on resize and font load.
-     */
+    // The toggles' width is not static (Unified reveals across the transition),
+    // so the inset is measured and the observer keeps it right every frame.
     const togglesWrapper = document.getElementById(
       "leaderboardToggles",
     ) as HTMLElement;
@@ -1488,12 +1456,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     searchBtn.addEventListener("click", () => {
       syncTogglesInset();
       searchContainer.classList.add("is-searching");
-      // preventScroll: the app shell is entirely position:fixed, so there is
-      // nothing legitimate to scroll into view — but iOS still scrolls the
-      // document to make room for the keyboard and does not always undo it,
-      // which strands the whole page one offset up. See the focusout reset in
-      // Layout.astro for the other half of this.
-      searchInput.focus({ preventScroll: true });
+      searchInput.focus();
     });
 
     searchInput.addEventListener("blur", () => {

@@ -1,11 +1,5 @@
-/**
- * Geometry for the Dashboard's listening-activity path.
- *
- * The card is a single chart: a smoothed gradient curve of daily plays, an
- * average reference line, and a marked peak day. Everything else the eye
- * doesn't need (raw columns, typical-range band, stat readouts) is gone, so the
- * two annotations carry the story on their own.
- */
+// Geometry for the Dashboard activity path: smoothed daily-plays curve, an
+// average reference line and a marked peak day.
 import type { YearlyTotals } from '../types/music';
 
 export interface ActivityDay {
@@ -29,10 +23,8 @@ function toDateString(time: number): string {
   return new Date(time).toISOString().slice(0, 10);
 }
 
-/**
- * yearly-totals is keyed by year with day-of-year indexed arrays, so walking
- * back N days means stitching across the year boundary.
- */
+// yearly-totals is keyed by year with day-of-year arrays, so walking back N
+// days means stitching across the year boundary.
 export function lastNDays(totals: YearlyTotals, count: number, endTime = Date.now()): ActivityDay[] {
   const end = Date.UTC(
     new Date(endTime).getUTCFullYear(),
@@ -126,20 +118,15 @@ function parseDay(date: string): Date {
   return new Date(`${date}T00:00:00Z`);
 }
 
-/**
- * Within a week the weekday is the useful handle ("Tuesday"); over longer
- * ranges the calendar date is.
- */
+// Within a week the weekday is the useful handle ("Tuesday"); over longer
+// ranges the calendar date is.
 function describeDay(date: string, count: number): string {
   const d = parseDay(date);
   return count <= 7 ? WEEKDAYS[d.getUTCDay()] : `${MONTH_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/**
- * Catmull-Rom through the points, converted to cubic béziers, with control
- * points clamped into the plot box. Without the clamp a spike sends the curve
- * overshooting past the baseline and the chart appears to dip below zero.
- */
+// Catmull-Rom as cubic béziers, control points clamped into the plot box:
+// unclamped, a spike overshoots the baseline and the chart looks negative.
 function smoothPath(points: Array<{ x: number; y: number }>, top: number, bottom: number): string {
   if (points.length < 2) return points.length ? `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}` : '';
 
@@ -263,10 +250,8 @@ export function buildPathGeometry(
     };
   }
 
-  // Hunt for the stretch of the average line the curve stays farthest from,
-  // so the label can sit right on the line without the curve cutting through
-  // its text. `avgLabel` is an estimate of the rendered text's pixel width
-  // (rough, but good enough to size the search window).
+  // Find the stretch of the average line the curve stays farthest from, so the
+  // label sits on the line uncut. `avgLabel` estimates rendered text width.
   const avgLabelText = `${dailyAverage} Daily Plays on Average`;
   const avgLabelWidth = avgLabelText.length * 6.3;
   const radiusIdx = step > 0 ? Math.max(1, Math.round(avgLabelWidth / 2 / step)) : 0;

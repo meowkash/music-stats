@@ -1,11 +1,5 @@
-/**
- * Title/artist normalization and episodic-release parsing.
- *
- * Scrobbles arrive from Apple Music as three plain strings — the catalog ID
- * that Apple itself renders artwork from is not carried across. So matching has
- * to work from decorated human titles like "Black Room Boy - Original Mix" or
- * "A State of Trance 1234", which no catalog lists verbatim.
- */
+// Apple Music scrobbles carry three plain strings, not the catalog ID it renders
+// artwork from — so matching works from decorated titles no catalog lists.
 
 /** Trailing decorations that describe a version, not a different release. */
 const VERSION_SUFFIX = new RegExp(
@@ -86,11 +80,8 @@ export function tokenize(value) {
   return normalized ? normalized.split(' ') : [];
 }
 
-/**
- * Split an episodic title into its series and episode number.
- * Returns null when the title isn't episodic, or when the series part is too
- * short to be a meaningful series (avoids treating "Blink 182" as an episode).
- */
+// Splits an episodic title into series + episode number, or null. Short series
+// parts are rejected so "Blink 182" isn't read as an episode.
 export function parseEpisodic(title) {
   const match = EPISODIC.exec(stripDecorations(title));
   if (!match?.groups) return null;

@@ -1,13 +1,7 @@
 import { normalizeForCompare, tokenize } from './normalize.js';
 
-/**
- * Match scoring.
- *
- * The old resolver took `limit=1` from iTunes with no verification, so a query
- * that had no real match still cached whatever came back first — wrong covers
- * were as likely an outcome as missing ones. Everything here exists to make
- * "no match" a result the caller can act on.
- */
+// The old resolver took iTunes `limit=1` unverified, so a query with no real
+// match still cached whatever came first. This makes "no match" actionable.
 
 /** Fraction of the shorter token set that appears in the longer one. */
 function tokenSetRatio(a, b) {
@@ -52,18 +46,14 @@ export function similarity(a, b) {
   return Math.max(tokenSetRatio(a, b), levenshteinRatio(a, b));
 }
 
-/**
- * Acceptance thresholds. Artist is held to a higher bar than title because a
- * wrong artist is always wrong, whereas titles legitimately vary in decoration.
- */
+// Artist is held to a higher bar than title: a wrong artist is always wrong,
+// whereas titles legitimately vary in decoration.
 export const ARTIST_THRESHOLD = 0.8;
 export const TITLE_THRESHOLD = 0.7;
 /** Artist-only lookups have no title to corroborate, so they must be near-exact. */
 export const ARTIST_ONLY_THRESHOLD = 0.9;
 
-/**
- * @returns {{accepted: boolean, score: number, artistScore: number, titleScore: number}}
- */
+// Returns { accepted, score, artistScore, titleScore }.
 export function scoreCandidate(query, candidate) {
   const wantsArtist = Boolean(query.artistName);
   const wantsTitle = Boolean(query.name);

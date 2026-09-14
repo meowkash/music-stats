@@ -1,5 +1,5 @@
 import { createDeckSlider } from './deckSlider';
-import { isOverlayActive } from './overlayState';
+import { isOverlayOpen } from './overlayState';
 import { ENGAGE_DISTANCE, isAxisClaimed } from './gesture';
 import {
   colorToCss,
@@ -23,19 +23,8 @@ const TAP_BASE_MS = 300;
 const TAP_PER_TAB_MS = 50;
 const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
-function isOverlayOpen(): boolean {
-  return (
-    isOverlayActive() ||
-    document.body.classList.contains('overlay-open') ||
-    document.body.classList.contains('stats-sheet-open')
-  );
-}
-
-/**
- * Owns every nav interaction — taps, the free-form pill drag and the panel
- * deck — so the pill, the tab colours and the page always move together as one
- * rAF-driven animation instead of three transitions with different timings.
- */
+// Owns every nav interaction (taps, pill drag, panel deck) so the pill, tab
+// colours and page move as one rAF animation rather than three transitions.
 export function initNavBar(): void {
   const bar = document.querySelector('.main-tab-bar') as HTMLElement | null;
   const navZone = document.querySelector('.bottom-nav-container') as HTMLElement | null;
@@ -70,9 +59,6 @@ export function initNavBar(): void {
   }
 
   const paintedBg = bgLayers.map(() => -1);
-  function paintBarTint(_value: number) {}
-
-  function clearBarTint() {}
 
   function paintBackground(value: number) {
     for (let i = 0; i < bgLayers.length; i++) {
@@ -150,7 +136,6 @@ export function initNavBar(): void {
     track.render(value, { scale });
     paintButtons(value);
     paintBackground(value);
-    paintBarTint(value);
     deck?.setPosition(value);
   }
 
@@ -166,7 +151,6 @@ export function initNavBar(): void {
     deck?.end();
     clearButtonPaint();
     clearBackgroundPaint();
-    clearBarTint();
     track.render(index);
     paint.reset();
   }
@@ -206,7 +190,6 @@ export function initNavBar(): void {
 
   track.measure();
   track.render(activeIndex);
-  paintBarTint(activeIndex);
 
   let resizeRaf: number | null = null;
   const resizeObserver = new ResizeObserver(() => {

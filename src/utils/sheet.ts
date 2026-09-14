@@ -20,10 +20,7 @@ export interface SheetController {
   backdrop: HTMLElement;
 }
 
-/**
- * Wires the shared open/close, backdrop, Escape and swipe-to-dismiss behaviour
- * that every sheet in the app should share.
- */
+// Shared open/close, backdrop, Escape and swipe-to-dismiss for every sheet.
 export function createSheet(options: SheetOptions): SheetController | null {
   const { id, bodyClass, onOpen, onClose } = options;
 

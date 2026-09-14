@@ -67,12 +67,8 @@ function lerpRect(a: Rect, b: Rect, t: number): Rect {
   };
 }
 
-/**
- * Renders a pill highlight at any fractional position between buttons.
- *
- * Geometry is written every call (no style-write cache) so a re-measure can
- * never leave the DOM stuck at translate(0,0) while JS thinks it has moved.
- */
+// Pill highlight at any fractional position. Geometry is written every call so
+// a re-measure can't leave the DOM at translate(0,0) while JS thinks it moved.
 export function createPillTrack(options: PillTrackOptions): PillTrack {
   const { highlightEl, buttons, accentFor } = options;
   const mixScratch: Rgba = { r: 0, g: 0, b: 0, a: 0 };
@@ -235,11 +231,8 @@ export interface SlidingHighlightOptions {
   durationMs?: number;
 }
 
-/**
- * Tap-driven pill that glides directly from its current painted rect to the
- * tapped button's rect. Avoids index-space tweens (which restart at 0 when
- * state is stale) and looks correct across flex-wrapped rows.
- */
+// Glides from the current painted rect to the tapped button's rect: index-space
+// tweens restart at 0 when state is stale and break across wrapped rows.
 export function createSlidingHighlight(options: SlidingHighlightOptions): {
   sync: (btn: HTMLElement, animate?: boolean) => void;
   /** Paint the pill at a fractional index (e.g. while a pager is dragging). */

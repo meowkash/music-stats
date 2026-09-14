@@ -1,13 +1,5 @@
-/**
- * Builds the per-year story payloads behind the Recaps tab.
- *
- * Output: public/data/recaps.json (index) + public/data/recap-<year>.json.
- *
- * All the heavy lifting happens here rather than in the browser: the raw
- * enrichment cache is ~1 MB of tags the client would otherwise download and
- * re-aggregate on every launch. Each year's payload is a few KB instead, and is
- * fetched only when that year's story is opened.
- */
+// Emits recaps.json + recap-<year>.json. Aggregating here keeps ~1 MB of raw tags
+// off the client; each year is a few KB, fetched only when its story is opened.
 import fs from 'fs';
 import path from 'path';
 import { readScrobbles } from './scrobble-source.js';
@@ -18,10 +10,8 @@ import { canonicalizeTag, genreDisplayName, tagWeight } from './genre-taxonomy.j
 const PUBLIC_DATA_DIR = path.resolve('public/data');
 const CACHE_PATH = path.resolve('src/data/recap-meta-cache.json');
 
-/**
- * Hours-of-day and weekday stories are meaningless in UTC, so scrobbles are
- * bucketed in the listener's own timezone. Override with RECAP_TIMEZONE.
- */
+// Hour and weekday stories are meaningless in UTC, so scrobbles bucket in the
+// listener's timezone. Override with RECAP_TIMEZONE.
 const TIMEZONE = process.env.RECAP_TIMEZONE || 'America/New_York';
 
 /** Below this a "year in review" is noise — 2021 here is nine days of data. */
@@ -55,11 +45,8 @@ function readJson(file, fallback = null) {
   }
 }
 
-/**
- * Resolves a UTC timestamp into local calendar fields. Intl is the only way to
- * get this right across DST, so results are memoised per minute — consecutive
- * scrobbles cluster heavily and this cuts the formatter calls by ~10x.
- */
+// Intl is the only DST-correct option, so results memoise per minute:
+// consecutive scrobbles cluster and this cuts formatter calls ~10x.
 function createLocalTimeResolver(timeZone) {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -133,17 +120,8 @@ function timeOfDayArchetype(peakHour) {
   return { label: 'After Hours', blurb: 'The music keeps going long past midnight.' };
 }
 
-/**
- * Four independent signals, because no single one describes a year:
- *
- *   breadth    — distinct artists per 100 plays (how wide the net was)
- *   devotion   — share held by the single favourite artist
- *   repeat     — average plays per distinct track (how hard things were looped)
- *   rhythm     — how many days of the year had music, and how dense they were
- *
- * Checked most-distinctive first: a year with a 30%-share top artist is a
- * Devotee year no matter how the other numbers fall.
- */
+// breadth (artists/100 plays), devotion (top artist share), repeat (plays per
+// track), rhythm (days with music). Most-distinctive first: devotion wins outright.
 function listeningStyle({
   scrobbles,
   uniqueArtists,
@@ -199,16 +177,8 @@ function listeningStyle({
   return { label: 'Loyalist', blurb: 'A tight circle of favourites, played into the ground.' };
 }
 
-/**
- * Genre families, scored by summed share rather than mere presence. Checking
- * membership in priority order made almost every year come out the same, since
- * a 5%-share genre high in the list outranked a 20%-share one below it.
- *
- * Deliberately fine-grained: one broad "electronic" family made every year
- * with any dance music in it come out identical. Splitting the big rooms into
- * trance / club / bass / synth-pop (and the same for rock, rap and pop) is what
- * gives neighbouring years a chance to land somewhere different.
- */
+// Scored by summed share, not presence — priority order let a 5% genre outrank a
+// 20% one. Fine-grained because one broad "electronic" made every year identical.
 const VIBE_FAMILIES = [
   {
     label: 'High Voltage',
@@ -326,12 +296,8 @@ const VIBE_FAMILIES = [
   },
 ];
 
-/**
- * Catch-all tags that sit on almost every artist. Counted at half weight so a
- * generic "electronic" or "pop" tag cannot outvote the specific subgenre that
- * actually describes the year — that was what made four of five years come out
- * as the same vibe.
- */
+// Catch-alls that sit on almost every artist, at half weight so a generic tag
+// can't outvote the subgenre that describes the year.
 const BROAD_SLUGS = new Set([
   'pop', 'rock', 'electronic', 'indie', 'alternative rock', 'dance',
 ]);

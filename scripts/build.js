@@ -1,9 +1,8 @@
 import { spawnSync } from 'child_process';
 import { loadEnv } from './lastfm-client.js';
 
-// Without this the Last.fm steps were silently skipped on local builds: the
-// credentials live in .env, but the gate below reads process.env, which only CI
-// populates.
+// Without this the Last.fm steps were silently skipped locally: credentials
+// live in .env but the gate below reads process.env, which only CI populates.
 loadEnv();
 
 const refresh = process.argv.includes('--refresh');

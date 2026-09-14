@@ -37,8 +37,7 @@ export function readBootHint(): BootHint | null {
   try {
     const raw = localStorage.getItem(BOOT_HINT_KEY);
     return raw ? (JSON.parse(raw) as BootHint) : null;
-  } catch (err) {
-    console.warn('[Generations] Failed to parse boot hint from localStorage:', err);
+  } catch {
     return null;
   }
 }
@@ -46,8 +45,8 @@ export function readBootHint(): BootHint | null {
 export function writeBootHint(hint: BootHint): void {
   try {
     localStorage.setItem(BOOT_HINT_KEY, JSON.stringify(hint));
-  } catch (err) {
-    console.warn('[Generations] Failed to write boot hint to localStorage:', err);
+  } catch {
+    // Boot hint is an optimisation; losing it only costs a slower first paint.
   }
 }
 
@@ -67,10 +66,8 @@ export function writeStoredFiles(entries: Array<[string, unknown]>): Promise<voi
   return idbSetMany(FILE_STORE, entries);
 }
 
-/**
- * Must mirror scripts/generate-manifest.js: sha256 of the file's UTF-8 bytes,
- * first 16 hex chars.
- */
+// Must mirror scripts/generate-manifest.js: sha256 of the file's UTF-8 bytes,
+// first 16 hex chars.
 export async function hashText(text: string): Promise<string | null> {
   if (typeof crypto === 'undefined' || !crypto.subtle) return null;
   try {
@@ -86,12 +83,8 @@ export async function hashText(text: string): Promise<string | null> {
   }
 }
 
-/**
- * Drop file blobs no longer referenced by the active manifest.
- *
- * Safe to run only after a commit: until then the previous generation's blobs
- * are the copy keeping the app usable offline.
- */
+// Drop blobs the active manifest no longer references. Only safe after a commit:
+// until then those blobs are what keeps the app usable offline.
 export async function collectGarbage(active: Manifest): Promise<number> {
   const live = new Set(active.files.map((f) => f.hash));
   const stored = await idbKeys(FILE_STORE);

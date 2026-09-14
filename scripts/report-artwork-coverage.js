@@ -6,13 +6,8 @@ import {
   resolveLegacyArtworkKey,
 } from './artwork-keys.js';
 
-/**
- * What's actually missing artwork, ranked by how much you listen to it.
- *
- * "Which covers are broken" used to mean scrolling the backfill log. This makes
- * it a command, and sorting by scrobbles keeps attention on the entries you'd
- * actually notice.
- */
+// What's missing artwork, ranked by play count so attention lands on entries
+// you'd actually notice. Previously this meant scrolling the backfill log.
 
 const ARTWORK_PATH = path.resolve('src/data/artwork.json');
 const CATALOG_PATH = path.resolve('public/data/catalog.json');
@@ -112,10 +107,8 @@ if (unresolved.length) {
 const totalMissing = missingAlbums.length + missingArtists.length + missingCanonical.length;
 console.log(`\nTotal entities without artwork: ${totalMissing}`);
 
-/**
- * A cached URL isn't the same as a working one — CDN images do disappear, and
- * the entity still counts as "covered" while pointing at a 404.
- */
+// A cached URL isn't a working one: CDN images disappear and the entity still
+// counts as "covered" while pointing at a 404.
 async function verifyUrls() {
   const urls = [
     ...new Set(Object.values(cache).filter((u) => typeof u === 'string' && u.startsWith('http'))),

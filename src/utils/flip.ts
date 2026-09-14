@@ -1,17 +1,7 @@
 import { IOS_SPRING_POINTS } from './motion';
 
-/**
- * FLIP reordering for list re-sorts.
- *
- * The lists are rebuilt from scratch on every re-sort (innerHTML, not node
- * moves), so the identity that survives a repaint is the row's data attributes
- * rather than the node itself. Capture offsets before the repaint, match them
- * up by key afterwards, and play the difference.
- *
- * offsetTop rather than getBoundingClientRect(): it is unaffected by the
- * scroll position, so a capture taken before a repaint stays comparable to one
- * taken after even though the repaint changes the container's scroll height.
- */
+// Lists are rebuilt via innerHTML, so rows are matched by data attribute, not node.
+// offsetTop (not getBoundingClientRect) so captures survive a scroll-height change.
 
 const EASING = `cubic-bezier(${IOS_SPRING_POINTS.join(', ')})`;
 
@@ -45,12 +35,8 @@ export function captureRowPositions(container: HTMLElement, selector = '.scrobbl
   return capture;
 }
 
-/**
- * Plays rows from where they were to where they now are. Rows with no entry in
- * `before` are treated as entering and get a fade instead of a slide, so an
- * Artists rollup change (where the entities themselves differ) still reads as
- * a deliberate transition rather than a repaint.
- */
+// Rows absent from `before` are entering and fade rather than slide, so an
+// Artists rollup change still reads as a transition rather than a repaint.
 export function playFlip(
   container: HTMLElement,
   before: FlipCapture,
