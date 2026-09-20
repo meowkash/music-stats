@@ -597,6 +597,7 @@ function paintRowGlow(row: Element): void {
     getDominantColor(imgEl, (rgb, resolved) => {
       countEl.setAttribute('style', getGlowStyle(rgb, { blur: 8, alpha: 0.5 }));
       countEl.setAttribute('data-color-state', resolved ? 'resolved' : 'pending');
+      (row as HTMLElement).style.setProperty('--row-accent', `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
     });
   };
 

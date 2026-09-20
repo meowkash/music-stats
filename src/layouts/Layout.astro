@@ -444,12 +444,12 @@ const washStyles = [
 		--accent-red: #ef4444;
 		--accent-red-glow: rgba(239, 68, 68, 0.4);
 		
-		--accent-cat-artists: #f97316;
-		--accent-cat-artists-glow: rgba(249, 115, 22, 0.4);
-		--accent-cat-albums: #10b981;
-		--accent-cat-albums-glow: rgba(16, 185, 129, 0.4);
-		--accent-cat-songs: #3b82f6;
-		--accent-cat-songs-glow: rgba(59, 130, 246, 0.4);
+		--accent-cat-artists: #14a3b4;
+		--accent-cat-artists-glow: rgba(20, 163, 180, 0.45);
+		--accent-cat-albums: #14a3b4;
+		--accent-cat-albums-glow: rgba(20, 163, 180, 0.45);
+		--accent-cat-songs: #14a3b4;
+		--accent-cat-songs-glow: rgba(20, 163, 180, 0.45);
 
 		--font-header:
 			"Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -460,11 +460,11 @@ const washStyles = [
 
 		/* Motion tokens — every transition uses one of these so nothing animates
 		   on a different curve or timing than its neighbours. */
-		--ios-spring: cubic-bezier(0.16, 1, 0.3, 1);
-		--duration-fast: 0.18s;
-		--duration-normal: 0.3s;
-		--duration-slow: 0.5s;
-		--duration-nav: 0.34s;
+		--ios-spring: cubic-bezier(0.22, 1, 0.36, 1);
+		--duration-fast: 0.14s;
+		--duration-normal: 0.24s;
+		--duration-slow: 0.38s;
+		--duration-nav: 0.28s;
 		/* Explicit property list — `all` also animates layout properties,
 		   which drops frames whenever an element reflows. */
 		--transition-smooth:
@@ -491,8 +491,8 @@ const washStyles = [
 		--radius-sheet: 20px;
 		/* Snappier than --duration-slow: at 500ms the eye reads the soft landing
 		   as lag at the start of the gesture, even on a spring curve. */
-		--duration-sheet: 0.38s;
-		--ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+		--duration-sheet: 0.14s;
+		--ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
 		--nav-bar-height: 64px;

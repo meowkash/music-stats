@@ -1,9 +1,8 @@
-import { rafTween } from './motion';
+import { rafTween, easeOutCubic } from './motion';
 import { bindWheelPan } from './wheelPan';
 import {
   ENGAGE_DISTANCE,
-  SETTLE_MS,
-  commitIndex,
+  commitAdjacentIndex,
   isAxisClaimed,
   rubberBand,
 } from './gesture';
@@ -27,12 +26,14 @@ export interface PagerSwipe {
   index: () => number;
   goTo: (index: number, animate?: boolean) => void;
   measure: () => void;
+  setPageCount: (count: number) => void;
 }
 
 // Finger-tracking horizontal pager. Transform-only writes and shared easing,
 // so it matches the nav and sheet animations.
 export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
-  const { gestureEl, trackEl, viewportEl, pageCount, onSettled, onProgress } = options;
+  const { gestureEl, trackEl, viewportEl, onSettled, onProgress } = options;
+  let pageCount = Math.max(1, options.pageCount);
 
   let index = 0;
   let width = 0;
@@ -88,18 +89,21 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   }
 
   function clampOffset(value: number): number {
+    // Travel is capped at the neighbouring section so a fling cannot skip it.
+    const neighborMin = restingX(Math.min(index + 1, pageCount - 1));
+    const neighborMax = restingX(Math.max(index - 1, 0));
     const absX = restingX(index) + value;
-    const minX = restingX(pageCount - 1);
-    const maxX = 0;
-    // width can still be 0 on the first gesture of a hidden panel; fall back to
-    // the viewport so the resistance curve has a sane scale either way.
     const span = width || window.innerWidth;
+    const atStart = index <= 0;
+    const atEnd = index >= pageCount - 1;
 
-    if (absX > maxX) {
-      return maxX + rubberBand(absX - maxX, span) - restingX(index);
+    if (absX > neighborMax) {
+      if (!atStart) return neighborMax - restingX(index);
+      return neighborMax + rubberBand(absX - neighborMax, span) - restingX(index);
     }
-    if (absX < minX) {
-      return minX + rubberBand(absX - minX, span) - restingX(index);
+    if (absX < neighborMin) {
+      if (!atEnd) return neighborMin - restingX(index);
+      return neighborMin + rubberBand(absX - neighborMin, span) - restingX(index);
     }
     return value;
   }
@@ -118,15 +122,25 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     }
 
     setMoving(true);
+    const dest = restingX(clamped);
     const from = Number.isNaN(lastPaintX) ? restingX() + offset : lastPaintX;
-    cancelTween = rafTween(from, restingX(clamped), SETTLE_MS, paint, () => {
-      cancelTween = null;
-      offset = 0;
-      index = clamped;
-      paint(restingX());
-      setMoving(false);
-      onSettled(index);
-    });
+    const distance = Math.abs(dest - from);
+    const duration = Math.min(180, Math.max(110, distance * 0.32));
+    cancelTween = rafTween(
+      from,
+      dest,
+      duration,
+      paint,
+      () => {
+        cancelTween = null;
+        offset = 0;
+        index = clamped;
+        paint(restingX());
+        setMoving(false);
+        onSettled(index);
+      },
+      easeOutCubic,
+    );
   }
 
   const onStart = (e: TouchEvent) => {
@@ -184,7 +198,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   function commit(endVelocity: number, moved: boolean) {
     const absX = restingX(index) + offset;
     const exactPage = -absX / (width || 1);
-    goTo(commitIndex(exactPage, endVelocity, moved));
+    goTo(commitAdjacentIndex(index, exactPage, endVelocity, moved), true);
   }
 
   const onEnd = () => {
@@ -229,5 +243,12 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
 
   measure();
 
-  return { index: () => index, goTo, measure };
+  function setPageCount(count: number) {
+    pageCount = Math.max(1, count);
+    if (index > pageCount - 1) index = pageCount - 1;
+    measure();
+    if (!cancelTween) paint(restingX());
+  }
+
+  return { index: () => index, goTo, measure, setPageCount };
 }

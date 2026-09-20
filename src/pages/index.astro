@@ -8,7 +8,6 @@ import Recents from "../components/Recents.astro";
 import Statistics from "../components/Statistics.astro";
 import BottomNav from "../components/BottomNav.astro";
 import DetailOverlay from "../components/DetailOverlay.astro";
-import StatsTopSheet from "../components/StatsTopSheet.astro";
 import { TAB_ORDER } from "../utils/tabs";
 import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
 ---
@@ -63,7 +62,6 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
     }
   </script>
 
-  <StatsTopSheet />
   <DetailOverlay />
   <RecapStory />
 </Layout>
@@ -108,12 +106,15 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
     pointer-events: none;
     width: 100%;
     height: 100%;
-    transition: transform var(--duration-normal) var(--ios-spring);
+    /* JS owns the transform (deckSlider). CSS here is only the first-paint
+       fallback before the nav hydrates — keep it a compositor-only property. */
+    transform: translateZ(0);
     backface-visibility: hidden;
+    contain: layout size;
+    isolation: isolate;
   }
 
   .view-deck.tab-dragging .panel-section {
-    transition: none !important;
     will-change: transform;
   }
 

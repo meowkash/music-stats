@@ -45,7 +45,7 @@ export function playFlip(
   if (typeof container.animate !== 'function') return;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const { durationMs = 420, staggerMs = 12, maxStaggerMs = 180, viewport } = options;
+  const { durationMs = 280, staggerMs = 10, maxStaggerMs = 140, viewport } = options;
 
   const scrollTop = viewport?.scrollTop ?? 0;
   const viewHeight = viewport?.clientHeight ?? window.innerHeight;

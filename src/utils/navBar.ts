@@ -5,7 +5,8 @@ import {
   colorToCss,
   createCssPaintCache,
   parseColor,
-  rafTween,
+  springTween,
+  SPRING_NAV,
   withAlpha,
   type Rgba,
 } from './motion';
@@ -17,10 +18,7 @@ import { TAB_ORDER, getActiveTab, navigateToTab, type TabId } from './tabs';
 const DRAG_SCALE = 1.08;
 /** Distance over which an off-centre grab is pulled onto the finger. */
 const GRAB_DECAY_DISTANCE = 140;
-const MIN_SETTLE_MS = 200;
-const MAX_SETTLE_MS = 420;
-const TAP_BASE_MS = 300;
-const TAP_PER_TAB_MS = 50;
+const TAP_STIFFNESS_PER_TAB = 48;
 const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
 // Owns every nav interaction (taps, pill drag, panel deck) so the pill, tab
@@ -144,18 +142,16 @@ export function initNavBar(): void {
     fraction = index;
     settleFromScale = 1;
 
-    // Hand control back in one paint: classes first, then clear inline overrides
-    // that exactly match the class-driven end state.
     barEl.classList.remove('nav-animating');
     navigateToTab(TAB_ORDER[index]);
-    deck?.end();
+    deck?.settle(index);
     clearButtonPaint();
     clearBackgroundPaint();
     track.render(index);
     paint.reset();
   }
 
-  function animateTo(index: number, durationMs: number) {
+  function animateTo(index: number, flingVelocity = 0) {
     cancelTween?.();
     barEl.classList.add('nav-animating');
     beginBackgroundPaint();
@@ -163,17 +159,25 @@ export function initNavBar(): void {
 
     const from = fraction;
     const startScale = settleFromScale;
+    const span = index - from;
+    const distance = Math.max(Math.abs(span), 0.35);
 
-    cancelTween = rafTween(
-      0,
-      1,
-      durationMs,
-      (progress) => {
-        render(from + (index - from) * progress, startScale + (1 - startScale) * progress);
+    cancelTween = springTween(
+      from,
+      index,
+      (value) => {
+        const progress = span === 0 ? 1 : (value - from) / span;
+        render(value, startScale + (1 - startScale) * Math.min(Math.max(progress, 0), 1));
       },
       () => {
         cancelTween = null;
         commit(index);
+      },
+      {
+        ...SPRING_NAV,
+        stiffness: SPRING_NAV.stiffness - TAP_STIFFNESS_PER_TAB * Math.min(distance, 3),
+        velocity: flingVelocity,
+        restDelta: 0.002,
       },
     );
   }
@@ -184,8 +188,8 @@ export function initNavBar(): void {
       track.render(index);
       return;
     }
-    const distance = Math.abs(index - fraction);
-    animateTo(index, TAP_BASE_MS + TAP_PER_TAB_MS * Math.min(distance, 3));
+    settleFromScale = 1;
+    animateTo(index);
   }
 
   track.measure();
@@ -223,6 +227,7 @@ export function initNavBar(): void {
     activeIndex = index;
     fraction = index;
     track.render(index);
+    deck?.settle(index);
   });
 
   // ── Free-form pill drag + desktop wheel ─────────────────────────────────
@@ -345,12 +350,9 @@ export function initNavBar(): void {
       buttons.length - 1,
     );
 
-    const distance = Math.abs(target - fraction) * spacing;
-    const speed = Math.max(Math.abs(velocity), 0.4);
-    const duration = Math.min(Math.max(distance / speed, MIN_SETTLE_MS), MAX_SETTLE_MS);
-
     settleFromScale = DRAG_SCALE;
-    animateTo(target, duration);
+    // velocity is px/ms along the bar; convert to tab-index units per second.
+    animateTo(target, (velocity * 1000) / spacing);
   }
 
   // Touchpad / mouse wheel over the nav — steps through tabs along whichever

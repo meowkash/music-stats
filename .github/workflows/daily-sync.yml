@@ -114,10 +114,9 @@ jobs:
           aws s3 cp src/data/recap-meta-cache.json s3://music-stats/recap-meta-cache.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'music-stats'
-          directory: 'dist'
+          command: pages deploy dist --project-name=music-stats
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}

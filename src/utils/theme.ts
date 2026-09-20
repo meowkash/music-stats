@@ -3,12 +3,10 @@
 export function getCategoryAccent(category: string): { color: string; glow: string } {
   switch (category) {
     case 'artists':
-      return { color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)' };
     case 'albums':
-      return { color: '#10b981', glow: 'rgba(16, 185, 129, 0.4)' };
     case 'tracks':
     case 'songs':
-      return { color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.4)' };
+      return { color: '#14a3b4', glow: 'rgba(20, 163, 180, 0.45)' };
     default:
       return { color: 'rgba(255, 255, 255, 0.25)', glow: 'rgba(0, 0, 0, 0.4)' };
   }

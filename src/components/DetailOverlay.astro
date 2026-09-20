@@ -119,7 +119,8 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 380px;
+    /* Track the square header so the wash never stops mid-artwork. */
+    height: min(100vw, 480px);
     background-size: cover;
     background-position: center;
     filter: blur(22px) saturate(1.3);
@@ -182,9 +183,11 @@
     position: relative;
     z-index: 1;
     width: 100%;
-    height: 50vh;
-    min-height: 320px;
-    max-height: 480px;
+    /* Square frame matches album art — vh-based height was taller than wide and
+       object-fit:cover cropped the top/bottom so only ~half the art read. */
+    aspect-ratio: 1 / 1;
+    height: auto;
+    max-height: min(100vw, 480px);
     margin-bottom: 24px;
     overflow: hidden;
     flex-direction: column;
@@ -201,13 +204,13 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 55%;
+    height: 42%;
     pointer-events: none;
     z-index: 2;
     background: linear-gradient(
       to top,
-      rgba(10, 10, 15, 0.95) 0%,
-      rgba(10, 10, 15, 0.6) 60%,
+      rgba(10, 10, 15, 0.92) 0%,
+      rgba(10, 10, 15, 0.45) 55%,
       rgba(10, 10, 15, 0) 100%
     );
   }
@@ -241,6 +244,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center center;
     opacity: 0;
     z-index: 1;
     will-change: transform, opacity;

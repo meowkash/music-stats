@@ -1,7 +1,7 @@
 /** iOS-style cross-dissolve timing for in-sheet navigation */
-export const OVERLAY_CROSSFADE_MS = 280;
+export const OVERLAY_CROSSFADE_MS = 220;
 export const OVERLAY_CONTENT_OUT_MS = 90;
-export const OVERLAY_EASE = 'cubic-bezier(0.4, 0.0, 0.2, 1)';
+export const OVERLAY_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const OVERLAY_SLIDE_PX = 28;
 
 export type OverlayNavDirection = 'forward' | 'back';

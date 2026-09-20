@@ -16,8 +16,10 @@ export interface DeckSlider {
   begin: () => void;
   /** Positions the deck at a fractional tab index. */
   setPosition: (fraction: number) => void;
-  /** Hands the panels back to their class-driven transforms. */
+  /** Hands pointer-events back without dropping compositor layers. */
   end: () => void;
+  /** Resting pose after a settle — keeps GPU layers, hides far panels. */
+  settle: (index: number) => void;
   isActive: () => boolean;
 }
 
@@ -62,6 +64,23 @@ export function createDeckSlider(): DeckSlider | null {
     panel.el.style.visibility = 'visible';
   }
 
+  function hideFar(center: number) {
+    for (const panel of panels) {
+      if (Math.abs(panel.index - center) <= 1) continue;
+      if (panel.visible === false) continue;
+      panel.visible = false;
+      panel.el.style.visibility = 'hidden';
+    }
+  }
+
+  function paintOffset(panel: DeckPanel, offset: number, vertical: boolean) {
+    if (Math.abs(offset - panel.lastOffset) < 0.1) return;
+    panel.lastOffset = offset;
+    panel.el.style.transform = vertical
+      ? `translate3d(0, ${offset}px, 0)`
+      : `translate3d(${offset}px, 0, 0)`;
+  }
+
   function begin() {
     if (active) return;
     active = true;
@@ -70,39 +89,33 @@ export function createDeckSlider(): DeckSlider | null {
     deckEl.classList.add('tab-dragging');
     for (const panel of panels) {
       panel.visible = null;
-      panel.lastOffset = Number.NaN;
       panel.el.style.pointerEvents = 'none';
     }
   }
 
   function setPosition(fraction: number) {
-    if (!active) return;
-
     const vertical = isVertical();
     const pageSize = stride();
 
-    if (!prepared) {
-      const center = Math.round(fraction);
-      for (const panel of panels) {
-        if (Math.abs(panel.index - center) <= 1) show(panel);
-      }
-      prepared = true;
-    } else {
-      const lo = Math.floor(fraction);
-      const hi = Math.ceil(fraction);
-      for (const panel of panels) {
-        if (panel.index === lo || panel.index === hi) show(panel);
+    if (active) {
+      if (!prepared) {
+        const center = Math.round(fraction);
+        for (const panel of panels) {
+          if (Math.abs(panel.index - center) <= 1) show(panel);
+        }
+        prepared = true;
+      } else {
+        const lo = Math.floor(fraction);
+        const hi = Math.ceil(fraction);
+        for (const panel of panels) {
+          if (panel.index === lo || panel.index === hi) show(panel);
+        }
       }
     }
 
     for (const panel of panels) {
-      if (panel.visible !== true) continue;
-      const offset = (panel.index - fraction) * pageSize;
-      if (Math.abs(offset - panel.lastOffset) < 0.1) continue;
-      panel.lastOffset = offset;
-      panel.el.style.transform = vertical
-        ? `translate3d(0, ${offset}px, 0)`
-        : `translate3d(${offset}px, 0, 0)`;
+      if (active && panel.visible !== true) continue;
+      paintOffset(panel, (panel.index - fraction) * pageSize, vertical);
     }
   }
 
@@ -110,18 +123,34 @@ export function createDeckSlider(): DeckSlider | null {
     if (!active) return;
     active = false;
     prepared = false;
-    for (const panel of panels) {
-      panel.el.style.transform = '';
-      panel.el.style.visibility = '';
-      panel.el.style.pointerEvents = '';
-      panel.visible = null;
-      panel.lastOffset = Number.NaN;
-    }
     deckEl.classList.remove('tab-dragging');
   }
 
-  window.addEventListener('resize', measure);
+  function settle(index: number) {
+    end();
+    measure();
+    const vertical = isVertical();
+    const pageSize = stride();
+    for (const panel of panels) {
+      const nearby = Math.abs(panel.index - index) <= 1;
+      if (nearby) show(panel);
+      paintOffset(panel, (panel.index - index) * pageSize, vertical);
+      panel.el.style.pointerEvents = panel.index === index ? '' : 'none';
+    }
+    hideFar(index);
+  }
+
+  window.addEventListener('resize', () => {
+    measure();
+    if (!active) {
+      const current = panels.find((p) => p.el.classList.contains('active'));
+      if (current) settle(current.index);
+    }
+  });
   desktopQuery.addEventListener('change', measure);
+
+  const initial = panels.find((p) => p.el.classList.contains('active'));
+  if (initial) settle(initial.index);
 
   return {
     measure,
@@ -130,6 +159,7 @@ export function createDeckSlider(): DeckSlider | null {
     begin,
     setPosition,
     end,
+    settle,
     isActive: () => active,
   };
 }

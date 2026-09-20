@@ -68,6 +68,12 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         class="glass-input search-input"
         placeholder="Search entries..."
       />
+      <button class="search-close-btn" id="leaderboardSearchClose" type="button" aria-label="Close search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
     </div>
 
     <div class="toggles-wrapper" id="leaderboardToggles">
@@ -143,10 +149,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   .leaderboard-tab-group {
     display: flex;
     position: relative;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 4px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .search-bar-row {
@@ -394,7 +401,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     color-scheme: dark; /* Force dark calendar popup */
   }
 
-  /* Sub tabs */
+  /* Sub tabs — same capsule as Reports Last week/month/year */
   .sub-tab-btn {
     position: relative;
     z-index: 2;
@@ -402,56 +409,24 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     background: none;
     border: none;
     outline: none;
-    padding: 8px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
     cursor: pointer;
-    transition:
-      color var(--duration-normal) var(--ios-spring),
-      text-shadow var(--duration-normal) var(--ios-spring);
+    white-space: nowrap;
     font-family: var(--font-body);
-  }
-
-  /* JS paints colour frame-by-frame while the pager moves — CSS must not smear it. */
-  .leaderboard-tab-group.tabs-paging .sub-tab-btn {
-    transition: none;
   }
 
   .sub-tab-btn.active {
     color: #fff;
   }
 
-  .sub-tab-btn[data-tab="artists"].active {
-    color: var(--accent-cat-artists);
-    text-shadow: 0 0 12px var(--accent-cat-artists-glow);
-  }
-  .sub-tab-btn[data-tab="albums"].active {
-    color: var(--accent-cat-albums);
-    text-shadow: 0 0 12px var(--accent-cat-albums-glow);
-  }
-  .sub-tab-btn[data-tab="songs"].active {
-    color: var(--accent-cat-songs);
-    text-shadow: 0 0 12px var(--accent-cat-songs-glow);
-  }
-
   .sub-tab-highlight {
-    border-radius: 8px;
-    background: color-mix(
-      in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 15%,
-      transparent
-    );
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--hl-color, rgba(255, 255, 255, 0.4)) 40%,
-        transparent
-      );
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.3),
-      0 4px 12px var(--hl-glow, rgba(0, 0, 0, 0.4));
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   }
 
   /* Search bar */
@@ -532,6 +507,42 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   .search-container.is-searching .search-input {
     opacity: 1;
     pointer-events: auto;
+    padding-right: 40px;
+  }
+
+  .search-container.has-query .search-input {
+    padding-right: 40px;
+  }
+
+  .search-close-btn {
+    position: absolute;
+    right: 4px;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    display: none;
+    place-items: center;
+    cursor: pointer;
+    z-index: 3;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .search-container.is-searching .search-close-btn,
+  .search-container.has-query .search-close-btn {
+    display: grid;
+  }
+
+  .search-container.is-searching .search-close-btn {
+    right: calc(var(--toggles-inset, 0px) + 4px);
+  }
+
+  .search-close-btn svg {
+    width: 16px;
+    height: 16px;
   }
 
   /* Category accent instead of the global pink glass-input focus. */
@@ -589,6 +600,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     .search-input {
       opacity: 1;
       pointer-events: auto;
+    }
+
+    .search-container.is-searching .search-close-btn,
+    .search-container.has-query .search-close-btn {
+      right: 4px;
     }
 
     /* With all three columns on screen Unified is no longer a property of one
@@ -653,8 +669,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     transition: color var(--duration-normal) var(--ios-spring);
   }
   @media (hover: hover) and (pointer: fine) {
-    .leaderboard-container :global(.clickable-entity:hover) {
-      color: var(--accent-pink) !important;
+    .leaderboard-container :global(.scrobble-row .clickable-entity:hover) {
+      color: var(--row-accent, #fff);
     }
   }
 
@@ -679,6 +695,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     .date-input-group input[type="date"] {
       flex: 1;
     }
+  }
+
+  .leaderboard-container :global(.scrobble-row) {
+    --row-accent: #fff;
   }
 
   .leaderboard-container :global(.scrobble-count-val) {
@@ -717,15 +737,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   import { getCategoryAccent } from "../utils/theme";
   import { bindEntityClicks } from "../utils/events";
   import { readLocal, writeLocal } from "../utils/storage";
-  import { bindPagerSwipe } from "../utils/pagerSwipe";
   import { captureRowPositions, playFlip } from "../utils/flip";
-  import {
-    colorToCss,
-    lerpColor,
-    parseColor,
-    withAlpha,
-    type Rgba,
-  } from "../utils/motion";
 
   const RANKING_TABS = ["songs", "albums", "artists"] as const;
   type RankingTab = (typeof RANKING_TABS)[number];
@@ -824,12 +836,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const rootEl = document.querySelector(
       ".leaderboard-container",
     ) as HTMLElement;
-    const viewportEl = document.getElementById(
-      "leaderboardViewport",
-    ) as HTMLDivElement;
-    const trackEl = document.getElementById(
-      "leaderboardListTrack",
-    ) as HTMLDivElement;
     const customDateWrapper = document.getElementById(
       "customDateWrapper",
     ) as HTMLDivElement;
@@ -1139,12 +1145,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           return;
         }
 
-        // Active page + neighbours so a swipe never lands on an empty pane.
-        const tabsToPaint = new Set<RankingTab>([activeTab()]);
-        if (activeIndex > 0) tabsToPaint.add(RANKING_TABS[activeIndex - 1]);
-        if (activeIndex < RANKING_TABS.length - 1)
-          tabsToPaint.add(RANKING_TABS[activeIndex + 1]);
-        for (const tab of tabsToPaint) paintPage(tab, prepareTab(tab));
+        // Active category only — switching is a tap on the capsule, not a swipe.
+        paintPage(activeTab(), prepareTab(activeTab()));
       } catch (err) {
         if (epoch !== dataEpoch) return;
         console.error("Failed to aggregate data:", err);
@@ -1167,29 +1169,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       buttons: document.querySelectorAll(".quick-ranges .range-btn"),
     });
 
-    const tabGroup = document.querySelector(
-      ".leaderboard-tab-group",
-    ) as HTMLElement;
     const subTabButtons = [
       ...document.querySelectorAll(".leaderboard-tab-group .sub-tab-btn"),
     ] as HTMLElement[];
-    const idleTabRgba: Rgba = parseColor("rgba(255, 255, 255, 0.8)") ?? {
-      r: 255,
-      g: 255,
-      b: 255,
-      a: 0.8,
-    };
-    const tabAccentRgba: Rgba[] = RANKING_TABS.map(
-      (tab) => parseColor(getCategoryAccent(tab).color) ?? idleTabRgba,
-    );
 
     const subTabHighlightCtrl = createSlidingHighlight({
       highlightEl: subTabHighlight,
       buttons: subTabButtons,
-      accentFor: (btn) => {
-        const tabName = btn.getAttribute("data-tab") || "";
-        return getCategoryAccent(tabName);
-      },
       onSync: (btn) => {
         const tabName = btn.getAttribute("data-tab") || "";
         const accent = getCategoryAccent(tabName);
@@ -1216,44 +1202,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         String(Math.round(t * 1000) / 1000),
       );
       artistRankingToggle.classList.toggle("is-open", t > 0.95);
-    }
-
-    /** Drive label + date-pill colours from the same fraction as the pager. */
-    function paintTabColors(fraction: number) {
-      tabGroup.classList.add("tabs-paging");
-      for (let i = 0; i < subTabButtons.length; i++) {
-        const activeness = Math.max(0, 1 - Math.abs(fraction - i));
-        subTabButtons[i].style.color = colorToCss(
-          lerpColor(idleTabRgba, tabAccentRgba[i], activeness),
-        );
-        subTabButtons[i].style.textShadow =
-          activeness > 0.04
-            ? `0 0 12px ${withAlpha(tabAccentRgba[i], 0.4 * activeness)}`
-            : "none";
-      }
-      // fraction goes out of range while rubber-banding past an edge; the throw
-      // from tabAccentRgba[-1] used to kill rafTween's settle mid-bounce.
-      const i0 = Math.min(
-        Math.max(Math.floor(fraction), 0),
-        tabAccentRgba.length - 1,
-      );
-      const i1 = Math.min(i0 + 1, tabAccentRgba.length - 1);
-      const mix = Math.min(Math.max(fraction - i0, 0), 1);
-      const mixed = lerpColor(tabAccentRgba[i0], tabAccentRgba[i1], mix);
-      const mixedCss = colorToCss(mixed);
-      const mixedGlow = withAlpha(mixed, 0.4);
-      rangeHighlight.style.setProperty("--range-color", mixedCss);
-      rangeHighlight.style.setProperty("--range-glow", mixedGlow);
-      setSearchAccent(mixedCss, mixedGlow);
-      paintUnifiedToggle(fraction, true);
-    }
-
-    function clearTabColorPaint() {
-      tabGroup.classList.remove("tabs-paging");
-      for (const btn of subTabButtons) {
-        btn.style.color = "";
-        btn.style.textShadow = "";
-      }
     }
 
     function syncArtistRankingToggle() {
@@ -1318,43 +1266,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
 
       ensurePage(tab);
-      if (index > 0) ensurePage(RANKING_TABS[index - 1]);
-      if (index < RANKING_TABS.length - 1) ensurePage(RANKING_TABS[index + 1]);
-    }
-
-    let pager: ReturnType<typeof bindPagerSwipe> | null = null;
-
-    if (!isDesktopLayout()) {
-      pager = bindPagerSwipe({
-        gestureEl: viewportEl,
-        trackEl,
-        viewportEl,
-        pageCount: RANKING_TABS.length,
-        onProgress: (fraction) => {
-          const lo = Math.floor(fraction);
-          const hi = Math.ceil(fraction);
-          if (lo >= 0 && lo < RANKING_TABS.length) ensurePage(RANKING_TABS[lo]);
-          if (hi >= 0 && hi < RANKING_TABS.length) ensurePage(RANKING_TABS[hi]);
-          subTabHighlightCtrl.scrub(fraction);
-          paintTabColors(fraction);
-        },
-        onSettled: (index) => {
-          clearTabColorPaint();
-          applyActiveTab(index, {
-            syncHighlight: true,
-            animateHighlight: false,
-            updateActiveClass: true,
-            syncChrome: true,
-          });
-        },
-      });
     }
 
     desktopQuery.addEventListener("change", () => {
       if (isDesktopLayout()) {
-        trackEl.style.transform = "";
-        trackEl.classList.remove("pager-moving");
-        clearTabColorPaint();
         syncArtistRankingToggle();
         for (const t of RANKING_TABS) {
           pageEl(t).classList.add("panel-scroll-active");
@@ -1363,22 +1278,15 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
     });
 
-    function selectRankingTab(tab: string, animate = true) {
+    function selectRankingTab(tab: string) {
       const index = RANKING_TABS.indexOf(tab as RankingTab);
       if (index === -1 || index === activeIndex) return;
-      const from = activeIndex;
-      // .active / CSS colours stay off until settle so JS can interpolate in
-      // lockstep with the pager and pill.
       applyActiveTab(index, {
-        syncHighlight: !animate,
-        animateHighlight: false,
-        updateActiveClass: !animate,
-        syncChrome: !animate,
+        syncHighlight: true,
+        animateHighlight: true,
+        updateActiveClass: true,
+        syncChrome: true,
       });
-      // Seed paint at the current tab so the first tween frame doesn't flash
-      // CSS .active colours before onProgress takes over.
-      if (animate) paintTabColors(from);
-      pager?.goTo(index, animate);
     }
 
     document.querySelectorAll(".quick-ranges .range-btn").forEach((btn) => {
@@ -1459,6 +1367,16 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       searchInput.focus();
     });
 
+    const searchClose = document.getElementById("leaderboardSearchClose") as HTMLButtonElement;
+    function closeSearch() {
+      searchInput.value = "";
+      searchQuery = "";
+      searchContainer.classList.remove("is-searching", "has-query");
+      updateLeaderboard();
+    }
+    searchClose?.addEventListener("pointerdown", (e) => e.preventDefault());
+    searchClose?.addEventListener("click", closeSearch);
+
     searchInput.addEventListener("blur", () => {
       if (!searchInput.value.trim()) {
         searchContainer.classList.remove("is-searching");
@@ -1470,13 +1388,14 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       .forEach((btn) => {
         btn.addEventListener("click", () => {
           const tab = btn.getAttribute("data-tab");
-          if (tab) selectRankingTab(tab, true);
+          if (tab) selectRankingTab(tab);
         });
       });
 
     let searchDebounce: ReturnType<typeof setTimeout>;
     searchInput.addEventListener("input", (e) => {
       searchQuery = (e.target as HTMLInputElement).value;
+      searchContainer.classList.toggle("has-query", searchQuery.trim().length > 0);
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(updateLeaderboard, 250);
     });
@@ -1524,8 +1443,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       if (e.detail?.tab === "rankings") {
         requestAnimationFrame(() => {
           placeHighlights(false);
-          pager?.measure();
-          pager?.goTo(activeIndex, false);
         });
       }
     }) as EventListener);

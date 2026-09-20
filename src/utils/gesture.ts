@@ -8,13 +8,13 @@ export const ENGAGE_DISTANCE = 8;
 export const DIRECTION_BIAS = 1.2;
 
 /** Flick speed (px/ms) that commits regardless of distance travelled. */
-export const FLICK_VELOCITY = 0.3;
+export const FLICK_VELOCITY = 0.22;
 
 /** Fraction of a page that commits to the next one on a slow drag. */
-export const COMMIT_FRACTION = 0.18;
+export const COMMIT_FRACTION = 0.12;
 
-/** Settle duration for page-sized moves — matches --duration-normal. */
-export const SETTLE_MS = 300;
+/** Settle duration for page-sized CSS moves — matches --duration-normal. */
+export const SETTLE_MS = 240;
 
 // iOS-style progressive resistance: starts near 1:1 so the edge announces itself,
 // then stiffens. Linear damping read as "nothing happened" for the first ~10px.
@@ -39,6 +39,17 @@ export function commitIndex(exact: number, velocity: number, moved: boolean): nu
   if (fraction > COMMIT_FRACTION && fraction <= 0.5) return Math.ceil(exact);
   if (fraction < 1 - COMMIT_FRACTION && fraction > 0.5) return Math.floor(exact);
   return Math.round(exact);
+}
+
+/** A section fling may land on the current page or one neighbor — never skip. */
+export function commitAdjacentIndex(
+  current: number,
+  exact: number,
+  velocity: number,
+  moved: boolean,
+): number {
+  const next = commitIndex(exact, velocity, moved);
+  return Math.min(current + 1, Math.max(current - 1, next));
 }
 
 /** True when a gesture's dominant axis is the one the surface cares about. */

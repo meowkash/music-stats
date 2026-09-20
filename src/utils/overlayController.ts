@@ -165,17 +165,7 @@ export function initDetailOverlay(): void {
     closeCleanupTimer = setTimeout(() => {
       closeCleanupTimer = null;
       runCloseCleanup();
-    }, 380);
-  }
-
-  function frames(count: number): Promise<void> {
-    return new Promise((resolve) => {
-      const step = (n: number) => {
-        if (n <= 0) resolve();
-        else requestAnimationFrame(() => step(n - 1));
-      };
-      step(count);
-    });
+    }, 180);
   }
 
   async function openDetails(
@@ -208,18 +198,6 @@ export function initDetailOverlay(): void {
     document.body.classList.add('overlay-open');
     setOverlayOpen('detail', true);
 
-    if (!isSwitchingEntity) {
-      // Paint the off-screen state, then add .visible so the CSS transition
-      // actually runs instead of jumping straight to the end state.
-      panel.classList.remove('visible');
-      backdrop.classList.remove('visible');
-      void panel.offsetWidth;
-      panel.classList.add('visible');
-      backdrop.classList.add('visible');
-      // Yield two frames so the slide is on the compositor before DOM work.
-      await frames(2);
-    }
-
     const data = getCachedData() || (await ensureData());
     if (!data) return;
 
@@ -234,8 +212,25 @@ export function initDetailOverlay(): void {
       catalogKey ?? 'canonicalArtists',
     );
 
-    if (isSwitchingEntity) {
-      overlayScrollContainer.scrollTo({ top: 0, behavior: 'auto' });
+    if (!isSwitchingEntity) {
+      await populateOverlay(type, id, data.meta, data.catalog, {
+        elements,
+        artworkCache,
+        onNavigate: (t, i, catalog) => openDetails(t, i, 'push', catalog),
+        animate: false,
+        scrollContainer: overlayScrollContainer,
+        panel,
+      }, catalogKey ?? 'canonicalArtists');
+
+      panel.classList.remove('visible');
+      backdrop.classList.remove('visible');
+      void panel.offsetWidth;
+      panel.classList.add('visible');
+      backdrop.classList.add('visible');
+      return;
+    }
+
+    overlayScrollContainer.scrollTo({ top: 0, behavior: 'auto' });
 
       const contentInMs = fromEdgeSwipe
         ? OVERLAY_CROSSFADE_MS
@@ -269,17 +264,6 @@ export function initDetailOverlay(): void {
       await visualsPromise;
       initOverlayAlbumArtwork(elements.overlayAlbumsList);
       clearContentTransition(contentRegions);
-      return;
-    }
-
-    await populateOverlay(type, id, data.meta, data.catalog, {
-      elements,
-      artworkCache,
-      onNavigate: (t, i, catalog) => openDetails(t, i, 'push', catalog),
-      animate: false,
-      scrollContainer: overlayScrollContainer,
-      panel,
-    }, artistCatalog ?? 'canonicalArtists');
   }
 
   function goBackOrClose() {

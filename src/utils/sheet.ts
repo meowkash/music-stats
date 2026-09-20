@@ -39,19 +39,22 @@ export function createSheet(options: SheetOptions): SheetController | null {
     if (open) return;
     open = true;
 
+    document.body.classList.add(bodyClass);
+    setOverlayOpen(`sheet:${bodyClass}`, true);
+    // Fill content while the panel is still off-screen so the slide isn't
+    // hitching on a late innerHTML write.
+    onOpen?.();
+
+    panelEl.style.willChange = 'transform';
     panelEl.style.transform = '';
     backdropEl.style.opacity = '';
     panelEl.classList.remove('visible');
     backdropEl.classList.remove('visible');
     void panelEl.offsetWidth;
 
-    panelEl.classList.add('visible');
-    backdropEl.classList.add('visible');
-    document.body.classList.add(bodyClass);
-    setOverlayOpen(`sheet:${bodyClass}`, true);
-
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => onOpen?.());
+      panelEl.classList.add('visible');
+      backdropEl.classList.add('visible');
     });
   }
 

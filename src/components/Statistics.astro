@@ -4,183 +4,272 @@
 <div class="compare-container glass-card panel-container panel-fill">
   <div class="view-header shrink-0">
     <h2>Statistics</h2>
-    <p class="subtitle">Welcome to my nerdy side...</p>
-  </div>
-
-  <!-- Chart Controls -->
-  <div class="chart-controls shrink-0">
-    <div class="control-group">
-      <span class="control-label">Select Years</span>
-      <div class="year-checkbox-group" id="yearCheckboxes" data-scroll-x>
-        <!-- Injected by client JS -->
+    <div class="view-header-row">
+      <p class="subtitle">Welcome to my nerdy side...</p>
+      <div class="chart-controls" id="yearsFilter">
+        <button class="years-filter-btn" id="yearsFilterBtn" type="button">
+          <span id="yearsFilterLabel">Years</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <div class="dropdown-popover years-filter-popover" id="yearsFilterPopover"></div>
       </div>
     </div>
-    <button
-      class="years-info-btn"
-      id="openStatsSheetBtn"
-      type="button"
-      aria-label="View top lists"
-      title="Top lists"
-    >
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="16" x2="12" y2="12"></line>
-        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-      </svg>
-    </button>
   </div>
 
-  <!-- Chart Display Canvas -->
-  <div class="chart-wrapper panel-fill">
-    <div class="chart-canvas-container">
-      <canvas id="yearlyCompareChart"></canvas>
+  <div class="chart-plot">
+    <canvas id="yearlyCompareChart"></canvas>
+  </div>
+  <div class="stats-legend shrink-0" id="statsLegend"></div>
+  <div class="year-story-card shrink-0">
+    <div class="year-story-viewport" id="yearStoryViewport">
+      <div class="year-story-track" id="yearStoryTrack"></div>
     </div>
+    <div class="year-story-dots" id="yearStoryDots"></div>
   </div>
 </div>
 
 <style>
+  .compare-container.panel-fill {
+    /* Keep dropdown visible; chart still fills via flex + min-height. */
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .compare-container :global(.view-header) {
+    overflow: visible;
+  }
+
+  .view-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .view-header-row .subtitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: calc(100% - 7.5rem);
+    margin-top: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .chart-controls {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    background: rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 16px;
-    padding-bottom: 14px;
-    border-radius: 6px;
+    flex: 0 0 auto;
+    z-index: 4;
+    width: max-content;
   }
 
-  .years-info-btn {
-    position: absolute;
-    right: 10px;
-    bottom: 10px;
-    width: 28px;
-    height: 28px;
+  .years-filter-btn {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: var(--transition-smooth);
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .years-info-btn:hover {
-      color: var(--text-primary);
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    .years-info-btn:active {
-      transform: scale(0.94);
-    }
-  }
-
-  .control-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .control-label {
-    font-size: 10px;
+    gap: 6px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 7px 12px;
+    color: #fff;
+    font-size: 13px;
     font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-family: var(--font-header);
+    cursor: pointer;
+    white-space: nowrap;
   }
 
-  .year-checkbox-group {
+  .years-filter-popover {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: 240px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .chart-controls.open .years-filter-popover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .dropdown-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    padding: 6px;
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    /* Keep year chips clear of the info button in the corner. */
-    padding-right: 36px;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: var(--transition-smooth);
+    z-index: var(--z-dropdown);
   }
 
-  .year-checkbox-group :global(.checkbox-label) {
+  .years-filter-popover {
+    left: auto;
+    right: 0;
+  }
+
+  .years-filter-popover :global(.checkbox-label) {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 16px;
-    border-radius: 20px;
+    padding: 8px 10px;
+    border-radius: 8px;
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
-    transition: var(--transition-smooth);
-    user-select: none;
     color: var(--year-color);
-    opacity: 0.6;
+    opacity: 0.55;
   }
 
-  @media (hover: hover) and (pointer: fine) {
-    .year-checkbox-group :global(.checkbox-label:hover) {
-      background: rgba(255, 255, 255, 0.04);
-      opacity: 0.85;
-      border-color: rgba(255, 255, 255, 0.15);
-    }
+  .years-filter-popover :global(.checkbox-label.checked) {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.06);
   }
 
-  .year-checkbox-group :global(.checkbox-label.is-pressed) {
-    background: rgba(255, 255, 255, 0.04);
-    opacity: 0.85;
-    border-color: rgba(255, 255, 255, 0.15);
-  }
-
-  .year-checkbox-group :global(.checkbox-label input) {
+  .years-filter-popover :global(.checkbox-label input) {
     display: none;
   }
 
-  .year-checkbox-group :global(.led-indicator) {
+  .years-filter-popover :global(.led-indicator) {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: var(--transition-smooth);
     flex-shrink: 0;
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
   }
 
-  .year-checkbox-group :global(.checkbox-label.checked) {
-    opacity: 1;
-    border-color: var(--year-color);
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 0 12px var(--year-color-glow), inset 0 0 4px var(--year-color-glow);
-  }
-
-  .year-checkbox-group :global(.checkbox-label.checked .led-indicator) {
+  .years-filter-popover :global(.checkbox-label.checked .led-indicator) {
     background: var(--year-color);
     border-color: #fff;
-    box-shadow: 0 0 8px var(--year-led-glow), 0 0 16px var(--year-color-glow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 8px var(--year-led-glow);
   }
 
-  .chart-wrapper {
+  /* Chart fills remaining space inside the Statistics panel — no nested card. */
+  .chart-plot {
     position: relative;
+    flex: 1 1 auto;
+    min-height: 200px;
     width: 100%;
-    min-height: 0;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 16px;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.02);
   }
 
-  .chart-canvas-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
-
-  canvas {
+  .chart-plot canvas {
     width: 100% !important;
     height: 100% !important;
+    display: block;
+  }
+
+  .stats-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .stats-legend :global(i) {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+
+  .year-story-card {
+    min-height: 0;
+    flex-shrink: 0;
+    padding: 0;
+  }
+
+  .year-story-viewport {
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+
+  .year-story-track {
+    display: flex;
+  }
+
+  .year-story-track :global(.year-story-page) {
+    flex: 0 0 100%;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .year-story-track :global(p) {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .year-story-track :global(.year-story-year-inline) {
+    font-family: var(--font-header);
+    font-size: 1.35em;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .year-story-track :global(.clickable-entity) {
+    cursor: pointer;
+    font-weight: 700;
+    color: #fff;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .year-story-track :global(.clickable-entity:hover) {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  }
+
+  .year-story-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding-top: 8px;
+  }
+
+  .year-story-dots :global(button) {
+    width: 6px;
+    height: 6px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    cursor: pointer;
+  }
+
+  .year-story-dots :global(button.is-active) {
+    background: var(--accent-green);
+    width: 16px;
+    border-radius: 99px;
+  }
+
+  @media (max-width: 767px) {
+    .view-header-row .subtitle {
+      max-width: calc(100% - 6.75rem);
+    }
   }
 
   /* Top-lists sheet lives in StatsTopSheet.astro (shared BottomSheet). */
@@ -189,64 +278,77 @@
 <script>
   import type { Chart as ChartType } from "chart.js";
   import {
-    generateScrobbleRowHTML,
-    applyCountGlows,
+    loadMetaCache,
+    loadArtworkCache,
+    loadColorsCache,
+    getArtworkCacheSync,
     getArtworkUrl,
     getArtistArtworkUrl,
-    loadArtworkCache,
-    loadMetaCache,
-    initArtworkImages,
-    getArtworkCacheSync,
+    getColorForUrl,
   } from "../utils/ui";
+  import { getGlowStyle } from "../utils/theme";
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import { bindEntityClicks } from "../utils/events";
   import type { YearlyTotals } from "../types/music";
-  import { rawArtistNamesForCanonical } from "../utils/scrobbles";
-  import { bindHorizontalSwipe } from "../utils/horizontalSwipe";
-  import { createSheet } from "../utils/sheet";
   import { getActiveTab } from "../utils/tabs";
+  import { bindPagerSwipe } from "../utils/pagerSwipe";
+  import { buildYearStory } from "../utils/yearBlurb";
+  import { rawArtistNamesForCanonical } from "../utils/scrobbles";
 
   document.addEventListener("DOMContentLoaded", () => {
     let rawStats: Record<string, unknown> | null = null;
-    let activeYear: string | null = null;
-    let activeCategory: "tracks" | "albums" | "artists" = "tracks";
     let rawTotals: YearlyTotals | null = null;
     let metaDict: any = null;
     const albumToArtist = new Map<number, number>();
-    let lastSwipeTarget: "year" | "category" = "year";
 
     let chart: ChartType | null = null;
     const selectedYears = new Set<string>();
-    const checkboxGroup = document.getElementById("yearCheckboxes") as HTMLDivElement;
-
-    const sheetPanel = document.getElementById("statsSheetPanel") as HTMLDivElement;
-    const statsList = document.getElementById("activeStatsList") as HTMLDivElement;
-    const openBtn = document.getElementById("openStatsSheetBtn") as HTMLButtonElement;
-    const closeBtn = document.getElementById("statsSheetCloseBtn") as HTMLButtonElement;
+    const yearsFilter = document.getElementById("yearsFilter") as HTMLDivElement;
+    const yearsFilterBtn = document.getElementById("yearsFilterBtn") as HTMLButtonElement;
+    const yearsFilterLabel = document.getElementById("yearsFilterLabel") as HTMLSpanElement;
+    const yearsFilterPopover = document.getElementById("yearsFilterPopover") as HTMLDivElement;
+    const statsLegend = document.getElementById("statsLegend") as HTMLDivElement;
+    const storyViewport = document.getElementById("yearStoryViewport") as HTMLDivElement;
+    const storyTrack = document.getElementById("yearStoryTrack") as HTMLDivElement;
+    const storyDots = document.getElementById("yearStoryDots") as HTMLDivElement;
 
     const colors = ["#ff2d55", "#00f0ff", "#8b5cf6", "#22c55e", "#f97316", "#eab308"];
     let yearColorMap: { [year: string]: string } = {};
+    let storyYears: string[] = [];
+    let storyIndex = 0;
 
-    const sheet = createSheet({
-      id: "statsSheet",
-      scrollContainer: statsList,
-      bodyClass: "stats-sheet-open",
-      onOpen: () => renderYearlyStats(),
+    const storyPager = bindPagerSwipe({
+      gestureEl: storyViewport,
+      trackEl: storyTrack,
+      viewportEl: storyViewport,
+      pageCount: 1,
+      onSettled: (index) => {
+        storyIndex = index;
+        syncStoryDots();
+      },
     });
 
-    openBtn?.addEventListener("click", () => sheet?.open());
-    closeBtn?.addEventListener("click", () => sheet?.close());
+    bindEntityClicks(storyTrack);
 
-    const generateLabels = (): string[] => {
-      const labels = [];
-      const d = new Date(2024, 0, 1);
-      for (let i = 0; i < 366; i++) {
-        labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-        d.setDate(d.getDate() + 1);
-      }
-      return labels;
-    };
-    const xLabels = generateLabels();
+    const MONTH_LABELS = [
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC",
+    ];
+    // Day-of-year indices (0-based, leap calendar) where each month begins.
+    const MONTH_STARTS = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+
+    // Keep a daily label array so datasets stay day-aligned; ticks render months only.
+    const xLabels = Array.from({ length: 366 }, (_, i) => String(i));
 
     async function loadData() {
       try {
@@ -255,6 +357,7 @@
           fetchAppJson<Record<string, unknown>>("/data/yearly-stats.json"),
           loadMetaCache(),
           loadArtworkCache(),
+          loadColorsCache(),
         ]);
         rawTotals = totals;
         rawStats = stats;
@@ -271,7 +374,7 @@
 
         initializeCheckboxes(rawTotals!);
         updateChart();
-        if (sheet?.isOpen()) renderYearlyStats();
+        renderYearStories();
       } catch (err) {
         console.error("Failed to load statistics data:", err);
       }
@@ -355,6 +458,9 @@
           responsive: true,
           maintainAspectRatio: false,
           animation: { duration: 400, easing: "easeInOutQuart" },
+          layout: {
+            padding: { top: 8, right: 8, bottom: 0, left: 0 },
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -374,6 +480,15 @@
               titleFont: { family: "Outfit", weight: "bold" as const, size: 18 },
               bodyFont: { family: "Inter", size: 15 },
               callbacks: {
+                title(items) {
+                  const index = items[0]?.dataIndex ?? 0;
+                  const d = new Date(Date.UTC(2024, 0, 1 + index));
+                  return d.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  });
+                },
                 label: (context) => {
                   let label = context.dataset.label || "";
                   if (label) label += ": ";
@@ -387,12 +502,33 @@
           scales: {
             x: {
               grid: { display: false },
-              ticks: { color: "rgba(255,255,255,0.3)", font: { family: "Inter", size: 10 }, maxTicksLimit: 12 },
+              afterBuildTicks(axis) {
+                axis.ticks = MONTH_STARTS.map((dayIndex) => ({
+                  value: dayIndex,
+                }));
+              },
+              ticks: {
+                color: "rgba(255,255,255,0.38)",
+                font: { family: "Inter", size: 10, weight: "600" as const },
+                autoSkip: false,
+                maxRotation: 0,
+                padding: 6,
+                callback(tickValue) {
+                  const dayIndex = typeof tickValue === "string" ? Number(tickValue) : Number(tickValue);
+                  const mi = MONTH_STARTS.indexOf(dayIndex);
+                  return mi >= 0 ? MONTH_LABELS[mi] : "";
+                },
+              },
               border: { display: false },
             },
             y: {
               grid: { color: "rgba(255,255,255,0.03)" },
-              ticks: { color: "rgba(255,255,255,0.3)", font: { family: "Inter", size: 10 } },
+              ticks: {
+                color: "rgba(255,255,255,0.32)",
+                font: { family: "Inter", size: 10, weight: "500" as const },
+                padding: 6,
+                maxTicksLimit: 5,
+              },
               border: { display: false },
             },
           },
@@ -403,135 +539,108 @@
       updateChart();
     }
 
-    function updateDropdownsUI() {
-      const yearPopover = document.getElementById("yearDropdownPopover");
-      if (yearPopover) {
-        const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
-        yearPopover.innerHTML = sortedSelectedYears
-          .map(
-            (year) => `
-          <div class="dropdown-item ${year === activeYear ? "active" : ""}" data-val="${year}">${year}</div>
-        `,
-          )
-          .join("");
-      }
-
-      document.getElementById("yearDropdownText")!.innerText = activeYear || "Select";
-
-      const catText =
-        activeCategory === "tracks" ? "Songs" : activeCategory === "albums" ? "Albums" : "Artists";
-      document.getElementById("categoryDropdownText")!.innerText = catText;
-
-      document.querySelectorAll("#categoryDropdownPopover .dropdown-item").forEach((item) => {
-        item.classList.toggle("active", item.getAttribute("data-val") === activeCategory);
-      });
-
-      let catColor = "#ffffff";
-      if (activeCategory === "tracks") catColor = "var(--accent-cat-songs)";
-      else if (activeCategory === "albums") catColor = "var(--accent-cat-albums)";
-      else if (activeCategory === "artists") catColor = "var(--accent-cat-artists)";
-
-      const catBtn = document.getElementById("categoryDropdownBtn");
-      if (catBtn) {
-        catBtn.style.color = catColor;
-        catBtn.style.borderColor = `color-mix(in srgb, ${catColor} 40%, transparent)`;
-        catBtn.style.background = `color-mix(in srgb, ${catColor} 10%, transparent)`;
-      }
-
-      document.documentElement.style.setProperty(
-        "--cat-active-color",
-        `color-mix(in srgb, ${catColor} 20%, transparent)`,
-      );
-
-      const color = activeYear ? yearColorMap[activeYear] : "#ffffff";
-      document.documentElement.style.setProperty("--active-color", color + "40");
-
-      const yearBtn = document.getElementById("yearDropdownBtn");
-      if (yearBtn && activeYear) {
-        yearBtn.style.color = color;
-        yearBtn.style.borderColor = color + "40";
-        yearBtn.style.background = color + "10";
-      }
+    function updateYearsLabel() {
+      const years = Object.keys(yearColorMap);
+      const n = selectedYears.size;
+      if (n === 0) yearsFilterLabel.textContent = "Years";
+      else if (n === years.length) yearsFilterLabel.textContent = "All years";
+      else if (n === 1) yearsFilterLabel.textContent = Array.from(selectedYears)[0];
+      else yearsFilterLabel.textContent = `${n} years`;
     }
 
-    function renderYearlyStats() {
-      const container = document.getElementById("activeStatsList");
-      if (!container || !rawStats || !metaDict || selectedYears.size === 0) {
-        if (container) container.innerHTML = "";
-        return;
-      }
+    function updateStatsLegend() {
+      if (!statsLegend) return;
+      const years = Array.from(selectedYears).sort().reverse();
+      statsLegend.innerHTML = years
+        .map((year) => {
+          const color = yearColorMap[year] || "#fff";
+          return `<span><i style="background:${color}"></i>${year}</span>`;
+        })
+        .join("");
+    }
 
-      const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
-      if (!activeYear || !selectedYears.has(activeYear)) {
-        activeYear = sortedSelectedYears[0];
-      }
+    function syncStoryDots() {
+      storyDots.querySelectorAll("button").forEach((btn, i) => {
+        btn.classList.toggle("is-active", i === storyIndex);
+      });
+    }
 
-      updateDropdownsUI();
+    function accentStyle(url: string | null): string | undefined {
+      const rgb = getColorForUrl(url);
+      return rgb ? getGlowStyle(rgb, { blur: 10, alpha: 0.45 }) : undefined;
+    }
 
-      const stats = rawStats[activeYear] as Record<string, [number, number][]> | undefined;
-      if (!stats) {
-        container.innerHTML = "";
-        return;
-      }
-
-      const items = stats[activeCategory] || [];
+    function storyAccents(year: string): { artist?: string; track?: string; album?: string } {
+      const stats = rawStats?.[year] as
+        | { tracks?: [number, number][]; albums?: [number, number][]; artists?: [number, number][] }
+        | undefined;
+      if (!stats || !metaDict) return {};
       const cache = getArtworkCacheSync() || {};
+      const accents: { artist?: string; track?: string; album?: string } = {};
 
-      container.innerHTML = items
-        .map((item: [number, number], idx: number) => {
-          const id = item[0];
-          const count = item[1];
-          let name = "Unknown";
-          let subtitle = "";
-          let imgUrl = null;
-          let rowType = "artist";
-          let rowArtistCatalog: "artists" | "canonicalArtists" | undefined;
-
-          if (activeCategory === "tracks" && metaDict.tracks[id]) {
-            name = metaDict.tracks[id][0];
-            const artistId = metaDict.tracks[id][1];
-            const albumId = metaDict.tracks[id][2];
-            const artistName = metaDict.artists[artistId] || "Unknown Artist";
-            const albumName = metaDict.albums[albumId] || "Unknown Album";
-            subtitle = artistName;
-            rowType = "track";
-            imgUrl = getArtworkUrl("track", name, artistName, albumName, cache);
-          } else if (activeCategory === "albums" && metaDict.albums[id]) {
-            name = metaDict.albums[id];
-            const artistId = albumToArtist.get(id);
-            const artistName = (artistId !== undefined ? metaDict.artists[artistId] : null) || "Unknown Artist";
-            subtitle = artistName;
-            imgUrl = getArtworkUrl("album", name, artistName === "Unknown Artist" ? "" : artistName, name, cache);
-            rowType = "album";
-          } else if (activeCategory === "artists" && metaDict.canonicalArtists?.[id]) {
-            name = metaDict.canonicalArtists[id];
-            subtitle = "Artist";
-            rowType = "artist";
-            rowArtistCatalog = "canonicalArtists";
-            imgUrl = getArtistArtworkUrl(name, cache, rawArtistNamesForCanonical(id, metaDict));
-          }
-
-          return generateScrobbleRowHTML(
-            {
-              type: rowType,
-              id: id.toString(),
-              rank: idx + 1,
-              name,
-              subtitle,
-              imgUrl: imgUrl || null,
-              count,
-              artistCatalog: rowArtistCatalog,
-            },
-            true,
+      const topArtist = stats.artists?.[0];
+      if (topArtist) {
+        const name = metaDict.canonicalArtists?.[topArtist[0]] || metaDict.artists?.[topArtist[0]];
+        if (name) {
+          accents.artist = accentStyle(
+            getArtistArtworkUrl(name, cache, rawArtistNamesForCanonical(topArtist[0], metaDict)),
           );
+        }
+      }
+
+      const topTrack = stats.tracks?.[0];
+      if (topTrack && metaDict.tracks?.[topTrack[0]]) {
+        const [name, artistId, albumId] = metaDict.tracks[topTrack[0]];
+        const artistName = metaDict.artists?.[artistId] || "";
+        const albumName = metaDict.albums?.[albumId] || "";
+        accents.track = accentStyle(getArtworkUrl("track", name, artistName, albumName, cache));
+      }
+
+      const topAlbum = stats.albums?.[0];
+      if (topAlbum && metaDict.albums?.[topAlbum[0]]) {
+        const name = metaDict.albums[topAlbum[0]];
+        const artistName = metaDict.artists?.[albumToArtist.get(topAlbum[0]) ?? -1] || "";
+        accents.album = accentStyle(getArtworkUrl("album", name, artistName, name, cache));
+      }
+
+      return accents;
+    }
+
+    function renderYearStories() {
+      storyYears = Array.from(selectedYears).sort().reverse();
+      if (!rawStats || !metaDict || storyYears.length === 0) {
+        storyTrack.innerHTML = "";
+        storyDots.innerHTML = "";
+        storyPager.setPageCount(1);
+        return;
+      }
+
+      storyTrack.innerHTML = storyYears
+        .map((year) => {
+          const story = buildYearStory(
+            year,
+            rawStats![year] as { tracks?: [number, number][]; albums?: [number, number][]; artists?: [number, number][] },
+            metaDict,
+            albumToArtist,
+            yearColorMap[year],
+            storyAccents(year),
+          );
+          return `<div class="year-story-page">${story.html}</div>`;
         })
         .join("");
 
-      initArtworkImages(container);
-      applyCountGlows(container);
+      storyDots.innerHTML = storyYears
+        .map((_, i) => `<button type="button" data-story="${i}" aria-label="Year ${storyYears[i]}"></button>`)
+        .join("");
+
+      storyPager.setPageCount(storyYears.length);
+      storyIndex = Math.min(storyIndex, storyYears.length - 1);
+      storyPager.goTo(storyIndex, false);
+      syncStoryDots();
     }
 
     function updateChart() {
+      updateStatsLegend();
       if (!chart) return;
 
       for (let i = chart.data.datasets.length - 1; i >= 0; i--) {
@@ -565,7 +674,7 @@
         yearColorMap[year] = colors[idx % colors.length];
       });
 
-      checkboxGroup.innerHTML = years
+      yearsFilterPopover.innerHTML = years
         .map((year) => {
           const color = yearColorMap[year];
           const glow = hexToRgba(color, 0.4);
@@ -582,94 +691,51 @@
         `;
         })
         .join("");
+      updateYearsLabel();
+      updateStatsLegend();
     }
 
-    document.getElementById("yearCheckboxes")?.addEventListener("change", (e) => {
+    yearsFilterPopover.addEventListener("change", (e) => {
       const target = e.target as HTMLInputElement;
       if (target.tagName !== "INPUT") return;
       const year = target.value;
-      if (target.checked) selectedYears.add(year);
-      else selectedYears.delete(year);
+      if (target.checked) {
+        selectedYears.add(year);
+      } else if (selectedYears.size <= 1) {
+        target.checked = true;
+        return;
+      } else {
+        selectedYears.delete(year);
+      }
       target.closest("label")?.classList.toggle("checked", target.checked);
+      updateYearsLabel();
       updateChart();
-      renderYearlyStats();
+      renderYearStories();
+    });
+
+    yearsFilterBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      yearsFilter.classList.toggle("open");
     });
 
     document.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
-
-      if (!target.closest(".custom-dropdown")) {
-        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
-      }
-
-      const trigger = target.closest(".dropdown-trigger");
-      if (trigger) {
-        const container = trigger.closest(".custom-dropdown");
-        const wasOpen = container?.classList.contains("open");
-        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
-        if (!wasOpen) container?.classList.add("open");
-        return;
-      }
-
-      const dropItem = target.closest(".dropdown-item");
-      if (dropItem) {
-        const val = dropItem.getAttribute("data-val");
-        const container = dropItem.closest("#yearDropdownContainer");
-        if (container && val) activeYear = val;
-        else if (val) activeCategory = val as typeof activeCategory;
-        document.querySelectorAll(".custom-dropdown").forEach((el) => el.classList.remove("open"));
-        renderYearlyStats();
-      }
+      if (!target.closest("#yearsFilter")) yearsFilter.classList.remove("open");
     });
 
-    bindHorizontalSwipe({
-      element: sheetPanel,
-      onSwipeLeft: () => {
-        const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
-        if (lastSwipeTarget === "category") {
-          const cats = ["tracks", "albums", "artists"] as const;
-          let idx = cats.indexOf(activeCategory);
-          idx = Math.min(idx + 1, 2);
-          activeCategory = cats[idx];
-        } else if (activeYear) {
-          let idx = sortedSelectedYears.indexOf(activeYear);
-          idx = Math.min(idx + 1, sortedSelectedYears.length - 1);
-          if (activeYear !== sortedSelectedYears[idx]) activeYear = sortedSelectedYears[idx];
-        }
-        renderYearlyStats();
-      },
-      onSwipeRight: () => {
-        const sortedSelectedYears = Array.from(selectedYears).sort().reverse();
-        if (lastSwipeTarget === "category") {
-          const cats = ["tracks", "albums", "artists"] as const;
-          let idx = cats.indexOf(activeCategory);
-          idx = Math.max(idx - 1, 0);
-          activeCategory = cats[idx];
-        } else if (activeYear) {
-          let idx = sortedSelectedYears.indexOf(activeYear);
-          idx = Math.max(idx - 1, 0);
-          if (activeYear !== sortedSelectedYears[idx]) activeYear = sortedSelectedYears[idx];
-        }
-        renderYearlyStats();
-      },
+    storyDots.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest("button");
+      if (!btn) return;
+      const idx = Number(btn.getAttribute("data-story"));
+      if (!Number.isNaN(idx)) storyPager.goTo(idx, true);
     });
-
-    // Whichever control the gesture starts over is the one it pages — tracked
-    // for touch and for trackpad pans alike.
-    const trackSwipeTarget = (e: Event) => {
-      const target = e.target as HTMLElement;
-      lastSwipeTarget = target.closest("#categoryDropdownContainer") ? "category" : "year";
-    };
-    sheetPanel.addEventListener("touchstart", trackSwipeTarget, { passive: true });
-    // Capture so the target is recorded before the pan handler reads it.
-    sheetPanel.addEventListener("wheel", trackSwipeTarget, { passive: true, capture: true });
-
-    if (statsList) bindEntityClicks(statsList);
 
     window.addEventListener("tab-navigated", (e: Event) => {
       if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") {
         setTimeout(() => {
           if (chart) chart.resize();
+          storyPager.measure();
+          storyPager.goTo(storyIndex, false);
         }, 50);
       }
     });
@@ -682,6 +748,9 @@
     });
 
     loadData();
-    onPathsUpdated(["/data/yearly-totals.json", "/data/yearly-stats.json"], () => loadData());
+    onPathsUpdated(
+      ["/data/yearly-totals.json", "/data/yearly-stats.json", "/data/colors.json", "/data/artwork.json"],
+      () => loadData(),
+    );
   });
 </script>

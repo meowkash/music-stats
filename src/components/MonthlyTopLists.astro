@@ -6,10 +6,15 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   <slot name="intro" />
   <div class="section-header shrink-0">
     <h4>Over the last month</h4>
-    <span class="category-pill" id="monthlyCategoryPill">Top Tracks</span>
+    <div class="monthly-range" role="group" aria-label="Category">
+      <div id="monthlyRangeHighlight" class="sliding-highlight monthly-range-highlight"></div>
+      <button class="range-btn is-active" data-cat="tracks" type="button">Songs</button>
+      <button class="range-btn" data-cat="albums" type="button">Albums</button>
+      <button class="range-btn" data-cat="artists" type="button">Artists</button>
+    </div>
   </div>
   <SwipeableDeck tabs={['Tracks', 'Albums', 'Artists']} idPrefix="monthly">
-    <Fragment slot="header-tracks">Top Tracks</Fragment>
+    <Fragment slot="header-tracks">Top Songs</Fragment>
     <Fragment slot="header-albums">Top Albums</Fragment>
     <Fragment slot="header-artists">Top Artists</Fragment>
   </SwipeableDeck>
@@ -26,7 +31,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   @media (min-width: 768px) {
-    .monthly-section .category-pill {
+    .monthly-section .monthly-range {
       display: none;
     }
 
@@ -49,9 +54,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .section-header {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: space-between;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .section-header h4 {
@@ -61,18 +67,41 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     color: #fff;
   }
 
-  .category-pill {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 10px;
+  .monthly-range {
+    position: relative;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--pill-color, var(--accent-cat-songs));
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    flex-shrink: 0;
+  }
+
+  .monthly-range-highlight {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .monthly-range .range-btn {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--font-body);
+    cursor: pointer;
     white-space: nowrap;
-    /* Resting transition only — while paging, navBar-style JS painting takes
-       over and disables it so values aren't smeared frame to frame. */
-    transition: var(--transition-smooth);
+  }
+
+  .monthly-range .range-btn.is-active {
+    color: #fff;
   }
 
   @media (max-width: 767px) {
@@ -102,36 +131,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   } from "../utils/scrobbles";
   import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
   import { bindEntityClicks } from "../utils/events";
-  import { bindPagerSwipe } from "../utils/pagerSwipe";
-  import { colorToCss, createCssPaintCache, lerpColorInto, parseColor, type Rgba } from "../utils/motion";
-  import { getCategoryAccent } from "../utils/theme";
+  import { createSlidingHighlight } from "../utils/slidingHighlight";
 
   type TopCategory = "tracks" | "albums" | "artists";
 
   const CATEGORIES: TopCategory[] = ["tracks", "albums", "artists"];
-
-  const CATEGORY_LABELS: Record<TopCategory, string> = {
-    tracks: "Top Tracks",
-    albums: "Top Albums",
-    artists: "Top Artists",
-  };
-
-  const CATEGORY_COLORS: Record<TopCategory, string> = {
-    tracks: "var(--accent-cat-songs)",
-    albums: "var(--accent-cat-albums)",
-    artists: "var(--accent-cat-artists)",
-  };
-
-  /** Absolute equivalents of CATEGORY_COLORS, in CATEGORIES order. */
-  const CATEGORY_RGBA = CATEGORIES.map(
-    (cat) =>
-      parseColor(getCategoryAccent(cat === "tracks" ? "songs" : cat).color) ?? {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 1,
-      },
-  );
 
   const PAGE_IDS: Record<TopCategory, string> = {
     tracks: "monthlyPageTracks",
@@ -150,7 +154,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const isDesktopLayout = () => desktopQuery.matches;
 
     let activeIndex = 0;
-    let pillLabelIndex = 0;
     let topArtists: ReturnType<typeof rollupTopCounts>["artists"] = [];
     let topSongs: ReturnType<typeof rollupTopCounts>["tracks"] = [];
     let topAlbums: ReturnType<typeof rollupTopCounts>["albums"] = [];
@@ -159,14 +162,13 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const scrollControllers: Partial<Record<TopCategory, InfiniteScrollController>> = {};
 
     const trackEl = document.getElementById("monthlyListTrack") as HTMLDivElement;
-    const viewportEl = document.getElementById("monthlyViewport") as HTMLDivElement;
-    const pillEl = document.getElementById("monthlyCategoryPill") as HTMLSpanElement;
-    const sectionEl = document.getElementById("monthlyTopSection") as HTMLDivElement;
-    const pillPaint = createCssPaintCache();
-    const pillMix: Rgba = { r: 0, g: 0, b: 0, a: 0 };
-    let lastPillColor = "";
-    let lastPillOpacity = "";
-    let lastPillTransform = "";
+    const rangeButtons = [
+      ...document.querySelectorAll<HTMLButtonElement>(".monthly-range .range-btn"),
+    ];
+    const rangeHighlight = createSlidingHighlight({
+      highlightEl: document.getElementById("monthlyRangeHighlight") as HTMLDivElement,
+      buttons: rangeButtons,
+    });
 
     function activeCategory(): TopCategory {
       return CATEGORIES[activeIndex];
@@ -219,52 +221,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     function updateCategoryUI() {
       const cat = activeCategory();
-      pillEl.textContent = CATEGORY_LABELS[cat];
-      pillEl.style.setProperty("--pill-color", CATEGORY_COLORS[cat]);
-      sectionEl.style.setProperty("--pill-color", CATEGORY_COLORS[cat]);
-      pillEl.style.color = "";
-      pillEl.style.opacity = "";
-      pillEl.style.transform = "";
-      pillEl.style.transition = "";
-      lastPillColor = "";
-      lastPillOpacity = "";
-      lastPillTransform = "";
-      pillPaint.reset();
-      pillLabelIndex = CATEGORIES.indexOf(cat);
-    }
-
-    // Keeps the category pill in step with the slide: the label swaps at the
-    // halfway point while the accent colour interpolates continuously.
-    function renderCategoryPill(fraction: number) {
-      const clamped = Math.min(Math.max(fraction, 0), CATEGORIES.length - 1);
-      const nearest = Math.round(clamped);
-      const drift = clamped - nearest;
-
-      if (nearest !== pillLabelIndex) {
-        pillLabelIndex = nearest;
-        pillEl.textContent = CATEGORY_LABELS[CATEGORIES[nearest]];
-      }
-
-      const i0 = Math.floor(clamped);
-      const i1 = Math.min(i0 + 1, CATEGORIES.length - 1);
-      lerpColorInto(CATEGORY_RGBA[i0], CATEGORY_RGBA[i1], clamped - i0, pillMix);
-      const color = colorToCss(pillMix);
-      const opacity = String(Math.round((1 - Math.min(Math.abs(drift) * 2, 1) * 0.7) * 40) / 40);
-      const transform = pillPaint.translate3d(-drift * 14, 0);
-
-      if (pillEl.style.transition !== "none") pillEl.style.transition = "none";
-      if (color !== lastPillColor) {
-        lastPillColor = color;
-        pillEl.style.color = color;
-      }
-      if (opacity !== lastPillOpacity) {
-        lastPillOpacity = opacity;
-        pillEl.style.opacity = opacity;
-      }
-      if (transform !== lastPillTransform) {
-        lastPillTransform = transform;
-        pillEl.style.transform = transform;
-      }
+      rangeButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.getAttribute("data-cat") === cat);
+      });
+      const activeBtn = rangeButtons.find((btn) => btn.getAttribute("data-cat") === cat);
+      if (activeBtn) rangeHighlight.sync(activeBtn, true);
     }
 
     const renderedPages = new Set<TopCategory>();
@@ -298,19 +259,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       });
     }
 
-    /** Active page now; neighbours just before they scroll into view. */
-    function ensurePagesAround(index: number) {
-      renderCategoryPage(CATEGORIES[index]);
-      if (index > 0) renderCategoryPage(CATEGORIES[index - 1]);
-      if (index < CATEGORIES.length - 1) renderCategoryPage(CATEGORIES[index + 1]);
-    }
-
-    function scheduleNeighborWarmup(index: number) {
-      const warm = () => ensurePagesAround(index);
-      if ("requestIdleCallback" in window) {
-        (window as Window & { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(warm);
-      } else {
-        setTimeout(warm, 1);
+    function ensureActivePage() {
+      renderCategoryPage(CATEGORIES[activeIndex]);
+      for (const cat of CATEGORIES) {
+        pageEl(cat).classList.toggle("panel-scroll-active", isDesktopLayout() || cat === CATEGORIES[activeIndex]);
       }
     }
 
@@ -329,50 +281,35 @@ import SwipeableDeck from "./SwipeableDeck.astro";
         return;
       }
 
-      // Active page immediately so the viewport is never blank; neighbours warm
-      // on idle so the first swipe does not pay a mid-gesture HTML parse cost.
-      renderCategoryPage(CATEGORIES[activeIndex]);
-      setActiveIndex(activeIndex);
-      scheduleNeighborWarmup(activeIndex);
+      ensureActivePage();
     }
 
-    let pager: ReturnType<typeof bindPagerSwipe> | null = null;
-
-    if (!isDesktopLayout()) {
-      pager = bindPagerSwipe({
-        gestureEl: sectionEl,
-        trackEl,
-        viewportEl,
-        pageCount: CATEGORIES.length,
-        onProgress: (fraction) => {
-          // Safety net if idle warmup has not finished before the finger moves.
-          const last = CATEGORIES.length - 1;
-          const lo = Math.min(Math.max(Math.floor(fraction), 0), last);
-          const hi = Math.min(Math.max(Math.ceil(fraction), 0), last);
-          if (!renderedPages.has(CATEGORIES[lo])) renderCategoryPage(CATEGORIES[lo]);
-          if (!renderedPages.has(CATEGORIES[hi])) renderCategoryPage(CATEGORIES[hi]);
-          renderCategoryPill(fraction);
-        },
-        onSettled: (index) => {
-          activeIndex = index;
-          scheduleNeighborWarmup(index);
-          for (const cat of CATEGORIES) {
-            pageEl(cat).classList.toggle("panel-scroll-active", CATEGORIES.indexOf(cat) === index);
-          }
-          updateCategoryUI();
-        },
+    function selectCategory(cat: TopCategory, animateHighlight = true) {
+      const index = CATEGORIES.indexOf(cat);
+      if (index === -1 || index === activeIndex) return;
+      activeIndex = index;
+      rangeButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.getAttribute("data-cat") === cat);
       });
+      const activeBtn = rangeButtons.find((btn) => btn.getAttribute("data-cat") === cat);
+      if (activeBtn) rangeHighlight.sync(activeBtn, animateHighlight);
+      ensureActivePage();
     }
 
-    function setActiveIndex(index: number) {
-      pager?.goTo(index, false);
-    }
+    rangeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cat = btn.getAttribute("data-cat") as TopCategory | null;
+        if (cat) selectCategory(cat);
+      });
+    });
 
     desktopQuery.addEventListener("change", () => {
       if (isDesktopLayout()) {
         trackEl.style.transform = "";
-        trackEl.classList.remove("pager-moving");
         renderAllLists();
+      } else {
+        ensureActivePage();
+        updateCategoryUI();
       }
     });
 
@@ -420,7 +357,17 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
     }
 
-    pager?.measure();
+    const initialBtn = rangeButtons.find((btn) => btn.classList.contains("is-active"));
+    if (initialBtn) rangeHighlight.sync(initialBtn, false);
+    rangeHighlight.observe();
+
+    window.addEventListener("tab-navigated", ((e: CustomEvent<{ tab: string }>) => {
+      if (e.detail?.tab !== "recents") return;
+      requestAnimationFrame(() => {
+        const activeBtn = rangeButtons.find((btn) => btn.classList.contains("is-active"));
+        if (activeBtn) rangeHighlight.sync(activeBtn, false);
+      });
+    }) as EventListener);
 
     loadTopLists();
 

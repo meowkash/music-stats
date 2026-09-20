@@ -239,7 +239,7 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
   scrub: (fraction: number) => void;
   observe: () => ResizeObserver;
 } {
-  const { highlightEl, onSync, durationMs = 300 } = options;
+  const { highlightEl, onSync, durationMs = 240 } = options;
   const buttons = [...options.buttons] as HTMLElement[];
 
   const track = createPillTrack({

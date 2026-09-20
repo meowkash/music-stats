@@ -67,6 +67,22 @@ const { tabs, idPrefix } = Astro.props;
     flex: 0 0 100%;
   }
 
+  @media (max-width: 767px) {
+    .swipeable-list-track {
+      display: block;
+      transform: none !important;
+    }
+
+    .swipeable-list-page {
+      display: none;
+      flex: none;
+    }
+
+    .swipeable-list-page.panel-scroll-active {
+      display: block;
+    }
+  }
+
   @media (min-width: 768px) {
     .swipeable-list-track {
       gap: 12px;

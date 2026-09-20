@@ -27,5 +27,10 @@ export default defineConfig({
     define: {
       __CACHE_VERSION__: JSON.stringify(cacheVersion),
     },
+    // Latest Safari only — skip downleveling that costs parse and runtime.
+    build: {
+      target: ['es2023', 'safari18'],
+      cssTarget: 'safari18',
+    },
   },
 });

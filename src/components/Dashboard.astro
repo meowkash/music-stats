@@ -1,9 +1,11 @@
 ---
-import ActivityPath from "./ActivityPath.astro";
+import Reports from "./Reports.astro";
 import Recaps from "./Recaps.astro";
 ---
 
 <div class="dashboard-container panel-fill panel-scroll panel-scroll-active">
+  <Recaps />
+
   <!-- Stats Grid -->
   <div class="stats-grid shrink-0">
     <div class="glass-card stat-card hover-scale">
@@ -89,9 +91,7 @@ import Recaps from "./Recaps.astro";
     </div>
   </div>
 
-  <Recaps />
-
-  <ActivityPath />
+  <Reports />
 </div>
 
 <style>
@@ -106,14 +106,13 @@ import Recaps from "./Recaps.astro";
     min-height: 0;
   }
 
-  /* The recaps rail keeps its natural height; the listening path takes
-     whatever is left over. */
-  .dashboard-container :global(.activity-card) {
+  /* Recaps stay compact; reports fill the leftover dashboard height. */
+  .dashboard-container :global(.reports-card) {
     flex: 1 1 auto;
     min-height: 0;
   }
 
-  .dashboard-container :global(.recaps-card) {
+  .dashboard-container :global(.recaps-stories) {
     flex: 0 0 auto;
   }
 

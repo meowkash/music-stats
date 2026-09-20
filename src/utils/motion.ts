@@ -1,8 +1,15 @@
 export type Easing = (t: number) => number;
 
-// Single source of truth for motion feel. Mirrors the CSS `--ios-spring` curve
-// so JS- and CSS-driven animations match exactly.
-export const IOS_SPRING_POINTS = [0.16, 1, 0.3, 1] as const;
+// Smooth decelerate without the expo-out stall. Matches CSS `--ios-spring`.
+// Ease-out-expo (0.16, 1, 0.3, 1) spends too long in the last 10% and reads as lag.
+export const IOS_SPRING_POINTS = [0.22, 1, 0.36, 1] as const;
+
+/** iOS-like page spring: almost critically damped, slight settle, no bounce. */
+export const SPRING_PAGE = { stiffness: 340, damping: 36 } as const;
+/** Horizontal pagers (rankings, recents) — stiffer so a page-width fling doesn't crawl. */
+export const SPRING_PAGER = { stiffness: 820, damping: 52 } as const;
+/** Nav pill / tab index — a touch snappier than a full-page slide. */
+export const SPRING_NAV = { stiffness: 420, damping: 38 } as const;
 
 function bezierAxis(t: number, p1: number, p2: number): number {
   const inv = 1 - t;
@@ -50,6 +57,9 @@ export const easeIos: Easing = (t: number) => {
   return EASE_LUT[i] + (EASE_LUT[i + 1] - EASE_LUT[i]) * frac;
 };
 
+/** Decelerate into the target without crossing it. */
+export const easeOutCubic: Easing = (t) => 1 - (1 - t) ** 3;
+
 export function rafTween(
   from: number,
   to: number,
@@ -83,6 +93,69 @@ export function rafTween(
     } else {
       onComplete?.();
     }
+  };
+
+  rafId = requestAnimationFrame(tick);
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(rafId);
+  };
+}
+
+export interface SpringOptions {
+  stiffness?: number;
+  damping?: number;
+  /** Units per second. Gesture flings should pass their last velocity here. */
+  velocity?: number;
+  restDelta?: number;
+  restSpeed?: number;
+}
+
+// Critically-damped-ish Hookean spring. Duration-based tweens fight the finger
+// on interrupt; this continues from wherever the gesture left the value.
+export function springTween(
+  from: number,
+  to: number,
+  onUpdate: (value: number) => void,
+  onComplete?: () => void,
+  options: SpringOptions = {},
+): () => void {
+  const stiffness = options.stiffness ?? SPRING_PAGE.stiffness;
+  const damping = options.damping ?? SPRING_PAGE.damping;
+  const restDelta = options.restDelta ?? Math.max(0.001, Math.abs(to - from) * 0.001);
+  const restSpeed = options.restSpeed ?? 0.15;
+  let x = from;
+  let v = options.velocity ?? 0;
+  let cancelled = false;
+  let rafId = 0;
+  let last = performance.now();
+
+  if (from === to && Math.abs(v) < restSpeed) {
+    onUpdate(to);
+    onComplete?.();
+    return () => {};
+  }
+
+  const tick = (now: number) => {
+    if (cancelled) return;
+    const dt = Math.min((now - last) / 1000, 1 / 30);
+    last = now;
+    const accel = -stiffness * (x - to) - damping * v;
+    v += accel * dt;
+    x += v * dt;
+
+    const settled = Math.abs(x - to) < restDelta && Math.abs(v) < restSpeed;
+    try {
+      onUpdate(settled ? to : x);
+    } catch (err) {
+      console.error('[Motion] springTween onUpdate threw:', err);
+    }
+    if (settled) {
+      onComplete?.();
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
   };
 
   rafId = requestAnimationFrame(tick);
