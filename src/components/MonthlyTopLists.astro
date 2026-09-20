@@ -30,7 +30,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     min-height: 0;
   }
 
-  @media (min-width: 768px) {
+  @media (min-width: 1280px) {
     .monthly-section .monthly-range {
       display: none;
     }
@@ -150,7 +150,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   };
 
   document.addEventListener("DOMContentLoaded", () => {
-    const desktopQuery = window.matchMedia("(min-width: 768px)");
+    const desktopQuery = window.matchMedia("(min-width: 1280px)");
     const isDesktopLayout = () => desktopQuery.matches;
 
     let activeIndex = 0;

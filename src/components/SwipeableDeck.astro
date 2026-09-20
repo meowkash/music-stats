@@ -67,7 +67,8 @@ const { tabs, idPrefix } = Astro.props;
     flex: 0 0 100%;
   }
 
-  @media (max-width: 767px) {
+  /* Phone + tablet: one full-width column at a time (pills switch). */
+  @media (max-width: 1279px) {
     .swipeable-list-track {
       display: block;
       transform: none !important;
@@ -83,7 +84,8 @@ const { tabs, idPrefix } = Astro.props;
     }
   }
 
-  @media (min-width: 768px) {
+  /* XL / laptop+: Songs / Albums / Artists side by side. */
+  @media (min-width: 1280px) {
     .swipeable-list-track {
       gap: 12px;
       transform: none !important;
