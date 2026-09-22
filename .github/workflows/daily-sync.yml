@@ -46,7 +46,9 @@ jobs:
         run: |
           aws s3 cp s3://music-stats/scrobbles.csv src/data/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No scrobbles.csv found in R2"
           aws s3 cp s3://music-stats/artwork.json src/data/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No artwork.json found in R2"
-          aws s3 cp s3://music-stats/colors.json public/data/colors.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No colors.json found in R2"
+          # colors.json is sharded into public/data/colors/NN.json; readDataset()
+          # reassembles the directory, and writeDataset() deletes the monolith.
+          aws s3 sync s3://music-stats/colors/ public/data/colors/ --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No colors shards found in R2"
           # Without this the Last.fm enrichment restarts from empty every run and
           # re-fetches the whole catalogue (~13k requests) instead of just what's new.
           aws s3 cp s3://music-stats/recap-meta-cache.json src/data/recap-meta-cache.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No recap-meta-cache.json found in R2"
@@ -110,7 +112,7 @@ jobs:
         run: |
           aws s3 cp src/data/scrobbles.csv s3://music-stats/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 cp src/data/artwork.json s3://music-stats/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          aws s3 cp public/data/colors.json s3://music-stats/colors.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          aws s3 sync public/data/colors/ s3://music-stats/colors/ --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 cp src/data/recap-meta-cache.json s3://music-stats/recap-meta-cache.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
 
       - name: Deploy to Cloudflare Pages
