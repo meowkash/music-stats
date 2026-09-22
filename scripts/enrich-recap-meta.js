@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createLastfmClient, loadEnv, LastfmNotFound } from './lastfm-client.js';
+import { readDataset } from './data-files.js';
 
 loadEnv();
 
@@ -15,7 +16,6 @@ if (!API_KEY || !USERNAME) {
 }
 
 const META_PATH = path.resolve('public/data/meta.json');
-const CATALOG_PATH = path.resolve('public/data/catalog.json');
 const CACHE_PATH = path.resolve('src/data/recap-meta-cache.json');
 
 const CHECKPOINT_EVERY = 150;
@@ -75,7 +75,7 @@ async function main() {
   }
 
   const { artists, tracks } = meta;
-  const catalog = readJson(CATALOG_PATH, {});
+  const catalog = readDataset(path.resolve('public/data'), 'catalog.json') ?? {};
   const cache = loadCache();
 
   // Most-played first, so an interrupted run still covers what matters most.

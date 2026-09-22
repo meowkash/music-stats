@@ -9,14 +9,17 @@ import {
 } from './ui';
 import { bindEdgeSwipeNav, bindSwipeDismiss } from './overlayGestures';
 import {
-  populateOverlay,
   bindOverlayClicks,
   buildOverlayPayload,
   applyOverlayContent,
+  applyOverlayShell,
+  applyOverlayLists,
+  clearOverlayContent,
   crossfadeOverlayContent,
   initOverlayAlbumArtwork,
   type OverlayElements,
 } from './overlayPopulate';
+import { crossfadeOverlayArtwork } from './overlayArtwork';
 import { resetOverlayArtworkLayers } from './overlayArtwork';
 import {
   OVERLAY_CROSSFADE_MS,
@@ -129,8 +132,23 @@ export function initDetailOverlay(): void {
   type NavMode = 'push' | 'back' | 'forward';
 
   let closeCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped by every open and by close; deferred content work bails when stale. */
+  let currentOpenToken = 0;
+
+  /** Restarts the entrance transition from its off-screen end state. */
+  function startEntrance(): void {
+    // A cold open inherits the previous entity's scroll offset otherwise.
+    overlayScrollContainer.scrollTop = 0;
+    panel.classList.remove('sheet-closing');
+    panel.classList.remove('visible');
+    backdrop.classList.remove('visible');
+    void panel.offsetWidth;
+    panel.classList.add('visible');
+    backdrop.classList.add('visible');
+  }
 
   function runCloseCleanup() {
+    panel.classList.remove('sheet-closing');
     panel.style.removeProperty('--overlay-bg-bottom');
     overlayScrollContainer.style.removeProperty('--overlay-bg-bottom');
     clearContentTransition(contentRegions);
@@ -151,6 +169,10 @@ export function initDetailOverlay(): void {
       closeCleanupTimer = null;
     }
 
+    // Invalidates any deferred populate still queued from the open.
+    currentOpenToken++;
+
+    panel.classList.add('sheet-closing');
     panel.classList.remove('visible');
     backdrop.classList.remove('visible');
     document.body.classList.remove('overlay-open');
@@ -162,10 +184,12 @@ export function initDetailOverlay(): void {
 
     // Let the slide-out start on the compositor before tearing down artwork /
     // lists — that sync work was the main source of the "delayed" dismiss feel.
+    // Must outlast --duration-sheet-out, or artwork is torn down while the
+    // panel is still on screen.
     closeCleanupTimer = setTimeout(() => {
       closeCleanupTimer = null;
       runCloseCleanup();
-    }, 180);
+    }, 280);
   }
 
   async function openDetails(
@@ -198,8 +222,26 @@ export function initDetailOverlay(): void {
     document.body.classList.add('overlay-open');
     setOverlayOpen('detail', true);
 
-    const data = getCachedData() || (await ensureData());
-    if (!data) return;
+    const openToken = ++currentOpenToken;
+    const isColdOpen = !isSwitchingEntity;
+
+    // The entrance is a compositor-driven transform. Nothing that costs main
+    // thread — data loads, list building, artwork decode — may run before it
+    // starts, or the sheet sits still and then jumps.
+    const cached = getCachedData();
+    if (isColdOpen && !cached) {
+      // Data still loading. Blank the previous entity's content and bring the
+      // sheet up now; text and lists fill in behind the animation.
+      clearOverlayContent(elements);
+      startEntrance();
+    }
+
+    const data = cached ?? (await ensureData());
+    if (openToken !== currentOpenToken) return;
+    if (!data) {
+      if (isColdOpen) closeDetails();
+      return;
+    }
 
     const artworkCache = getArtworkCacheSync() || {};
     const catalogKey = artistCatalog ?? (type === 'artist' ? 'canonicalArtists' : undefined);
@@ -212,21 +254,34 @@ export function initDetailOverlay(): void {
       catalogKey ?? 'canonicalArtists',
     );
 
-    if (!isSwitchingEntity) {
-      await populateOverlay(type, id, data.meta, data.catalog, {
-        elements,
-        artworkCache,
-        onNavigate: (t, i, catalog) => openDetails(t, i, 'push', catalog),
-        animate: false,
-        scrollContainer: overlayScrollContainer,
-        panel,
-      }, catalogKey ?? 'canonicalArtists');
+    if (isColdOpen) {
+      // O(1) work only — title, subtitle, colour wash. Safe in the frame that
+      // kicks off the slide.
+      applyOverlayShell(payload, elements, overlayScrollContainer, panel);
+      if (cached) startEntrance();
 
-      panel.classList.remove('visible');
-      backdrop.classList.remove('visible');
-      void panel.offsetWidth;
-      panel.classList.add('visible');
-      backdrop.classList.add('visible');
+      // Two frames in, the transform is committed and running on the
+      // compositor, so the list build can't stutter it.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (openToken !== currentOpenToken) return;
+          applyOverlayLists(payload, elements, artworkCache);
+          initOverlayAlbumArtwork(elements.overlayAlbumsList);
+          // Not awaited: artwork resolution hits the network on a cold cache.
+          void crossfadeOverlayArtwork(
+            {
+              front: elements.overlayArtworkFront,
+              back: elements.overlayArtworkBack,
+              fallback: elements.overlayArtworkFallback,
+              bgBlur: elements.overlayBgBlur,
+              wrapper: elements.overlayArtworkWrapper,
+            },
+            payload.imgUrl,
+            OVERLAY_CROSSFADE_MS,
+            'forward',
+          );
+        });
+      });
       return;
     }
 

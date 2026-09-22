@@ -3,6 +3,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { QuantizerCelebi, Score, argbFromRgb, themeFromSourceColor } from '@material/material-color-utilities';
 import { isStaticArtworkUrl, normalizeStaticArtworkUrl } from './artwork-utils.js';
+import { readDataset, writeDataset } from './data-files.js';
 import {
   extractBottomSurfaceColor,
   BOTTOM_COLOR_VERSION,
@@ -11,7 +12,6 @@ import {
 const DATA_DIR = path.resolve('src/data');
 const PUBLIC_DATA_DIR = path.resolve('public/data');
 const ARTWORK_PATH = path.join(DATA_DIR, 'artwork.json');
-const COLORS_PATH = path.join(PUBLIC_DATA_DIR, 'colors.json');
 const refresh = process.argv.includes('--refresh');
 
 function pixelsFromRaw(data, info) {
@@ -143,10 +143,7 @@ async function extractColors() {
   }
 
   const artworkCache = JSON.parse(fs.readFileSync(ARTWORK_PATH, 'utf-8'));
-  let existingColors = {};
-  if (fs.existsSync(COLORS_PATH)) {
-    existingColors = JSON.parse(fs.readFileSync(COLORS_PATH, 'utf-8'));
-  }
+  const existingColors = readDataset(PUBLIC_DATA_DIR, 'colors.json') ?? {};
 
   const uniqueUrls = new Set(
     Object.values(artworkCache)
@@ -177,11 +174,11 @@ async function extractColors() {
 
     if (i % 100 === 0 && i > 0) {
       console.log(`Processed ${i}/${urlsToProcess.length} artworks...`);
-      fs.writeFileSync(COLORS_PATH, JSON.stringify(newColors), 'utf-8');
+      writeDataset(PUBLIC_DATA_DIR, 'colors.json', newColors);
     }
   }
 
-  fs.writeFileSync(COLORS_PATH, JSON.stringify(newColors), 'utf-8');
+  writeDataset(PUBLIC_DATA_DIR, 'colors.json', newColors);
   console.log(`Extraction complete! Extracted ${processed} colors, ${failed} failed.`);
 }
 

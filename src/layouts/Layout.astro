@@ -491,8 +491,14 @@ const washStyles = [
 		--radius-sheet: 20px;
 		/* Snappier than --duration-slow: at 500ms the eye reads the soft landing
 		   as lag at the start of the gesture, even on a spring curve. */
-		--duration-sheet: 0.14s;
+		/* A 92lvh sheet needs travel time to read as a slide rather than a snap.
+		   Both curves are front-loaded, so most of the distance is covered early
+		   and the motion still feels immediate. Keep CLOSE_SETTLE_MS in
+		   utils/overlayState.ts >= --duration-sheet-out. */
+		--duration-sheet-in: 0.36s;
+		--duration-sheet-out: 0.26s;
 		--ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
+		--ease-sheet-out: cubic-bezier(0.4, 0, 0.7, 0.2);
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
 		--nav-bar-height: 64px;
@@ -667,12 +673,14 @@ const washStyles = [
 		background: rgba(0, 0, 0, 0.55);
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity var(--duration-sheet) var(--ease-sheet);
+		transition: opacity var(--duration-sheet-out) var(--ease-sheet-out);
 	}
 
 	.app-sheet-backdrop.visible {
 		opacity: 1;
 		pointer-events: auto;
+		/* Dim leads the panel in slightly so the sheet never rises over a bright page. */
+		transition: opacity calc(var(--duration-sheet-in) * 0.6) var(--ease-sheet);
 	}
 
 	.app-sheet-panel {
@@ -680,7 +688,7 @@ const washStyles = [
 		z-index: var(--z-overlay-panel);
 		background: var(--overlay-bg-bottom, var(--surface-elevated));
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-		transition: transform var(--duration-sheet) var(--ease-sheet);
+		transition: transform var(--duration-sheet-out) var(--ease-sheet-out);
 		overflow: hidden;
 		/* paint only — layout/style containment caused stale widths on iOS rotation */
 		contain: paint;
@@ -690,11 +698,15 @@ const washStyles = [
 
 	.app-sheet-panel.visible {
 		transform: none;
+		transition: transform var(--duration-sheet-in) var(--ease-sheet);
 	}
 
-	/* Promote before/during motion so the first frame of the entrance isn't a hitch. */
+	/* Promote before/during motion so the first frame of the entrance isn't a hitch.
+	   `sheet-closing` holds the promotion through the exit — dropping will-change
+	   as .visible comes off de-promotes the layer mid-animation. */
 	.app-sheet-panel.visible,
-	.app-sheet-panel.sheet-dragging {
+	.app-sheet-panel.sheet-dragging,
+	.app-sheet-panel.sheet-closing {
 		will-change: transform;
 	}
 

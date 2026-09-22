@@ -192,7 +192,13 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
         // this path, so a cold offline launch paints the same as a warm one.
         const hydrated = await hydrateFromStore();
         if (!hydrated) await ensureInitialGeneration();
-        await Promise.all([loadColorsCache(), preloadAppData()]);
+
+        // Colours are deliberately not awaited: loadColorsCache() ends in
+        // repaintPendingGlows(), so rows that painted on the fallback glow are
+        // corrected when it lands. Awaiting 1.4 MB of reassembly here just
+        // delayed first paint for a second-pass effect.
+        void loadColorsCache();
+        await preloadAppData();
       } catch (err) {
         console.warn("Data hydration failed:", err);
       }

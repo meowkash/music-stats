@@ -1,3 +1,4 @@
+import type { DatasetMap } from './datasets';
 import {
   FILE_STORE,
   META_STORE,
@@ -18,6 +19,9 @@ export interface Manifest {
   generation: string;
   builtAt: string;
   files: ManifestFile[];
+  // Absent on manifests built before the shard split; dataStore treats a
+  // missing map as "every path is a whole file", which is the old behaviour.
+  datasets?: DatasetMap;
   artwork: string[];
 }
 

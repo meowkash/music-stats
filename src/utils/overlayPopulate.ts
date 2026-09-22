@@ -13,7 +13,6 @@ import {
 import { getGlowStyle } from './theme';
 import type { ArtistCatalogKey } from './events';
 import {
-  crossfadeOverlayArtwork,
   crossfadeOverlayVisuals,
   washGradient,
   applyOverlayBackground,
@@ -37,15 +36,6 @@ export interface OverlayElements {
   overlayAlbumsSection: HTMLElement;
   overlayAlbumsHeader: HTMLElement;
   overlayAlbumsList: HTMLElement;
-}
-
-export interface PopulateContext {
-  elements: OverlayElements;
-  artworkCache: Record<string, string>;
-  onNavigate: (type: string, id: number, artistCatalog?: ArtistCatalogKey) => void;
-  animate?: boolean;
-  scrollContainer?: HTMLElement;
-  panel?: HTMLElement;
 }
 
 export interface OverlayPayload {
@@ -205,22 +195,18 @@ function applyOverlayTheme(
   }
 }
 
-export function applyOverlayContent(
+/**
+ * Text, colour wash and artwork fallback — everything whose cost is O(1) in the
+ * size of the entity. Cheap enough to run in the frame that starts the sheet's
+ * entrance; `applyOverlayLists` carries the O(tracks) work that must not.
+ */
+export function applyOverlayShell(
   payload: OverlayPayload,
   elements: OverlayElements,
-  artworkCache: Record<string, string>,
   scrollContainer?: HTMLElement,
   panel?: HTMLElement,
 ): void {
-  const {
-    overlayTitle,
-    overlaySubtitle,
-    overlayMetadata,
-    overlaySongsList,
-    overlayAlbumsSection,
-    overlayAlbumsHeader,
-    overlayAlbumsList,
-  } = elements;
+  const { overlayTitle, overlaySubtitle, overlayMetadata } = elements;
 
   overlayTitle.textContent = payload.name;
 
@@ -232,19 +218,6 @@ export function applyOverlayContent(
 
   overlayMetadata.textContent = payload.metadataStr;
 
-  populateTrackList(payload.sortedTracks, overlaySongsList);
-  populateAlbums(payload.type, payload.albumsToRender, payload.artistNameForArtworkLookup, {
-    overlayAlbumsSection,
-    overlayAlbumsHeader,
-    overlayAlbumsList,
-    artworkCache,
-  });
-
-  const glowStyle = getGlowStyle(payload.colors.primary);
-  overlaySongsList.querySelectorAll('.scrobble-count-val').forEach((el) => {
-    el.setAttribute('style', glowStyle);
-  });
-
   applyOverlayTheme(payload, elements, scrollContainer, panel);
 
   const { overlayArtworkFallback } = elements;
@@ -254,6 +227,52 @@ export function applyOverlayContent(
     overlayArtworkFallback.innerHTML = getArtworkFallbackIcon(payload.type);
     overlayArtworkFallback.classList.remove('hidden');
   }
+}
+
+/** Bumped on every list build; an in-flight chunk loop stops when it goes stale. */
+let trackListToken = 0;
+
+/**
+ * Blanks the previous entity so a sheet that opens before its data has loaded
+ * doesn't slide up carrying whatever was shown last.
+ */
+export function clearOverlayContent(elements: OverlayElements): void {
+  trackListToken++;
+  elements.overlayTitle.textContent = '';
+  elements.overlaySubtitle.textContent = '';
+  elements.overlayMetadata.textContent = '';
+  elements.overlaySongsList.innerHTML = '';
+  elements.overlayAlbumsList.innerHTML = '';
+  elements.overlayAlbumsSection.classList.add('hidden');
+}
+
+/** Track and album lists — O(tracks + albums), so keep it off the entrance frame. */
+export function applyOverlayLists(
+  payload: OverlayPayload,
+  elements: OverlayElements,
+  artworkCache: Record<string, string>,
+): void {
+  const { overlaySongsList, overlayAlbumsSection, overlayAlbumsHeader, overlayAlbumsList } =
+    elements;
+
+  populateTrackList(payload.sortedTracks, overlaySongsList, getGlowStyle(payload.colors.primary));
+  populateAlbums(payload.type, payload.albumsToRender, payload.artistNameForArtworkLookup, {
+    overlayAlbumsSection,
+    overlayAlbumsHeader,
+    overlayAlbumsList,
+    artworkCache,
+  });
+}
+
+export function applyOverlayContent(
+  payload: OverlayPayload,
+  elements: OverlayElements,
+  artworkCache: Record<string, string>,
+  scrollContainer?: HTMLElement,
+  panel?: HTMLElement,
+): void {
+  applyOverlayShell(payload, elements, scrollContainer, panel);
+  applyOverlayLists(payload, elements, artworkCache);
 }
 
 export async function crossfadeOverlayContent(
@@ -285,44 +304,51 @@ export async function crossfadeOverlayContent(
   );
 }
 
-export async function populateOverlay(
-  type: string,
-  id: number,
-  dictionary: MetaData,
-  catalogData: Record<string, any>,
-  ctx: PopulateContext,
-  artistCatalog: 'artists' | 'canonicalArtists' = 'canonicalArtists',
-): Promise<void> {
-  const { elements, artworkCache, animate = false, scrollContainer, panel } = ctx;
-  const payload = buildOverlayPayload(type, id, dictionary, catalogData, artworkCache, artistCatalog);
+/** Rows built in the first pass — more than fills a 92lvh sheet, so the rest can wait. */
+const TRACK_FIRST_CHUNK = 24;
+/** Rows appended per idle callback once the entrance has settled. */
+const TRACK_CHUNK_SIZE = 60;
 
-  applyOverlayContent(payload, elements, artworkCache, scrollContainer, panel);
-
-  if (animate) {
-    await crossfadeOverlayContent(payload, elements, OVERLAY_CROSSFADE_MS, 'forward', scrollContainer, panel);
-  } else {
-    await crossfadeOverlayArtwork(
+function renderTrackRows(
+  tracks: { name: string; count: number }[],
+  offset: number,
+  limit: number,
+  countStyle: string,
+): string {
+  let html = '';
+  const end = Math.min(offset + limit, tracks.length);
+  for (let i = offset; i < end; i++) {
+    html += generateScrobbleRowHTML(
       {
-        front: elements.overlayArtworkFront,
-        back: elements.overlayArtworkBack,
-        fallback: elements.overlayArtworkFallback,
-        bgBlur: elements.overlayBgBlur,
-        wrapper: elements.overlayArtworkWrapper,
+        type: 'track',
+        id: 0,
+        rank: i + 1,
+        name: tracks[i].name,
+        subtitle: '',
+        imgUrl: null,
+        count: tracks[i].count,
+        showThumb: false,
+        countStyle,
       },
-      payload.imgUrl,
-      OVERLAY_CROSSFADE_MS,
-      'forward',
+      true,
     );
   }
-
-  initOverlayAlbumArtwork(elements.overlayAlbumsList);
+  return html;
 }
+
+const scheduleIdle: (cb: () => void) => void =
+  typeof requestIdleCallback === 'function'
+    ? (cb) => void requestIdleCallback(() => cb(), { timeout: 200 })
+    : (cb) => void setTimeout(cb, 16);
 
 function populateTrackList(
   sortedTracks: { name: string; count: number }[] | null,
   overlaySongsList: HTMLElement,
+  countStyle: string,
 ): void {
+  const token = ++trackListToken;
   const overlaySongsSection = overlaySongsList.parentElement;
+
   if (sortedTracks === null) {
     overlaySongsSection?.classList.add('hidden');
     overlaySongsList.innerHTML = '';
@@ -335,23 +361,22 @@ function populateTrackList(
     return;
   }
 
-  overlaySongsList.innerHTML = sortedTracks
-    .map((track, idx) =>
-      generateScrobbleRowHTML(
-        {
-          type: 'track',
-          id: 0,
-          rank: idx + 1,
-          name: track.name,
-          subtitle: '',
-          imgUrl: null,
-          count: track.count,
-          showThumb: false,
-        },
-        true,
-      ),
-    )
-    .join('');
+  overlaySongsList.innerHTML = renderTrackRows(sortedTracks, 0, TRACK_FIRST_CHUNK, countStyle);
+  if (sortedTracks.length <= TRACK_FIRST_CHUNK) return;
+
+  // Remaining rows land during idle time. The sheet is already up and the first
+  // screenful is already there, so this is invisible unless you scroll fast.
+  let offset = TRACK_FIRST_CHUNK;
+  const appendNext = () => {
+    if (token !== trackListToken) return;
+    overlaySongsList.insertAdjacentHTML(
+      'beforeend',
+      renderTrackRows(sortedTracks, offset, TRACK_CHUNK_SIZE, countStyle),
+    );
+    offset += TRACK_CHUNK_SIZE;
+    if (offset < sortedTracks.length) scheduleIdle(appendNext);
+  };
+  scheduleIdle(appendNext);
 }
 
 function populateAlbums(

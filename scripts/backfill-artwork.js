@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readDataset } from './data-files.js';
 import {
   isStaticArtworkUrl,
   normalizeStaticArtworkUrl,
@@ -50,7 +51,7 @@ const DATA_DIR = path.resolve('src/data');
 const ARTWORK_PATH = path.join(DATA_DIR, 'artwork.json');
 const OVERRIDES_PATH = path.join(DATA_DIR, 'artwork-overrides.json');
 const UNRESOLVED_PATH = path.join(DATA_DIR, 'artwork-unresolved.json');
-const CATALOG_PATH = path.resolve('public/data/catalog.json');
+const PUBLIC_DATA_DIR = path.resolve('public/data');
 const META_PATH = path.resolve('public/data/meta.json');
 
 /** One cache for the whole run, so every episode of a series costs one lookup. */
@@ -280,15 +281,15 @@ async function main() {
   const artworkCache = loadJson(ARTWORK_PATH, {});
   console.log(`Loaded ${Object.keys(artworkCache).length} existing artwork entries.`);
 
-  if (!fs.existsSync(CATALOG_PATH) || !fs.existsSync(META_PATH)) {
-    console.error('Error: catalog.json and meta.json required. Run "npm run build" first.');
+  const catalog = readDataset(PUBLIC_DATA_DIR, 'catalog.json');
+  if (!catalog || !fs.existsSync(META_PATH)) {
+    console.error('Error: catalog and meta.json required. Run "npm run build" first.');
     process.exit(1);
   }
 
   if (pruneDead) await pruneDeadUrls(artworkCache);
   applyOverrides(artworkCache);
 
-  const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'));
   const meta = JSON.parse(fs.readFileSync(META_PATH, 'utf-8'));
 
   const albums = Object.values(catalog.albums || {})

@@ -12,6 +12,9 @@ export interface ScrobbleRowData {
   imgUrl: string | null;
   count: number | string;
   color?: string;
+  /** Pre-built style for the count cell. Takes precedence over `color` — lets a
+      caller bake the glow in at build time instead of re-styling every row after. */
+  countStyle?: string;
   infoHtml?: string;
   showThumb?: boolean;
   artistCatalog?: 'artists' | 'canonicalArtists';
@@ -450,7 +453,9 @@ export function generateScrobbleRowHTML(data: ScrobbleRowData, showRank: boolean
   const thumbContent = showThumb ? getArtworkThumbHTML(data.imgUrl, data.type || 'track') : '';
   const rankClass = data.rank && data.rank <= 3 ? ` rank-${data.rank}` : '';
   const rankHtml = showRank ? `<span class="scrobble-row-rank${rankClass}">${data.rank}</span>` : '';
-  const countColorStyle = data.color ? `color: ${data.color}; text-shadow: 0 0 10px ${data.color}80;` : '';
+  const countColorStyle =
+    data.countStyle ??
+    (data.color ? `color: ${data.color}; text-shadow: 0 0 10px ${data.color}80;` : '');
 
   const infoBlock = data.infoHtml ?? `
         <span class="scrobble-row-title">${escapeHTML(data.name)}</span>

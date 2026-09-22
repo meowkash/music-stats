@@ -4,6 +4,7 @@ import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normali
 import { parseCSVLine } from './scrobble-source.js';
 import fs from 'fs';
 import path from 'path';
+import { writeDataset } from './data-files.js';
 
 const DATA_DIR = path.resolve('src/data');
 const PUBLIC_DATA_DIR = path.resolve('public/data');
@@ -429,9 +430,12 @@ function main() {
     }
   }
 
-  const catalogPath = path.join(PUBLIC_DATA_DIR, 'catalog.json');
-  fs.writeFileSync(catalogPath, JSON.stringify(catalog), 'utf-8');
-  console.log(`Wrote pre-aggregated catalog to ${catalogPath}`);
+  // Shards are placed by canonical artist, which needs the same dictionaries
+  // meta.json carries — see SHARDED_DATASETS in data-files.js.
+  writeDataset(PUBLIC_DATA_DIR, 'catalog.json', catalog, {
+    meta: { tracks, rawToCanonical, trackToCanonical },
+  });
+  console.log(`Wrote pre-aggregated catalog to ${PUBLIC_DATA_DIR}/catalog/`);
 
   // Promote raw-artist artwork onto canonical display names, then publish cache
   if (fs.existsSync(ARTWORK_PATH)) {
@@ -441,8 +445,8 @@ function main() {
       fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
       console.log(`Promoted artwork for ${promoted} canonical artists`);
     }
-    fs.copyFileSync(ARTWORK_PATH, path.join(PUBLIC_DATA_DIR, 'artwork.json'));
-    console.log(`Copied artwork.json to public directory`);
+    writeDataset(PUBLIC_DATA_DIR, 'artwork.json', artworkCache);
+    console.log(`Published artwork cache to ${PUBLIC_DATA_DIR}/artwork/`);
   }
 
   console.log("Data aggregation and processing completed successfully.");

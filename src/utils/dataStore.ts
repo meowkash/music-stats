@@ -1,16 +1,20 @@
-import { FILE_STORE, idbKeys } from './persist/idb';
 import {
   MANIFEST_PATH,
   collectGarbage,
-  hashText,
   loadActiveManifest,
   readBootHint,
   readStoredFile,
   saveActiveManifest,
   writeBootHint,
-  writeStoredFiles,
   type Manifest,
 } from './persist/generations';
+import {
+  buildShardOwnerIndex,
+  expandDatasetPaths,
+  mergeShards,
+  type DatasetMap,
+} from './persist/datasets';
+import { syncFiles } from './dataSyncClient';
 
 declare const __CACHE_VERSION__: string | undefined;
 
@@ -18,7 +22,6 @@ export const CACHE_VERSION =
   typeof __CACHE_VERSION__ !== 'undefined' ? __CACHE_VERSION__ : 'dev';
 
 const NETWORK_TIMEOUT_MS = 10000;
-const DOWNLOAD_CONCURRENCY = 4;
 
 /** Parsed data for the active generation, keyed by data path. */
 const memory = new Map<string, unknown>();
@@ -26,6 +29,34 @@ const inflight = new Map<string, Promise<unknown>>();
 
 let activeManifest: Manifest | null = null;
 let staging = false;
+
+// Component scripts start reading on DOMContentLoaded, which races the boot
+// sequence that establishes the manifest. Before sharding, losing that race was
+// harmless — the path fell through to a direct network read of a file that
+// existed. A sharded dataset has no such file, so a read that arrives early
+// must wait to learn whether its path is a dataset.
+let manifestSettled = false;
+let settleManifestReady: () => void;
+const manifestReady = new Promise<void>((resolve) => {
+  settleManifestReady = resolve;
+});
+
+function settleManifest(): void {
+  if (manifestSettled) return;
+  manifestSettled = true;
+  settleManifestReady();
+}
+
+/** Bounded: a boot that never resolves a manifest must not wedge every read. */
+const MANIFEST_WAIT_MS = 5000;
+
+async function awaitManifest(): Promise<void> {
+  if (manifestSettled) return;
+  await Promise.race([
+    manifestReady,
+    new Promise<void>((resolve) => setTimeout(resolve, MANIFEST_WAIT_MS)),
+  ]);
+}
 
 export const CRITICAL_DATA_PATHS = [
   '/data/meta.json',
@@ -90,10 +121,51 @@ function dispatch<T>(name: string, detail: T): void {
 
 /** Rebuilt whenever the pointer moves; `manifestEntry` sits on every data read. */
 let activeHashByPath = new Map<string, string>();
+/** Sharded dataset path -> its shard files. Empty for a pre-shard manifest. */
+let activeDatasets: DatasetMap = {};
+/** Shard path -> the dataset path it feeds, so a changed shard invalidates it. */
+let shardOwners = new Map<string, string>();
 
 function setActiveManifest(manifest: Manifest | null): void {
   activeManifest = manifest;
   activeHashByPath = new Map(manifest?.files.map((f) => [f.path, f.hash]) ?? []);
+  activeDatasets = manifest?.datasets ?? {};
+  shardOwners = buildShardOwnerIndex(activeDatasets);
+}
+
+/** Reads every shard of a dataset from the store and reassembles it. */
+async function readDataset<T>(datasetPath: string): Promise<T | undefined> {
+  const spec = activeDatasets[datasetPath];
+  if (!spec) return undefined;
+
+  const shards = await Promise.all(
+    spec.files.map(async (file) => {
+      const hash = activeHashByPath.get(file);
+      return hash ? await readStoredFile<unknown>(hash) : undefined;
+    }),
+  );
+
+  // A dataset is all-or-nothing: a partial merge would look like missing data
+  // rather than a failed read, and would be cached as such.
+  if (shards.some((shard) => shard === undefined)) return undefined;
+  return mergeShards(shards, spec.kind) as T;
+}
+
+/** Manifest entries for a dataset's shards, for handing to the sync worker. */
+function shardFilesFor(datasetPath: string): Array<{ path: string; hash: string; bytes: number }> {
+  const spec = activeDatasets[datasetPath];
+  if (!spec) return [];
+  const byPath = new Map(activeManifest?.files.map((f) => [f.path, f]) ?? []);
+  return spec.files
+    .map((file) => byPath.get(file))
+    .filter((f): f is { path: string; hash: string; bytes: number } => Boolean(f));
+}
+
+/** One read path for both layouts, so callers never branch on shardedness. */
+async function readPath<T>(path: string): Promise<T | undefined> {
+  if (activeDatasets[path]) return readDataset<T>(path);
+  const hash = activeHashByPath.get(path);
+  return hash ? readStoredFile<T>(hash) : undefined;
 }
 
 function manifestEntry(path: string): ManifestEntryLookup {
@@ -110,15 +182,16 @@ interface ManifestEntryLookup {
 // is awaited; the rest resolves on demand so first paint stays light.
 export async function hydrateFromStore(): Promise<boolean> {
   setActiveManifest((await loadActiveManifest()) ?? null);
+  // A miss here is not the end of the wait: ensureInitialGeneration() runs next
+  // and settles it once the remote manifest lands.
   if (!activeManifest) return false;
 
-  const critical = new Set<string>(CRITICAL_DATA_PATHS);
-  const entries = activeManifest.files.filter((f) => critical.has(f.path));
+  settleManifest();
 
   await Promise.all(
-    entries.map(async (file) => {
-      const data = await readStoredFile<unknown>(file.hash);
-      if (data !== undefined) memory.set(file.path, data);
+    CRITICAL_DATA_PATHS.map(async (path) => {
+      const data = await readPath<unknown>(path);
+      if (data !== undefined) memory.set(path, data);
     }),
   );
 
@@ -128,6 +201,8 @@ export async function hydrateFromStore(): Promise<boolean> {
 // Memory, then the active generation in IndexedDB, then the network as a last
 // resort (first run, or a path the manifest doesn't know).
 export async function fetchAppJson<T>(path: string): Promise<T> {
+  await awaitManifest();
+
   const { normalized, hash } = manifestEntry(path);
 
   if (memory.has(normalized)) return memory.get(normalized) as T;
@@ -136,6 +211,31 @@ export async function fetchAppJson<T>(path: string): Promise<T> {
   if (pending) return pending as Promise<T>;
 
   const promise = (async (): Promise<T> => {
+    const spec = activeDatasets[normalized];
+    if (spec) {
+      const merged = await readDataset<T>(normalized);
+      if (merged !== undefined) {
+        memory.set(normalized, merged);
+        return merged;
+      }
+
+      // Shards missing from the store — pull them, then reassemble. No
+      // monolithic file exists to fall back to.
+      await syncFiles(shardFilesFor(normalized), CACHE_VERSION);
+      const retried = await readDataset<T>(normalized);
+      if (retried !== undefined) {
+        memory.set(normalized, retried);
+        return retried;
+      }
+
+      const shards = await Promise.all(
+        spec.files.map((file) => fetchNetwork<unknown>(dataUrl(file))),
+      );
+      const data = mergeShards(shards, spec.kind) as T;
+      memory.set(normalized, data);
+      return data;
+    }
+
     if (hash) {
       const stored = await readStoredFile<T>(hash);
       if (stored !== undefined) {
@@ -157,41 +257,17 @@ export async function fetchAppJson<T>(path: string): Promise<T> {
   }
 }
 
-async function downloadFile(
-  file: { path: string; hash: string },
-): Promise<[string, unknown] | null> {
-  const text = await fetchText(freshDataUrl(file.path));
-
-  // The SW is network-first with a 3s deadline, so a slow network can return the
-  // *previous* body; the hash check stops stale bytes filed under the new hash.
-  const actual = await hashText(text);
-  if (actual !== null && actual !== file.hash) return null;
-
-  try {
-    return [file.hash, JSON.parse(text)];
-  } catch (err) {
-    console.error(`[DataStore] Failed to parse JSON for file ${file.path} (${file.hash}):`, err);
-    return null;
-  }
-}
-
-async function downloadAll(
-  files: Array<{ path: string; hash: string }>,
-): Promise<Array<[string, unknown]> | null> {
-  const results: Array<[string, unknown]> = [];
-
-  for (let i = 0; i < files.length; i += DOWNLOAD_CONCURRENCY) {
-    const batch = files.slice(i, i + DOWNLOAD_CONCURRENCY);
-    const settled = await Promise.all(
-      batch.map((file) => downloadFile(file).catch(() => null)),
-    );
-    // Partial generations are worse than no update: bail and keep serving the
-    // generation already on disk.
-    if (settled.some((entry) => entry === null)) return null;
-    results.push(...(settled as Array<[string, unknown]>));
-  }
-
-  return results;
+/**
+ * Ensures the given files are in the store, doing the download, SHA-256 verify
+ * and JSON.parse on a worker. Returns false if any file could not be stored —
+ * a partial generation is worse than no update, so callers bail on false.
+ */
+async function ensureFilesStored(
+  files: Array<{ path: string; hash: string; bytes: number }>,
+  options: { gentle?: boolean } = {},
+): Promise<boolean> {
+  const outcome = await syncFiles(files, CACHE_VERSION, options);
+  return outcome.ok;
 }
 
 // Boot phase 2. Downloads stay invisible until all have landed, then the manifest
@@ -213,17 +289,12 @@ export async function stageUpdate(): Promise<number> {
 
     console.info('[data] New deploy detected:', remote.generation, remote.builtAt);
 
+    // Content-addressed per shard: a daily rebuild only moves the handful of
+    // shards whose entries actually changed, not the whole dataset.
     const changed = remote.files.filter((f) => activeHashByPath.get(f.path) !== f.hash);
 
-    // One transaction for the whole presence test, rather than one read per
-    // file just to find out whether it is already on disk.
-    const stored = new Set(await idbKeys(FILE_STORE));
-    const needed = changed.filter((f) => !stored.has(f.hash));
+    if (!(await ensureFilesStored(changed))) return 0;
 
-    const downloaded = await downloadAll(needed);
-    if (downloaded === null) return 0;
-
-    await writeStoredFiles(downloaded);
     await commitGeneration(remote, changed.map((f) => f.path));
     dispatch<Manifest>('data-manifest-ready', remote);
 
@@ -241,15 +312,22 @@ async function commitGeneration(manifest: Manifest, changedPaths: string[]): Pro
   await saveActiveManifest(manifest);
   setActiveManifest(manifest);
 
+  // A changed shard invalidates the dataset it belongs to, not itself: nothing
+  // consumes shard paths directly. Collapse to one entry per affected dataset so
+  // 30 changed artwork shards trigger a single reassembly.
+  const dirtyPaths = new Set<string>();
+  for (const path of changedPaths) {
+    dirtyPaths.add(shardOwners.get(path) ?? path);
+  }
+
   const refreshed: string[] = [];
 
-  for (const path of changedPaths) {
+  for (const path of dirtyPaths) {
     // Only refresh what the app has actually read; anything else will pick up
     // the new hash on its next fetchAppJson.
     if (!memory.has(path)) continue;
-    const hash = activeHashByPath.get(path);
-    if (!hash) continue;
-    const data = await readStoredFile<unknown>(hash);
+
+    const data = await readPath<unknown>(path);
     if (data === undefined) continue;
     memory.set(path, data);
     refreshed.push(path);
@@ -277,33 +355,47 @@ async function commitGeneration(manifest: Manifest, changedPaths: string[]): Pro
 
 /** First successful run has no stored generation, so seed one from the network. */
 export async function ensureInitialGeneration(): Promise<void> {
-  if (activeManifest || !navigator.onLine) return;
+  if (activeManifest || !navigator.onLine) {
+    settleManifest();
+    return;
+  }
 
   try {
     const remote = await fetchNetwork<Manifest>(freshDataUrl(MANIFEST_PATH));
     if (!remote?.files?.length) return;
 
-    const critical = new Set<string>(CRITICAL_DATA_PATHS);
-    const files = remote.files.filter((f) => critical.has(f.path));
-    const downloaded = await downloadAll(files);
-    if (downloaded === null) return;
+    // Published before the downloads: a read that is already waiting only needs
+    // to know how to resolve its path, and can then take the store-or-network
+    // route itself rather than blocking on the whole critical set.
+    setActiveManifest(remote);
+    settleManifest();
 
-    await writeStoredFiles(downloaded);
-
-    const byHash = new Map(downloaded);
-    for (const file of files) {
-      const data = byHash.get(file.hash);
-      if (data !== undefined) memory.set(file.path, data);
-    }
+    // Datasets in the critical set expand to their shards.
+    const criticalPaths = new Set(
+      expandDatasetPaths(CRITICAL_DATA_PATHS, remote.datasets ?? {}),
+    );
+    const files = remote.files.filter((f) => criticalPaths.has(f.path));
+    if (!(await ensureFilesStored(files))) return;
 
     // The manifest is recorded in full even though only the critical files were
     // downloaded; the rest resolve lazily and are backfilled by the next sweep.
     await saveActiveManifest(remote);
-    setActiveManifest(remote);
+
+    // Read back through the same path a warm boot uses, so a dataset is
+    // reassembled from its shards rather than special-cased here.
+    await Promise.all(
+      CRITICAL_DATA_PATHS.map(async (path) => {
+        const data = await readPath<unknown>(path);
+        if (data !== undefined) memory.set(path, data);
+      }),
+    );
+
     writeBootHint({ generation: remote.generation, complete: true, artworkCached: 0 });
     dispatch<Manifest>('data-manifest-ready', remote);
   } catch (err) {
     console.warn('[DataStore] Initial generation seed failed; falling back to direct network reads:', err);
+  } finally {
+    settleManifest();
   }
 }
 
@@ -311,12 +403,9 @@ export async function ensureInitialGeneration(): Promise<void> {
 export async function backfillStoredFiles(): Promise<void> {
   if (!activeManifest || !navigator.onLine) return;
 
-  const stored = new Set(await idbKeys(FILE_STORE));
-  const missing = activeManifest.files.filter((f) => !stored.has(f.hash));
-  if (!missing.length) return;
-
-  const downloaded = await downloadAll(missing);
-  if (downloaded) await writeStoredFiles(downloaded);
+  // `gentle` — this runs while the user is interacting. The worker paces
+  // itself between batches so the sweep never competes with a gesture.
+  await ensureFilesStored(activeManifest.files, { gentle: true });
 }
 
 export async function revalidateCriticalData(): Promise<void> {

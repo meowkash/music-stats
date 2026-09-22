@@ -1,6 +1,14 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import {
+  SHARDED_DATASETS,
+  SHARD_COUNT,
+  datasetDirName,
+  listDataFiles,
+  readDataset,
+  shardFileName,
+} from './data-files.js';
 
 // The contract the client downloads against. Files are content-hashed; artwork
 // CDN URLs are content addresses, so the URL set *is* the invalidation signal.
@@ -14,27 +22,44 @@ function hashBytes(buffer) {
 }
 
 function collectDataFiles() {
-  return fs
-    .readdirSync(DATA_DIR)
-    .filter((name) => name.endsWith('.json') && name !== MANIFEST_NAME)
-    .sort()
-    .map((name) => {
-      const bytes = fs.readFileSync(path.join(DATA_DIR, name));
-      return {
-        path: `/data/${name}`,
-        hash: hashBytes(bytes),
-        bytes: bytes.length,
-      };
-    });
+  // Recursive: the sharded datasets live in per-dataset subdirectories.
+  return listDataFiles(DATA_DIR, new Set([MANIFEST_NAME])).map((rel) => {
+    const bytes = fs.readFileSync(path.join(DATA_DIR, rel));
+    return {
+      path: `/data/${rel}`,
+      hash: hashBytes(bytes),
+      bytes: bytes.length,
+    };
+  });
+}
+
+// Tells the client which shard files reassemble into each logical dataset, and
+// how to merge them. Consumers keep asking for '/data/catalog.json'.
+function collectDatasets() {
+  const datasets = {};
+
+  for (const [name, spec] of Object.entries(SHARDED_DATASETS)) {
+    const dir = path.join(DATA_DIR, datasetDirName(name));
+    if (!fs.existsSync(dir)) continue;
+
+    const files = [];
+    for (let i = 0; i < SHARD_COUNT; i++) {
+      const shard = shardFileName(i);
+      if (!fs.existsSync(path.join(dir, shard))) continue;
+      files.push(`/data/${datasetDirName(name)}/${shard}`);
+    }
+
+    if (files.length) datasets[`/data/${name}`] = { kind: spec.kind, files };
+  }
+
+  return datasets;
 }
 
 function readJson(file) {
-  const full = path.join(DATA_DIR, file);
-  if (!fs.existsSync(full)) return null;
   try {
-    return JSON.parse(fs.readFileSync(full, 'utf-8'));
+    return readDataset(DATA_DIR, file);
   } catch (err) {
-    console.error(`[GenerateManifest] Failed to parse JSON from ${full}:`, err);
+    console.error(`[GenerateManifest] Failed to read dataset ${file}:`, err);
     return null;
   }
 }
@@ -98,11 +123,13 @@ function generationId(files, artworkUrls) {
 
 const files = collectDataFiles();
 const artwork = collectArtworkUrls();
+const datasets = collectDatasets();
 
 const manifest = {
   generation: generationId(files, artwork),
   builtAt: new Date().toISOString(),
   files,
+  datasets,
   artwork,
 };
 
@@ -111,5 +138,6 @@ fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest));
 const totalBytes = files.reduce((sum, f) => sum + f.bytes, 0);
 console.log(
   `Generated manifest ${manifest.generation}: ${files.length} files ` +
-    `(${(totalBytes / 1024).toFixed(0)} KB), ${artwork.length} artwork URLs`,
+    `(${(totalBytes / 1024).toFixed(0)} KB), ${Object.keys(datasets).length} sharded datasets, ` +
+    `${artwork.length} artwork URLs`,
 );

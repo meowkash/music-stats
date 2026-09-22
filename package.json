@@ -12,7 +12,9 @@
     "artwork:coverage": "node scripts/report-artwork-coverage.js",
     "deploy": "npm run build && npx wrangler pages deploy dist/ --project-name music-stats",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "bench": "node bench/run.js",
+    "bench:update": "node bench/run.js --update"
   },
   "dependencies": {
     "astro": "^7.0.6",
@@ -22,6 +24,7 @@
     "@astrojs/check": "^0.9.10",
     "@material/material-color-utilities": "^0.4.0",
     "@types/node": "^26.2.0",
+    "playwright": "^1.61.1",
     "sharp": "^0.35.3",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3"

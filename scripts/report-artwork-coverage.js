@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readDataset } from './data-files.js';
 import {
   artworkCacheKey,
   resolveArtistArtworkFromCache,
@@ -10,7 +11,6 @@ import {
 // you'd actually notice. Previously this meant scrolling the backfill log.
 
 const ARTWORK_PATH = path.resolve('src/data/artwork.json');
-const CATALOG_PATH = path.resolve('public/data/catalog.json');
 const UNRESOLVED_PATH = path.resolve('src/data/artwork-unresolved.json');
 
 const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
@@ -29,7 +29,7 @@ function loadJson(file, fallback) {
 }
 
 const cache = loadJson(ARTWORK_PATH, {});
-const catalog = loadJson(CATALOG_PATH, null);
+const catalog = readDataset(path.resolve('public/data'), 'catalog.json');
 
 if (!catalog) {
   console.error('catalog.json not found — run "npm run build" first.');

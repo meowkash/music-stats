@@ -37,3 +37,6 @@ AGENTS.md
 /public/cache-version.json
 
 .claude/*
+
+# benchmark run history (baseline.json is tracked)
+bench/records/
