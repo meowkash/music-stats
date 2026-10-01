@@ -6,9 +6,9 @@ import Recaps from "./Recaps.astro";
 <div class="dashboard-container panel-fill panel-scroll panel-scroll-active">
   <Recaps />
 
-  <!-- Stats Grid -->
-  <div class="stats-grid shrink-0">
-    <div class="glass-card stat-card hover-scale">
+  <!-- Stats strip: one card, four icon-over-number columns -->
+  <div class="glass-card stats-strip shrink-0">
+    <div class="stat-item">
       <div class="stat-icon-wrapper pink">
         <svg
           viewBox="0 0 24 24"
@@ -24,12 +24,12 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">TOTAL PLAYS</span>
         <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
+        <span class="stat-label">Total</span>
       </div>
     </div>
 
-    <div class="glass-card stat-card hover-scale">
+    <div class="stat-item">
       <div class="stat-icon-wrapper cyan">
         <svg
           viewBox="0 0 24 24"
@@ -46,12 +46,12 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">PLAYS THIS YEAR</span>
         <h3 class="stat-value text-cyan" id="stat-year-scrobbles">-</h3>
+        <span class="stat-label">This year</span>
       </div>
     </div>
 
-    <div class="glass-card stat-card hover-scale">
+    <div class="stat-item">
       <div class="stat-icon-wrapper violet">
         <svg
           viewBox="0 0 24 24"
@@ -66,12 +66,12 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">ACTIVE DAYS</span>
         <h3 class="stat-value text-violet" id="stat-active-days">-</h3>
+        <span class="stat-label">Days</span>
       </div>
     </div>
 
-    <div class="glass-card stat-card hover-scale">
+    <div class="stat-item">
       <div class="stat-icon-wrapper green">
         <svg
           viewBox="0 0 24 24"
@@ -85,8 +85,8 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <span class="stat-label">DAILY AVERAGE</span>
         <h3 class="stat-value text-green" id="stat-daily-avg">-</h3>
+        <span class="stat-label">Average</span>
       </div>
     </div>
   </div>
@@ -116,23 +116,31 @@ import Recaps from "./Recaps.astro";
     flex: 0 0 auto;
   }
 
-  .stats-grid {
+  .stats-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-  }
-
-  .stat-card {
-    display: flex;
-    align-items: center;
-    padding: 20px;
-    gap: 16px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 12px 6px;
     background: rgba(255, 255, 255, 0.02);
   }
 
+  .stat-item {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    text-align: center;
+  }
+
+  .stat-item + .stat-item {
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
   .stat-icon-wrapper {
-    width: 48px;
-    height: 48px;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -141,8 +149,8 @@ import Recaps from "./Recaps.astro";
   }
 
   .stat-icon-wrapper svg {
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
   }
 
   .stat-icon-wrapper.pink {
@@ -165,14 +173,21 @@ import Recaps from "./Recaps.astro";
   .stat-content {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 2px;
+    max-width: 100%;
+    white-space: nowrap;
+    line-height: 1.15;
   }
 
   .stat-label {
     font-size: 12px;
     font-weight: 700;
     color: var(--text-muted);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.01em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .stat-value {
@@ -201,23 +216,22 @@ import Recaps from "./Recaps.astro";
   }
 
   @media (max-width: 767px) {
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
+    .stats-strip {
+      padding: 10px 2px;
+      border-radius: 16px;
     }
-    .stat-card {
-      padding: 12px;
-      gap: 10px;
-      border-radius: 12px;
+    .stat-item {
+      gap: 5px;
+      padding: 0 2px;
     }
     .stat-icon-wrapper {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
     }
     .stat-icon-wrapper svg {
-      width: 18px;
-      height: 18px;
+      width: 14px;
+      height: 14px;
     }
     .stat-value {
       font-size: 20px;

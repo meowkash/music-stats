@@ -200,9 +200,14 @@
     padding: 0;
   }
 
+  /* Same raised box as the dashboard's reports summary. Padding lives on the
+     pages: the pager steps by viewport clientWidth, which includes padding. */
   .year-story-viewport {
     overflow: hidden;
     touch-action: pan-y;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
   }
 
   .year-story-track {
@@ -213,6 +218,8 @@
     flex: 0 0 100%;
     width: 100%;
     min-height: 0;
+    padding: 10px 12px;
+    box-sizing: border-box;
   }
 
   .year-story-track :global(p) {

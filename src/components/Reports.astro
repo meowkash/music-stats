@@ -4,7 +4,6 @@
 <div class="glass-card reports-card" id="reportsCard">
   <!-- Chart + summary only; trends tiles were dropped so this fits phones. -->
   <div class="reports-header">
-    <h4>Reports</h4>
     <div class="reports-range" role="group" aria-label="Range">
       <div id="reportsRangeHighlight" class="sliding-highlight reports-range-highlight"></div>
       <button class="range-btn is-active" data-range="week" type="button">Last week</button>
@@ -24,7 +23,7 @@
   </div>
 
   <div class="reports-hero">
-    <h2 class="reports-total"><span id="reportsTotal">—</span> Scrobbles</h2>
+    <h2 class="reports-total"><span id="reportsTotal">—</span> Plays</h2>
     <p class="reports-vs" id="reportsVs"></p>
   </div>
 
@@ -54,13 +53,6 @@
     justify-content: space-between;
     gap: 12px;
     flex-shrink: 0;
-  }
-
-  .reports-header h4 {
-    font-family: var(--font-header);
-    font-size: 17px;
-    font-weight: 700;
-    color: #fff;
   }
 
   .reports-range {
@@ -144,7 +136,7 @@
 
   .reports-total {
     font-family: var(--font-header);
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 800;
     letter-spacing: -0.03em;
     color: #fff;
@@ -168,10 +160,12 @@
     font-weight: 700;
   }
 
+  /* Plot absorbs whatever height the card has left; the floor scales with
+     the viewport so short phones shrink the chart instead of scrolling. */
   .reports-plot {
     position: relative;
-    flex: 1 1 auto;
-    min-height: 220px;
+    flex: 1 1 0;
+    min-height: clamp(96px, 16dvh, 220px);
   }
 
   .reports-plot canvas {
@@ -263,7 +257,7 @@
     }
 
     .reports-total {
-      font-size: 24px;
+      font-size: 20px;
     }
   }
 </style>
