@@ -77,7 +77,10 @@ jobs:
           # converges across daily runs rather than stalling one build for an hour.
           RECAP_TRACK_LIMIT: '4000'
           RECAP_ARTIST_LIMIT: '2000'
-          REFRESH_MEDIA: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.refresh_artwork_and_colors == 'true' }}
+          # Full re-resolve: tick the box on a manual run, or put [refresh artwork]
+          # in any commit message of a push to main. Every commit in the push is
+          # checked, not just the head, so it survives being pushed mid-stack.
+          REFRESH_MEDIA: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.refresh_artwork_and_colors == 'true') || (github.event_name == 'push' && contains(join(github.event.commits.*.message, ' '), '[refresh artwork]')) }}
         run: |
           if [ "$REFRESH_MEDIA" = "true" ]; then
             echo "Running full artwork + color cache refresh (build:refresh)"

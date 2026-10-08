@@ -197,21 +197,28 @@
     transition: var(--transition-smooth);
   }
 
-  /* Scrim stays fixed over the artwork while title/subtitle slide during nav. */
+  /* Scrim stays fixed over the artwork while title/subtitle slide during nav.
+     It lands fully opaque on the sheet colour that continues below the header,
+     so the artwork dissolves into the sheet. A translucent end left a band of
+     artwork showing through, cut off by a hard edge where the header stops.
+     bottom: -1px covers the sub-pixel row a fractional header height leaves. */
   .overlay-header::after {
+    --scrim: var(--overlay-bg-bottom, rgb(10, 10, 15));
     content: "";
     position: absolute;
-    bottom: 0;
+    bottom: -1px;
     left: 0;
     right: 0;
-    height: 42%;
+    height: 55%;
     pointer-events: none;
     z-index: 2;
     background: linear-gradient(
       to top,
-      rgba(10, 10, 15, 0.92) 0%,
-      rgba(10, 10, 15, 0.45) 55%,
-      rgba(10, 10, 15, 0) 100%
+      var(--scrim) 0%,
+      var(--scrim) 6%,
+      color-mix(in srgb, var(--scrim) 82%, transparent) 30%,
+      color-mix(in srgb, var(--scrim) 40%, transparent) 65%,
+      color-mix(in srgb, var(--scrim) 0%, transparent) 100%
     );
   }
 
@@ -424,7 +431,7 @@
   .overlay-albums-list :global(.overlay-album-card-artwork) {
     width: 130px;
     height: 130px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     overflow: hidden;
     background: rgb(12, 12, 16);
     border: 1px solid rgba(255, 255, 255, 0.08);

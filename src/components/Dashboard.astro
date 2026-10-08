@@ -25,7 +25,7 @@ import Recaps from "./Recaps.astro";
       </div>
       <div class="stat-content">
         <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
-        <span class="stat-label">Total</span>
+        <span class="stat-label">Scrobbles</span>
       </div>
     </div>
 
@@ -67,7 +67,7 @@ import Recaps from "./Recaps.astro";
       </div>
       <div class="stat-content">
         <h3 class="stat-value text-violet" id="stat-active-days">-</h3>
-        <span class="stat-label">Days</span>
+        <span class="stat-label">Active days</span>
       </div>
     </div>
 
@@ -86,7 +86,7 @@ import Recaps from "./Recaps.astro";
       </div>
       <div class="stat-content">
         <h3 class="stat-value text-green" id="stat-daily-avg">-</h3>
-        <span class="stat-label">Average</span>
+        <span class="stat-label">Per day</span>
       </div>
     </div>
   </div>
@@ -106,6 +106,15 @@ import Recaps from "./Recaps.astro";
     min-height: 0;
   }
 
+  /* A 10px gutter on both sides, given back as padding, so children such as
+     the story rail can bleed past the cards without the scroller clipping
+     their glow. */
+  .dashboard-container.panel-scroll {
+    width: calc(100% + 20px);
+    margin-inline: -10px;
+    padding-inline: 10px;
+  }
+
   /* Recaps stay compact; reports fill the leftover dashboard height. */
   .dashboard-container :global(.reports-card) {
     flex: 1 1 auto;
@@ -119,7 +128,7 @@ import Recaps from "./Recaps.astro";
   .stats-strip {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    padding: 12px 6px;
+    padding: 14px 6px 12px;
     background: rgba(255, 255, 255, 0.02);
   }
 
@@ -141,7 +150,7 @@ import Recaps from "./Recaps.astro";
     flex-shrink: 0;
     width: 36px;
     height: 36px;
-    border-radius: 12px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -174,67 +183,77 @@ import Recaps from "./Recaps.astro";
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     max-width: 100%;
     white-space: nowrap;
-    line-height: 1.15;
+    line-height: 1.1;
   }
 
   .stat-label {
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 10.5px;
+    font-weight: 600;
     color: var(--text-muted);
-    letter-spacing: 0.01em;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  /* One soft glow rather than two stacked ones: the double halo smeared the
+     digits into each other at this size. */
   .stat-value {
     font-family: var(--font-header);
     font-size: 26px;
-    font-weight: 800;
+    font-weight: 700;
     color: #fff;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .text-pink {
     color: var(--accent-pink);
-    text-shadow: 0 0 20px var(--accent-pink-glow), 0 0 40px var(--accent-pink-glow);
+    text-shadow: 0 0 18px var(--accent-pink-glow);
   }
   .text-cyan {
     color: var(--accent-cyan);
-    text-shadow: 0 0 20px var(--accent-cyan-glow), 0 0 40px var(--accent-cyan-glow);
+    text-shadow: 0 0 18px var(--accent-cyan-glow);
   }
   .text-violet {
     color: var(--accent-violet);
-    text-shadow: 0 0 20px var(--accent-violet-glow), 0 0 40px var(--accent-violet-glow);
+    text-shadow: 0 0 18px var(--accent-violet-glow);
   }
   .text-green {
     color: var(--accent-green);
-    text-shadow: 0 0 20px var(--accent-green-glow), 0 0 40px var(--accent-green-glow);
+    text-shadow: 0 0 18px var(--accent-green-glow);
   }
 
   @media (max-width: 767px) {
     .stats-strip {
-      padding: 10px 2px;
-      border-radius: 16px;
+      padding: 12px 2px 10px;
     }
     .stat-item {
       gap: 5px;
       padding: 0 2px;
     }
     .stat-icon-wrapper {
-      width: 26px;
-      height: 26px;
-      border-radius: 7px;
+      width: 28px;
+      height: 28px;
     }
     .stat-icon-wrapper svg {
       width: 14px;
       height: 14px;
     }
     .stat-value {
-      font-size: 20px;
+      font-size: 21px;
+    }
+
+    .stat-label {
+      font-size: 9.5px;
+      letter-spacing: 0.06em;
     }
   }
 </style>
@@ -242,6 +261,16 @@ import Recaps from "./Recaps.astro";
 <script>
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { YearlyTotals } from "../types/music";
+
+  // Each column is a quarter of a phone width, so past six digits the full
+  // figure no longer fits; compact notation keeps it to ~5 characters.
+  const compact = new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  });
+  function formatStat(value: number): string {
+    return value >= 1_000_000 ? compact.format(value) : value.toLocaleString();
+  }
 
   document.addEventListener("DOMContentLoaded", () => {
     async function loadDashboardStats() {
@@ -275,10 +304,10 @@ import Recaps from "./Recaps.astro";
         const activeEl = document.getElementById("stat-active-days");
         const avgEl = document.getElementById("stat-daily-avg");
 
-        if (totalEl) totalEl.textContent = totalScrobbles.toLocaleString();
-        if (yearEl) yearEl.textContent = currentYearScrobbles.toLocaleString();
-        if (activeEl) activeEl.textContent = `${activeDays}`;
-        if (avgEl) avgEl.textContent = `${dailyAverage}`;
+        if (totalEl) totalEl.textContent = formatStat(totalScrobbles);
+        if (yearEl) yearEl.textContent = formatStat(currentYearScrobbles);
+        if (activeEl) activeEl.textContent = formatStat(activeDays);
+        if (avgEl) avgEl.textContent = dailyAverage.toLocaleString();
       } catch (err) {
         console.error("Failed to compute dashboard stats:", err);
       }

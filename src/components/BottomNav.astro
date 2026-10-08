@@ -1,9 +1,26 @@
 ---
+import { TAB_ORDER } from "../utils/tabs";
+import { lensRefractionCss } from "../utils/tabTheme";
+
+// Same pattern as the wash in Layout.astro: the resting layer is chosen by
+// CSS from body[data-active-tab], and navBar.ts only writes opacity mid-drag.
+const lensStyles = TAB_ORDER.map(
+  (tab) =>
+    `.lens-refraction[data-tab="${tab}"]{background:${lensRefractionCss(tab)}}` +
+    `body[data-active-tab="${tab}"] .lens-refraction[data-tab="${tab}"]{opacity:1}`,
+).join("");
 ---
+
+<style is:inline set:html={lensStyles}></style>
 
 <nav class="bottom-nav-container">
   <div class="main-tab-bar">
-    <div class="nav-slider-highlight sliding-highlight" id="navSliderHighlight"></div>
+    <div class="nav-slider-highlight sliding-highlight" id="navSliderHighlight">
+      <div class="pill-face" aria-hidden="true"></div>
+      <div class="lens-refraction-stack" aria-hidden="true">
+        {TAB_ORDER.map((tab) => <div class="lens-refraction" data-tab={tab}></div>)}
+      </div>
+    </div>
     <button class="tab-btn active" data-tab="dashboard" aria-label="Home">
       <svg
         class="tab-icon"
@@ -74,6 +91,8 @@
 
 <style>
   .bottom-nav-container {
+    --nav-glass-tint: rgba(10, 10, 14, 0.34);
+    --nav-glass-blur: blur(18px) saturate(190%) brightness(0.72);
     position: fixed;
     bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
     left: 0;
@@ -110,18 +129,25 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    border-radius: var(--radius-xl);
-    background: rgba(14, 14, 18, 0.45);
-    border: 1px solid var(--panel-border-hover);
+    /* Capsule: the radius follows the bar height, and the 8px inset keeps the
+       highlight pill concentric with it. */
+    border-radius: var(--radius-pill);
+    /* Smoked glass: a low-alpha dark tint, with the backdrop itself dimmed
+       and saturated, so what is behind reads through as colour rather
+       than as a milky white sheet. */
+    background: var(--nav-glass-tint);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow:
-      0 12px 36px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+      0 14px 40px rgba(0, 0, 0, 0.42),
+      0 2px 6px rgba(0, 0, 0, 0.2);
     padding: 8px;
     pointer-events: auto;
     position: relative;
     z-index: 1;
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: var(--nav-glass-blur);
+    -webkit-backdrop-filter: var(--nav-glass-blur);
   }
 
   @supports not (backdrop-filter: blur(1px)) {
@@ -148,7 +174,7 @@
     flex: 1 1 0;
     min-width: 0;
     height: 48px;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition:
       color var(--duration-nav) var(--ios-spring),
@@ -204,38 +230,151 @@
     --btn-glow: var(--btn-accent-glow);
   }
 
+  /* The host only carries geometry: slidingHighlight.ts pins its transition
+     to none, so anything that has to fade lives on a child layer instead. */
   .nav-slider-highlight {
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
+  }
+
+  /* Resting pill: a lighter glass droplet sitting inside the bar. It fades
+     out as the lens lifts and eases back in as the lens settles. */
+  .pill-face {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    transition: opacity var(--duration-slow) var(--ios-spring);
     background: color-mix(
       in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 14%,
-      rgba(0, 0, 0, 0.35)
+      var(--hl-color, rgba(255, 255, 255, 0.25)) 16%,
+      rgba(255, 255, 255, 0.07)
     );
     border: 1px solid
       color-mix(
         in srgb,
-        var(--hl-color, rgba(255, 255, 255, 0.35)) 30%,
-        rgba(255, 255, 255, 0.06)
+        var(--hl-color, rgba(255, 255, 255, 0.35)) 28%,
+        rgba(255, 255, 255, 0.12)
       );
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 2px 10px var(--hl-glow, rgba(0, 0, 0, 0.45));
-  }
-
-  /* Liquid-glass grab state */
-  .main-tab-bar.nav-dragging .nav-slider-highlight {
-    background: color-mix(
-      in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 22%,
-      rgba(0, 0, 0, 0.28)
-    );
-    box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 6px 22px var(--hl-glow, rgba(0, 0, 0, 0.45));
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+      0 2px 12px var(--hl-glow, rgba(0, 0, 0, 0.45));
   }
 
   .main-tab-bar.nav-dragging {
     cursor: grabbing;
+  }
+
+  /* ── Liquid-glass lens ──────────────────────────────────────────────────
+     While the pill is being dragged (or travelling after a tap) it lifts
+     into a clear lens: navBar.ts scales it past the bar's edges and enlarges
+     the icon underneath. The tint drops away so the lens reads as clear
+     glass; the rim and glare are pseudo-elements so they can fade, since
+     slidingHighlight.ts pins the host's own transition to none. */
+  .nav-slider-highlight::before,
+  .nav-slider-highlight::after,
+  .lens-refraction-stack {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--duration-normal) var(--ios-spring);
+    /* Keeps these layers rasterised while invisible, so the first frame of a
+       drag only changes opacity instead of painting gradients and masks. */
+    will-change: opacity;
+  }
+
+  /* The lens body: clear glass plus the refraction layers, under the rim and
+     glare. Fading this (not the host) is what lets the lens ease in and out. */
+  .lens-refraction-stack {
+    z-index: 0;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  }
+
+  .nav-slider-highlight::before {
+    z-index: 1;
+  }
+
+  .nav-slider-highlight::after {
+    z-index: 2;
+  }
+
+  /* One pre-built layer per tab (see lensStyles above); only opacity moves. */
+  .lens-refraction {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+  }
+
+  /* Chromatic rim: a conic spectrum masked down to a thin ring, softened so
+     it reads as light splitting at the glass edge. */
+  .nav-slider-highlight::before {
+    padding: 1.5px;
+    background: conic-gradient(
+      from 200deg,
+      rgba(255, 140, 185, 0.22),
+      rgba(255, 220, 160, 0.14),
+      rgba(150, 225, 255, 0.22),
+      rgba(185, 165, 255, 0.18),
+      rgba(255, 140, 185, 0.22)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+
+  /* Glare: a bright crescent along the top and a fainter one at the bottom,
+     plus coloured fringes bleeding inward from the sides. */
+  .nav-slider-highlight::after {
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.14), transparent 60%),
+      radial-gradient(100% 40% at 50% 112%, rgba(255, 255, 255, 0.07), transparent 60%);
+    box-shadow:
+      inset 5px 0 9px -6px rgba(255, 130, 175, 0.2),
+      inset -5px 0 9px -6px rgba(120, 215, 255, 0.2);
+  }
+
+  /* The face drops away quickly so the lift feels immediate; its slow
+     return is the default transition above. */
+  .main-tab-bar.nav-lens .pill-face {
+    opacity: 0;
+    transition-duration: var(--duration-normal);
+  }
+
+  .main-tab-bar.nav-lens .nav-slider-highlight::before,
+  .main-tab-bar.nav-lens .nav-slider-highlight::after,
+  .main-tab-bar.nav-lens .lens-refraction-stack {
+    opacity: 1;
+    transition-duration: var(--duration-normal);
+  }
+
+  /* Leaving lens mode crossfades on the same slow curve as the face. */
+  .nav-slider-highlight::before,
+  .nav-slider-highlight::after,
+  .lens-refraction-stack {
+    transition-duration: var(--duration-slow);
+  }
+
+  /* navBar.ts writes a per-button --lens-mag while the lens is up. */
+  .tab-btn .tab-icon,
+  .tab-btn .tab-label {
+    transform: scale(var(--lens-mag, 1));
+    transform-origin: 50% 60%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-slider-highlight::before,
+    .nav-slider-highlight::after,
+    .lens-refraction-stack {
+      display: none;
+    }
   }
 
   /* Must not apply to the selected tab: a tap leaves :hover stuck on touch
@@ -260,14 +399,14 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 16px;
-      background: rgba(14, 14, 18, 0.45);
-      border: 1px solid var(--panel-border-hover);
+      background: var(--nav-glass-tint);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: var(--radius-xl);
       box-shadow:
-        0 12px 36px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(14px) saturate(140%);
-      -webkit-backdrop-filter: blur(14px) saturate(140%);
+        var(--glass-rim),
+        0 14px 40px rgba(0, 0, 0, 0.42);
+      backdrop-filter: var(--nav-glass-blur);
+      -webkit-backdrop-filter: var(--nav-glass-blur);
       pointer-events: auto;
       touch-action: none;
     }
@@ -275,6 +414,7 @@
     .main-tab-bar {
       flex-direction: column;
       background: transparent;
+      border-radius: 0;
       border: none;
       box-shadow: none;
       backdrop-filter: none;
@@ -291,7 +431,7 @@
     .tab-btn {
       width: 100%;
       height: 48px;
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-pill);
       padding: 0 16px;
       display: flex !important;
       flex-direction: row !important;

@@ -48,7 +48,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   <!-- Search + toggles -->
   <div class="search-bar-row shrink-0" id="searchBarRow">
     <div class="search-container" id="searchContainer">
-      <button class="search-btn" id="leaderboardSearchBtn" aria-label="Search">
+      <span class="search-btn" aria-hidden="true">
         <svg
           class="search-icon"
           viewBox="0 0 24 24"
@@ -61,14 +61,17 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-      </button>
+      </span>
       <input
         type="text"
         id="leaderboardSearch"
         class="glass-input search-input"
-        placeholder="Search entries..."
+        placeholder="Search"
+        aria-label="Search rankings"
+        enterkeyhint="search"
+        autocomplete="off"
       />
-      <button class="search-close-btn" id="leaderboardSearchClose" type="button" aria-label="Close search">
+      <button class="search-close-btn" id="leaderboardSearchClose" type="button" aria-label="Clear search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -168,8 +171,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     gap: 0;
     --toggle-reveal: 0;
     --search-accent: var(--accent-cat-songs);
-    /* Matches the 12px blur on the focus box-shadow, plus a pixel of slack. */
-    --search-glow-pad: 14px;
     --search-glow: var(--accent-cat-songs-glow);
     height: 40px;
     width: 100%;
@@ -311,7 +312,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: var(--text-secondary);
     padding: 6px 12px;
-    border-radius: 20px;
+    border-radius: var(--radius-pill);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -334,7 +335,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   }
 
   .range-highlight {
-    border-radius: 20px;
+    border-radius: var(--radius-pill);
     background: var(--range-color, var(--accent-pink));
     box-shadow: 0 4px 12px var(--range-glow, var(--accent-pink-glow));
   }
@@ -357,7 +358,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     background: transparent;
     border: 1px solid transparent;
     padding: 0 12px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     transition:
       padding var(--duration-normal) var(--ios-spring),
       border-color var(--duration-normal) var(--ios-spring),
@@ -425,65 +426,45 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .sub-tab-highlight {
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 2px 8px rgba(0, 0, 0, 0.25);
   }
 
-  /* Search bar */
+  /* Search bar — always open: the field takes whatever width the toggles
+     leave, so Unified sliding in just narrows it. */
   .search-container {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: relative;
     display: flex;
     align-items: center;
-    /* Hardware accelerated, perfectly smooth 120fps reveal */
-    clip-path: inset(0 calc(100% - 40px) 0 0 round 20px);
-    transition: clip-path var(--duration-normal) var(--ios-spring);
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     height: 40px;
-    will-change: clip-path;
-    z-index: 5;
-    pointer-events: none;
   }
 
-  .search-container.is-searching {
-    /* --toggles-inset is .toggles-wrapper's live width plus a gutter, tracked by
-       a ResizeObserver. The clip stops short so the focus glow has somewhere to land. */
-    clip-path: inset(
-      0 calc(var(--toggles-inset, 0px) - var(--search-glow-pad)) 0 0 round 20px
-    );
-  }
-
-  .search-container.is-searching .search-input {
-    width: calc(100% - var(--toggles-inset, 0px));
-  }
-
+  /* An in-field icon rather than a button; pointer-events: none lets a tap on
+     it fall through to the input. */
   .search-btn {
     position: absolute;
     left: 0;
     top: 0;
     width: 40px;
     height: 40px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none;
+    background: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
     z-index: 2;
-    transition:
-      background var(--duration-normal) var(--ios-spring),
-      border-color var(--duration-normal) var(--ios-spring),
-      color var(--duration-normal) var(--ios-spring);
     color: var(--text-muted);
-    pointer-events: auto; /* Always clickable since container has pointer-events: none */
+    pointer-events: none;
+    transition: color var(--duration-normal) var(--ios-spring);
   }
 
-  .search-container.is-searching .search-btn {
-    background: transparent;
-    border-color: transparent;
-    pointer-events: none;
+  .search-container:focus-within .search-btn,
+  .search-container.has-query .search-btn {
     color: var(--search-accent);
   }
 
@@ -496,18 +477,9 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     width: 100%;
     height: 100%;
     padding-left: 40px;
-    opacity: 0;
-    pointer-events: none;
     /* Use !important to override .glass-input */
     background: rgba(0, 0, 0, 0.15) !important;
-    border-radius: 20px !important;
-    transition: opacity var(--duration-normal) var(--ios-spring);
-  }
-
-  .search-container.is-searching .search-input {
-    opacity: 1;
-    pointer-events: auto;
-    padding-right: 40px;
+    border-radius: var(--radius-pill) !important;
   }
 
   .search-container.has-query .search-input {
@@ -518,7 +490,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     position: absolute;
     right: 4px;
     top: 0;
-    width: 40px;
+    width: 36px;
     height: 40px;
     border: none;
     background: none;
@@ -527,17 +499,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     place-items: center;
     cursor: pointer;
     z-index: 3;
-    pointer-events: auto;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .search-container.is-searching .search-close-btn,
   .search-container.has-query .search-close-btn {
     display: grid;
-  }
-
-  .search-container.is-searching .search-close-btn {
-    right: calc(var(--toggles-inset, 0px) + 4px);
   }
 
   .search-close-btn svg {
@@ -562,9 +528,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     will-change: transform, opacity;
   }
 
-  /* Deliberately no rule hiding .toggles-wrapper while searching: the field
-     now expands into the space the toggles leave rather than over them. */
-
   .ranking-toggle {
     display: flex;
     align-items: center;
@@ -578,33 +541,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       display: none;
     }
 
-    /* Collapse-to-a-circle is a mobile affordance: at this width the row fits
-       the field and both toggles, so the field just stays open. */
+    /* The row fits the field and both toggles, so cap the field's width. */
     .search-container {
-      position: relative;
       flex: 0 1 360px;
-      width: auto;
       margin-right: auto;
-      clip-path: none;
-      pointer-events: auto;
-    }
-
-    /* Permanently the in-field icon rather than a standalone round button.
-       pointer-events: none lets a click on it fall through to the input. */
-    .search-btn {
-      background: transparent;
-      border-color: transparent;
-      pointer-events: none;
-    }
-
-    .search-input {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .search-container.is-searching .search-close-btn,
-    .search-container.has-query .search-close-btn {
-      right: 4px;
     }
 
     /* With all three columns on screen Unified is no longer a property of one
@@ -846,9 +786,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     const searchContainer = document.getElementById(
       "searchContainer",
     ) as HTMLDivElement;
-    const searchBtn = document.getElementById(
-      "leaderboardSearchBtn",
-    ) as HTMLButtonElement;
     const searchInput = document.getElementById(
       "leaderboardSearch",
     ) as HTMLInputElement;
@@ -1340,48 +1277,16 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       resortLeaderboard();
     });
 
-    // The toggles' width is not static (Unified reveals across the transition),
-    // so the inset is measured and the observer keeps it right every frame.
-    const togglesWrapper = document.getElementById(
-      "leaderboardToggles",
-    ) as HTMLElement;
-    let lastTogglesInset = -1;
-
-    function syncTogglesInset() {
-      // Desktop lays the field out in flow, so the clip path is off entirely.
-      const inset = isDesktopLayout()
-        ? 0
-        : Math.round(togglesWrapper.offsetWidth);
-      if (inset === lastTogglesInset) return;
-      lastTogglesInset = inset;
-      searchBarRow.style.setProperty("--toggles-inset", `${inset}px`);
-    }
-
-    syncTogglesInset();
-    new ResizeObserver(syncTogglesInset).observe(togglesWrapper);
-    desktopQuery.addEventListener("change", syncTogglesInset);
-
-    searchBtn.addEventListener("click", () => {
-      syncTogglesInset();
-      searchContainer.classList.add("is-searching");
-      searchInput.focus();
-    });
-
     const searchClose = document.getElementById("leaderboardSearchClose") as HTMLButtonElement;
-    function closeSearch() {
+    function clearSearch() {
       searchInput.value = "";
       searchQuery = "";
-      searchContainer.classList.remove("is-searching", "has-query");
+      searchContainer.classList.remove("has-query");
       updateLeaderboard();
     }
+    // Keeps focus (and the keyboard) in the field while clearing it.
     searchClose?.addEventListener("pointerdown", (e) => e.preventDefault());
-    searchClose?.addEventListener("click", closeSearch);
-
-    searchInput.addEventListener("blur", () => {
-      if (!searchInput.value.trim()) {
-        searchContainer.classList.remove("is-searching");
-      }
-    });
+    searchClose?.addEventListener("click", clearSearch);
 
     document
       .querySelectorAll(".leaderboard-tab-group .sub-tab-btn")

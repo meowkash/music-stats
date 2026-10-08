@@ -8,13 +8,14 @@
 <style>
   .recaps-stories {
     min-height: 0;
-    width: 100%;
   }
 
-  @media (max-width: 767px) {
-    .recaps-stories {
-      margin-inline: -4px;
-    }
+  /* Bleeds into the dashboard's side gutter (Dashboard.astro) so the rail
+     scrolls edge to edge; the rail's own padding puts the first ring back in
+     line with the cards below. */
+  .recaps-stories {
+    margin-inline: -10px;
+    width: auto;
   }
 </style>
 
@@ -26,11 +27,14 @@
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 2px 4px 4px;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
+    /* The rail is a scroll container, so it clips at its padding box. This
+       padding has to hold the ring glow, or the glow is cut into a rectangle. */
+    padding: 12px 10px 4px;
+    scroll-padding-inline: 10px;
   }
 
   .recap-rail::-webkit-scrollbar {
@@ -66,7 +70,7 @@
         hsl(var(--year-hue) 80% 48%),
         hsl(var(--year-hue) 90% 62%)
       );
-    box-shadow: 0 0 18px var(--year-glow);
+    box-shadow: 0 2px 12px var(--year-glow);
     transition: transform var(--duration-fast) var(--ios-spring);
   }
 

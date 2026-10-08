@@ -91,12 +91,12 @@
     overflow-x: hidden;
     overflow-y: auto;
     box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-radius: 14px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    background: var(--glass-tint-strong);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: var(--radius-md);
+    box-shadow: var(--glass-rim), 0 10px 28px rgba(0, 0, 0, 0.35);
   }
 
   .chart-controls.open .years-filter-popover {
@@ -130,7 +130,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -207,7 +207,7 @@
     touch-action: pan-y;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
   }
 
   .year-story-track {
@@ -218,7 +218,7 @@
     flex: 0 0 100%;
     width: 100%;
     min-height: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     box-sizing: border-box;
   }
 

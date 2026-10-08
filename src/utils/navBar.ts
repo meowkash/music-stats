@@ -14,8 +14,17 @@ import { createPillTrack } from './slidingHighlight';
 import { TAB_ACCENTS, TAB_IDLE_COLOR } from './tabTheme';
 import { TAB_ORDER, getActiveTab, navigateToTab, type TabId } from './tabs';
 
-/** Pill swells slightly while held, like the iOS tab bar. */
-const DRAG_SCALE = 1.08;
+/** While held, the pill lifts into a lens that spills past the bar's edges. */
+const DRAG_SCALE = 1.55;
+/** Time for the pill to lift into the lens once a drag engages. Matches
+ *  --duration-normal, the fade the lens layers use on the way in. */
+const LIFT_MS = 240;
+/** Extra lens swell at the midpoint of a tap-driven glide. */
+const TAP_LENS_SWELL = 0.3;
+/** Glide progress at which the lens starts crossfading back into the pill. */
+const LENS_HANDBACK = 0.45;
+/** How much the lens enlarges the icon directly beneath it. */
+const LENS_MAG = 0.22;
 /** Distance over which an off-centre grab is pulled onto the finger. */
 const GRAB_DECAY_DISTANCE = 140;
 const TAP_STIFFNESS_PER_TAB = 48;
@@ -50,6 +59,12 @@ export function initNavBar(): void {
       document.querySelector(`#app-bg-gradient .bg-layer[data-tab="${tab}"]`) as HTMLElement | null,
   );
 
+  // The lens refracts the wash behind the bar, so its per-tab layers fade on
+  // exactly the same weights as the wash and never disagree with it.
+  const lensLayers = TAB_ORDER.map(
+    (tab) => highlight.querySelector(`.lens-refraction[data-tab="${tab}"]`) as HTMLElement | null,
+  );
+
   function beginBackgroundPaint() {
     for (const layer of bgLayers) {
       if (layer) layer.style.transition = 'none';
@@ -60,22 +75,26 @@ export function initNavBar(): void {
 
   function paintBackground(value: number) {
     for (let i = 0; i < bgLayers.length; i++) {
-      const layer = bgLayers[i];
-      if (!layer) continue;
       const opacity = Math.round(Math.max(0, 1 - Math.abs(value - i)) * 40) / 40;
       if (opacity === paintedBg[i]) continue;
       paintedBg[i] = opacity;
-      layer.style.opacity = String(opacity);
+      const css = String(opacity);
+      const layer = bgLayers[i];
+      if (layer) layer.style.opacity = css;
+      const lens = lensLayers[i];
+      if (lens) lens.style.opacity = css;
     }
   }
 
   function clearBackgroundPaint() {
     for (let i = 0; i < bgLayers.length; i++) {
-      const layer = bgLayers[i];
       paintedBg[i] = -1;
-      if (!layer) continue;
-      layer.style.transition = '';
-      layer.style.opacity = '';
+      const layer = bgLayers[i];
+      if (layer) {
+        layer.style.transition = '';
+        layer.style.opacity = '';
+      }
+      lensLayers[i]?.style.removeProperty('opacity');
     }
   }
 
@@ -92,6 +111,8 @@ export function initNavBar(): void {
   let activeIndex = Math.max(TAB_ORDER.indexOf(getActiveTab()), 0);
   let fraction = activeIndex;
   let settleFromScale = 1;
+  /** Scale last painted, so a re-grab mid-settle lifts from where it is. */
+  let currentScale = 1;
   let cancelTween: (() => void) | null = null;
 
   const paintedButtons = buttons.map(() => -1);
@@ -121,18 +142,39 @@ export function initNavBar(): void {
     }
   }
 
+  const paintedMag = buttons.map(() => 1);
+
+  // The lens magnifies whatever sits under it, so each button's content grows
+  // with its overlap. Scale is mapped back to 0..1 lens strength first, so a
+  // resting pill (scale 1) never magnifies anything.
+  function paintLens(value: number, scale: number) {
+    const lens = Math.min(Math.max((scale - 1) / (DRAG_SCALE - 1), 0), 1);
+    for (let i = 0; i < buttons.length; i++) {
+      const overlap = Math.max(0, 1 - Math.abs(value - i));
+      const mag = Math.round((1 + LENS_MAG * lens * overlap) * 200) / 200;
+      if (mag === paintedMag[i]) continue;
+      paintedMag[i] = mag;
+      if (mag === 1) buttons[i].style.removeProperty('--lens-mag');
+      else buttons[i].style.setProperty('--lens-mag', String(mag));
+    }
+  }
+
   function clearButtonPaint() {
     for (let i = 0; i < buttons.length; i++) {
       paintedButtons[i] = -1;
       lastButtonColor[i] = '';
       buttons[i].style.color = '';
+      paintedMag[i] = 1;
+      buttons[i].style.removeProperty('--lens-mag');
     }
   }
 
   function render(value: number, scale = 1) {
     fraction = value;
+    currentScale = scale;
     track.render(value, { scale });
     paintButtons(value);
+    paintLens(value, scale);
     paintBackground(value);
     deck?.setPosition(value);
   }
@@ -141,8 +183,9 @@ export function initNavBar(): void {
     activeIndex = index;
     fraction = index;
     settleFromScale = 1;
+    currentScale = 1;
 
-    barEl.classList.remove('nav-animating');
+    barEl.classList.remove('nav-animating', 'nav-lens');
     navigateToTab(TAB_ORDER[index]);
     deck?.settle(index);
     clearButtonPaint();
@@ -161,13 +204,25 @@ export function initNavBar(): void {
     const startScale = settleFromScale;
     const span = index - from;
     const distance = Math.max(Math.abs(span), 0.35);
+    // A tap glides as a lens too: it swells mid-flight and settles back into
+    // the pill on arrival. A released drag is already a lens and just shrinks.
+    const tapSwell = startScale === 1 && span !== 0 ? TAP_LENS_SWELL : 0;
+    let lensUp = startScale > 1 || tapSwell > 0;
+    if (lensUp) barEl.classList.add('nav-lens');
 
     cancelTween = springTween(
       from,
       index,
       (value) => {
-        const progress = span === 0 ? 1 : (value - from) / span;
-        render(value, startScale + (1 - startScale) * Math.min(Math.max(progress, 0), 1));
+        const progress = Math.min(Math.max(span === 0 ? 1 : (value - from) / span, 0), 1);
+        const swell = tapSwell * Math.sin(Math.PI * progress);
+        render(value, startScale + (1 - startScale) * progress + swell);
+        // Hand back to the pill partway in, so its face eases in over the
+        // tail of the glide instead of snapping on once the spring rests.
+        if (lensUp && progress >= LENS_HANDBACK) {
+          lensUp = false;
+          barEl.classList.remove('nav-lens');
+        }
       },
       () => {
         cancelTween = null;
@@ -226,6 +281,8 @@ export function initNavBar(): void {
     cancelTween = null;
     activeIndex = index;
     fraction = index;
+    barEl.classList.remove('nav-lens');
+    clearButtonPaint();
     track.render(index);
     deck?.settle(index);
   });
@@ -242,6 +299,35 @@ export function initNavBar(): void {
   let barOrigin = 0;
   let pendingPos: number | null = null;
   let dragRafId: number | null = null;
+  let liftScale = 1;
+  let liftRafId: number | null = null;
+
+  // Grows the pill into the lens over LIFT_MS with a slight overshoot. Runs
+  // on its own rAF so the lift finishes even if the finger holds still.
+  function startLift() {
+    const t0 = performance.now();
+    const fromScale = currentScale;
+    const step = (now: number) => {
+      if (!engaged) {
+        liftRafId = null;
+        return;
+      }
+      const p = Math.min((now - t0) / LIFT_MS, 1);
+      // A gentle easeOutBack: decelerates into a barely-there overshoot, so
+      // the swell reads as one smooth motion rather than a pop.
+      const q = p - 1;
+      const eased = 1 + 1.6 * q * q * q + 0.6 * q * q;
+      liftScale = fromScale + (DRAG_SCALE - fromScale) * eased;
+      if (pendingPos === null) render(fraction, liftScale);
+      liftRafId = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    liftRafId = requestAnimationFrame(step);
+  }
+
+  function stopLift() {
+    if (liftRafId !== null) cancelAnimationFrame(liftRafId);
+    liftRafId = null;
+  }
 
   const desktopLayoutQuery = window.matchMedia('(min-width: 768px)');
 
@@ -255,7 +341,7 @@ export function initNavBar(): void {
 
     const delta = pendingPos - (isVerticalNav() ? startY : startX);
     const decay = Math.max(0, 1 - Math.abs(delta) / GRAB_DECAY_DISTANCE);
-    render(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), DRAG_SCALE);
+    render(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), liftScale);
     pendingPos = null;
   }
 
@@ -302,7 +388,9 @@ export function initNavBar(): void {
       cancelTween?.();
       cancelTween = null;
       track.measure();
-      barEl.classList.add('nav-animating', 'nav-dragging');
+      barEl.classList.add('nav-animating', 'nav-dragging', 'nav-lens');
+      liftScale = currentScale;
+      startLift();
       beginBackgroundPaint();
       deck?.begin();
 
@@ -338,6 +426,7 @@ export function initNavBar(): void {
     if (!engaged) return;
     engaged = false;
 
+    stopLift();
     barEl.classList.remove('nav-dragging');
     setTimeout(() => {
       suppressClick = false;
@@ -350,7 +439,7 @@ export function initNavBar(): void {
       buttons.length - 1,
     );
 
-    settleFromScale = DRAG_SCALE;
+    settleFromScale = liftScale;
     // velocity is px/ms along the bar; convert to tab-index units per second.
     animateTo(target, (velocity * 1000) / spacing);
   }

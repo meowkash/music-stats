@@ -196,9 +196,13 @@ const washStyles = [
 				z-index: 10000;
 				padding: 10px 18px;
 				border-radius: 999px;
-				background: rgba(18, 18, 24, 0.92);
-				border: 1px solid rgba(255, 255, 255, 0.12);
-				box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+				background: rgba(24, 24, 30, 0.6);
+				border: 1px solid rgba(255, 255, 255, 0.14);
+				box-shadow:
+					inset 0 1px 0 rgba(255, 255, 255, 0.2),
+					0 8px 28px rgba(0, 0, 0, 0.45);
+				-webkit-backdrop-filter: blur(22px) saturate(180%);
+				backdrop-filter: blur(22px) saturate(180%);
 				color: #fff;
 				font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 				font-size: 13px;
@@ -226,7 +230,7 @@ const washStyles = [
 				width: min(360px, calc(100vw - 32px));
 				max-width: min(360px, calc(100vw - 32px));
 				padding: 18px 20px;
-				border-radius: 20px;
+				border-radius: 28px;
 				background: rgba(14, 14, 20, 0.96);
 				border: 1px solid rgba(255, 255, 255, 0.1);
 				box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
@@ -484,11 +488,25 @@ const washStyles = [
 			transform var(--duration-fast) var(--ios-spring);
 
 		--surface-elevated: #0a0a0f;
-		--radius-sm: 6px;
-		--radius-md: 12px;
-		--radius-lg: 16px;
-		--radius-xl: 20px;
-		--radius-sheet: 20px;
+		/* Continuous, generous corners to sit alongside the capsule controls.
+		   Nested surfaces step down one size so corners stay concentric. */
+		--radius-sm: 10px;
+		--radius-md: 16px;
+		--radius-lg: 24px;
+		--radius-xl: 28px;
+		--radius-pill: 999px;
+		--radius-sheet: 32px;
+
+		/* Liquid-glass material: a translucent tint, a heavy saturated blur, a
+		   specular top rim and a soft inner glow along the bottom edge. */
+		--glass-tint: rgba(28, 28, 34, 0.38);
+		--glass-tint-strong: rgba(24, 24, 30, 0.62);
+		--glass-blur: blur(22px) saturate(180%);
+		--glass-border: rgba(255, 255, 255, 0.14);
+		--glass-rim:
+			inset 0 1px 0 rgba(255, 255, 255, 0.22),
+			inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+			inset 0 0 18px rgba(255, 255, 255, 0.04);
 		/* Snappier than --duration-slow: at 500ms the eye reads the soft landing
 		   as lag at the start of the gesture, even on a spring curve. */
 		/* A 92lvh sheet needs travel time to read as a slide rather than a snap.
@@ -633,11 +651,11 @@ const washStyles = [
 		width: 36px;
 		height: 36px;
 		border-radius: 50%;
-		background: rgba(0, 0, 0, 0.35);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
-		border: 1px solid rgba(255, 255, 255, 0.15);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		background: rgba(20, 20, 26, 0.32);
+		backdrop-filter: var(--glass-blur);
+		-webkit-backdrop-filter: var(--glass-blur);
+		border: 1px solid var(--glass-border);
+		box-shadow: var(--glass-rim), 0 4px 14px rgba(0, 0, 0, 0.3);
 		color: var(--text-primary);
 		display: flex;
 		align-items: center;
@@ -829,6 +847,8 @@ const washStyles = [
 		border-radius: var(--radius-lg);
 		backdrop-filter: blur(10px) saturate(130%);
 		-webkit-backdrop-filter: blur(10px) saturate(130%);
+		/* Faint specular rim along the top edge, as on iOS glass panels. */
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 		transition: var(--transition-smooth);
 	}
 
@@ -843,7 +863,7 @@ const washStyles = [
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		color: #fff;
-		border-radius: 12px;
+		border-radius: var(--radius-pill);
 		padding: 10px 16px;
 		font-family: var(--font-body);
 		font-size: 14px;
@@ -975,7 +995,7 @@ const washStyles = [
 		padding: 40px 20px;
 		background: rgba(255, 255, 255, 0.02);
 		border: 1px dashed rgba(255, 255, 255, 0.1);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		margin: 20px 0;
 		font-style: italic;
 	}
@@ -988,7 +1008,7 @@ const washStyles = [
 		gap: 16px;
 		background: rgba(255, 255, 255, 0.02);
 		border: 1px solid rgba(255, 255, 255, 0.04);
-		border-radius: 12px;
+		border-radius: var(--radius-md);
 		margin-bottom: 8px;
 		transition: var(--transition-smooth);
 		cursor: pointer;
@@ -1044,7 +1064,7 @@ const washStyles = [
 	.scrobble-row-thumb {
 		width: 44px;
 		height: 44px;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		flex-shrink: 0;
 		overflow: hidden;
 		background: rgba(255, 255, 255, 0.04);

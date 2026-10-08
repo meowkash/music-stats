@@ -26,7 +26,9 @@ if (hasLastfm) {
   run('Enrich recap meta (durations + genres)', 'node', ['scripts/enrich-recap-meta.js']);
 }
 if (hasLastfm && refresh) {
-  run('Refresh all artwork', 'node', ['scripts/backfill-artwork.js', '--refresh']);
+  // --prune-dead first drops URLs that now 404, so entries the resolver can't
+  // re-match fall back to the placeholder rather than a broken image.
+  run('Refresh all artwork', 'node', ['scripts/backfill-artwork.js', '--refresh', '--prune-dead']);
 } else if (hasLastfm) {
   run('Backfill missing artwork', 'node', ['scripts/backfill-artwork.js']);
 }
