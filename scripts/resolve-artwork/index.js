@@ -73,7 +73,8 @@ export function buildLadder({ type, name, artistName }) {
     label: 'title-only',
     type,
     term: undecorated,
-    expect: { name: undecorated, artistName: '' },
+    // Broaden the search text, but still require the result's artist to match.
+    expect: { name: undecorated, artistName },
   });
 
   return rungs;
@@ -91,13 +92,13 @@ async function gatherCandidates(rung, { lastfmKey, artistName, name }) {
   };
 
   await collect(() => searchItunes(rung.term, ITUNES_ENTITY[rung.type] ?? 'album'));
-  if (candidates.length === 0) {
+  if (!pickBest(rung.expect, candidates)) {
     await collect(() => searchDeezer(rung.term, DEEZER_TYPE[rung.type] ?? 'album'));
   }
-  if (candidates.length === 0 && rung.type !== 'artist') {
+  if (!pickBest(rung.expect, candidates) && rung.type !== 'artist') {
     await collect(() => searchMusicBrainz(rung.expect.name, rung.expect.artistName));
   }
-  if (candidates.length === 0) {
+  if (!pickBest(rung.expect, candidates)) {
     await collect(() => searchLastfm(lastfmKey, { type: rung.type, name, artistName }));
   }
 

@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { readScrobbles } from './scrobble-source.js';
 import { buildArtistAttribution, loadOverrides } from './artist-resolve.js';
-import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normalize.js';
+import { canonicalAlbumTitle } from './resolve-artwork/normalize.js';
+import { createAlbumGroups } from './album-groups.js';
 import { canonicalizeTag, genreDisplayName, tagWeight } from './genre-taxonomy.js';
 
 const PUBLIC_DATA_DIR = path.resolve('public/data');
@@ -343,6 +344,7 @@ function main() {
   const durations = cache.tracks ?? {};
   const artistTags = cache.artists ?? {};
   const overrides = loadOverrides();
+  const albumGroupKey = createAlbumGroups(readScrobbles(), overrides);
   const localTime = createLocalTimeResolver(TIMEZONE);
 
   // Pass 1 — bucket every scrobble by year, resolving names once up front.
@@ -401,7 +403,7 @@ function main() {
     artistIdFor(artist);
     bump(bucket.rawArtistPlays, artist);
     if (album) {
-      const albumKey = albumGroupingKey(artist, album);
+      const albumKey = albumGroupKey(artist, album);
       bump(bucket.albums, albumKey);
       bucket.albumArtist.set(albumKey, artist);
       if (!bucket.albumDisplayNames.has(albumKey)) {

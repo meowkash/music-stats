@@ -1,6 +1,7 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
 import { promoteCanonicalArtworkCache } from './artwork-keys.js';
-import { albumGroupingKey, canonicalAlbumTitle } from './resolve-artwork/normalize.js';
+import { canonicalAlbumTitle } from './resolve-artwork/normalize.js';
+import { createAlbumGroups } from './album-groups.js';
 import { parseCSVLine } from './scrobble-source.js';
 import fs from 'fs';
 import path from 'path';
@@ -37,6 +38,15 @@ function main() {
 
   const content = fs.readFileSync(CSV_PATH, 'utf-8');
   const lines = content.split('\n');
+  const overrides = loadOverrides();
+  const albumGroupKey = createAlbumGroups((function* () {
+    for (const line of lines.slice(1)) {
+      const parts = parseCSVLine(line);
+      if (parts.length >= 4 && !Number.isNaN(parseInt(parts[0], 10))) {
+        yield { artist: parts[1], album: parts[2], track: parts[3] };
+      }
+    }
+  })(), overrides);
 
   const recapCachePath = path.join(DATA_DIR, 'recap-meta-cache.json');
   let trackDurations = {};
@@ -49,33 +59,27 @@ function main() {
   const artistMap = new Map();
 
   const albums = [];
-  const albumMap = new Map();
-  /** artist|normalized-title → canonical albumId */
+  let emptyAlbumId;
+  /** Release group key → canonical albumId */
   const albumGroupMap = new Map();
 
   function resolveAlbumId(artistName, albumName) {
     const trimmed = String(albumName ?? '').trim();
     if (!trimmed) {
-      let emptyId = albumMap.get('');
-      if (emptyId === undefined) {
-        emptyId = albums.length;
+      if (emptyAlbumId === undefined) {
+        emptyAlbumId = albums.length;
         albums.push('');
-        albumMap.set('', emptyId);
       }
-      return emptyId;
+      return emptyAlbumId;
     }
 
-    const cached = albumMap.get(trimmed);
-    if (cached !== undefined) return cached;
-
-    const groupKey = albumGroupingKey(artistName, trimmed);
+    const groupKey = albumGroupKey(artistName, trimmed);
     let albumId = albumGroupMap.get(groupKey);
     if (albumId === undefined) {
       albumId = albums.length;
       albums.push(canonicalAlbumTitle(trimmed));
       albumGroupMap.set(groupKey, albumId);
     }
-    albumMap.set(trimmed, albumId);
     return albumId;
   }
 
@@ -138,7 +142,6 @@ function main() {
 
   console.log(`Parsed database. Unique artists: ${artists.length}, Unique albums: ${albums.length}, Unique tracks: ${tracks.length}`);
 
-  const overrides = loadOverrides();
   const { canonicalArtists, rawToCanonical, trackToCanonical } = buildArtistAttribution(artists, overrides, artistCounts, tracks, trackCounts);
   console.log(`Built canonical artist graph: ${canonicalArtists.length} canonical entities`);
 
@@ -252,7 +255,7 @@ function main() {
     const trackName = parts[3];
 
     let artistId = artistMap.get(artistName);
-    let albumId = albumMap.get(albumName);
+    let albumId = resolveAlbumId(artistName, albumName);
     let trackId = trackMap.get(`${trackName}|${artistId}|${albumId}`);
     if (trackId === undefined) trackId = 0;
 
@@ -353,7 +356,7 @@ function main() {
     artistTrackCounts[artistId].push({ name: trackName, count });
 
     if (!artistAlbums[artistId]) artistAlbums[artistId] = new Set();
-    if (albumId !== undefined && albumId !== null && albumId !== 0 && albums[albumId] !== '') {
+    if (albumId !== undefined && albumId !== null && albums[albumId] !== '') {
       artistAlbums[artistId].add(albumId);
     }
   }
@@ -392,7 +395,7 @@ function main() {
       canonicalTrackCounts[cId][trackName] = (canonicalTrackCounts[cId][trackName] || 0) + count;
 
       if (!canonicalAlbumSets[cId]) canonicalAlbumSets[cId] = new Set();
-      if (albumId !== undefined && albumId !== null && albumId !== 0 && albums[albumId] !== '') {
+      if (albumId !== undefined && albumId !== null && albums[albumId] !== '') {
         canonicalAlbumSets[cId].add(albumId);
       }
     }

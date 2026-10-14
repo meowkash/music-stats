@@ -1,0 +1,26 @@
+{
+  "years": [
+    "2021",
+    "2022",
+    "2023",
+    "2024",
+    "2025",
+    "2026"
+  ],
+  "sourceAlbums": 5622,
+  "sourceTracks": 9754,
+  "playsVerified": 151166,
+  "collisionCandidates": 121,
+  "activeThisYear": 43,
+  "checks": [
+    "All yearly album totals",
+    "Yearly top-five counts",
+    "All-time album catalog counts",
+    "Artist album references",
+    "Raw artist totals preserved",
+    "Unified artist totals unchanged versus original code in every year",
+    "Unified all-time artist catalog totals unchanged",
+    "Total plays preserved"
+  ],
+  "limitation": "Candidate groups are inferred from track artist credits and album titles, not catalog release IDs. Some disconnected groups may be legitimate compilations or incomplete artist credits. Deployed dictionaries have already normalized edition names."
+}

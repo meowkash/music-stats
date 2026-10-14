@@ -90,7 +90,7 @@ function creditArtistRollup(
 
 function isValidAlbum(meta: MetaData, albumId: number): boolean {
   const name = meta.albums[albumId];
-  return albumId > 0 && typeof name === 'string' && name.trim() !== '';
+  return albumId >= 0 && typeof name === 'string' && name.trim() !== '';
 }
 
 function artistDisplayName(meta: MetaData, artistId: number, mode: ArtistRollupMode = 'canonical'): string {

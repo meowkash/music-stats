@@ -43,11 +43,22 @@ export function canonicalAlbumTitle(albumName) {
   return stripDecorations(trimmed) || trimmed;
 }
 
-/** Stable key for merging deluxe/custom/remaster editions per artist. */
+/** Titles that explicitly identify a compilation rather than a solo release. */
+export function isCompilationAlbum(albumName) {
+  const title = String(albumName ?? '');
+  return /\b(?:soundtrack|original score|dj mix|compilation|various artists|year mix|mixed by|motion picture|music pack|yearbook|episode|official album)\b|^official\b.*\balbum\b|:\s*the album(?:\s|$)/i.test(title)
+    || parseEpisodic(title) !== null;
+}
+
+/** Editions and guest credits share a release; unrelated lead artists do not.
+ * Scrobbles carry track artists, so explicitly named compilations use their
+ * title as identity. Catalog release IDs would be needed for ambiguous cases.
+ */
 export function albumGroupingKey(artistName, albumName) {
   const base = canonicalAlbumTitle(albumName);
   if (!base) return '';
-  return `${normalizeForCompare(artistName)}|${normalizeForCompare(base)}`;
+  const owner = isCompilationAlbum(albumName) ? 'compilation' : primaryArtist(artistName);
+  return `${normalizeForCompare(owner)}|${normalizeForCompare(base)}`;
 }
 
 export function stripDecorations(title) {
