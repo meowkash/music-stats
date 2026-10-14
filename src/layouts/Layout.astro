@@ -1,9 +1,18 @@
 ---
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import appleSplashTags from "./splash-tags.html?raw";
 import { TAB_ORDER } from "../utils/tabs";
 import { TAB_SURFACES, TAB_THEME_COLORS, TAB_BOTTOM_COLORS, cssWash } from "../utils/tabTheme";
 import cacheData from "../../public/cache-version.json";
 import logoMarkSvg from "../../public/logo-mark.svg?raw";
+
+// Community workaround for iOS 27.2 Home Screen icon fetch failures: embed
+// the generated PNG at build time so the install sheet needs no icon request.
+// Keep the public PNGs for manifest consumers and root-path icon discovery.
+const appleTouchIconDataUrl = `data:image/png;base64,${readFileSync(
+	resolve("public/apple-touch-icon.png"),
+).toString("base64")}`;
 
 // Inlined so the glyph is in the first frame — an <img> can paint a beat after
 // the overlay, which flashes against the identical launch image. Ids are
@@ -54,11 +63,6 @@ const washStyles = [
 		<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href={`/favicon.ico?v=${cacheData.version}`} />
 		<link rel="icon" type="image/png" sizes="32x32" href={`/icons/icon-32.png?v=${cacheData.version}`} />
 		<link rel="icon" type="image/png" sizes="192x192" href={`/icons/icon-192.png?v=${cacheData.version}`} />
-		{/* No ?v= cache-buster on these two: the home-screen icon and the manifest
-		    are fetched by WebKit's out-of-process icon loader and by Chrome's
-		    installability checker, neither of which reliably follows a
-		    query-stringed apple-touch-icon. public/_headers revalidates both on
-		    every request instead, which is what the buster was there for. */}
 		<script is:inline>
 			if (
 				navigator.standalone === true ||
@@ -67,9 +71,7 @@ const washStyles = [
 				document.documentElement.classList.add("is-standalone-pwa");
 			}
 		</script>
-		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-		<link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href={appleTouchIconDataUrl} />
 		<link rel="manifest" href="/manifest.json" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="mobile-web-app-capable" content="yes" />
