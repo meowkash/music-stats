@@ -1,5 +1,8 @@
 // Progress is a CSS animation per segment, not a JS timer: the fill stays on the
 // compositor, `animationend` advances so timing can't drift, pause is one property.
+// A slide may declare `data-steps="n"`: it then plays as n equal phases inside
+// one segment (a tap moves a phase, not a slide), with only the phase boundary
+// itself on a timer.
 
 export interface StoryPlayerOptions {
   /** Receives pointer/keyboard input and hosts the slides. */
@@ -10,6 +13,12 @@ export interface StoryPlayerOptions {
   durationMs?: number;
   /** Fired as a slide becomes active — the hook for per-slide animations. */
   onEnter?: (index: number, slide: HTMLElement) => void;
+  /**
+   * Applies a phase to a multi-step slide. `animate` is false when the slide is
+   * entered (reset to its first phase) and true for a live phase change. The
+   * default just writes `data-step`.
+   */
+  onStep?: (slide: HTMLElement, step: number, animate: boolean) => void;
   onExit?: () => void;
   /** Fired when advancing past the final slide. */
   onComplete?: () => void;
@@ -34,12 +43,22 @@ const DISMISS_DISTANCE_PX = 110;
 const TAP_SLOP_PX = 12;
 
 export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
-  const { root, progressBar, slides, durationMs = 20_000, onEnter, onExit, onComplete } = options;
+  const { root, progressBar, slides, durationMs = 20_000, onEnter, onStep, onExit, onComplete } = options;
+  const applyStep =
+    onStep ??
+    ((slide: HTMLElement, step: number) => {
+      slide.dataset.step = String(step);
+    });
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const segments: HTMLElement[] = [];
   let index = 0;
+  let step = 0;
   let running = false;
+  let paused = false;
+  let stepTimer: number | null = null;
+  let stepDueAt = 0;
+  let stepRemaining = 0;
   let holdTimer: number | null = null;
   let held = false;
   let pointerId: number | null = null;
@@ -85,6 +104,52 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     next();
   }
 
+  function stepsOf(slide: HTMLElement | undefined): number {
+    return Math.max(1, Number(slide?.dataset.steps) || 1);
+  }
+
+  function clearStepTimer() {
+    if (stepTimer !== null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
+  }
+
+  function scheduleStep(delay: number) {
+    clearStepTimer();
+    if (!running || reduceMotion) return;
+    if (step >= stepsOf(slides[index]) - 1) return;
+    stepRemaining = delay;
+    if (paused) return;
+    stepDueAt = performance.now() + delay;
+    stepTimer = window.setTimeout(() => {
+      stepTimer = null;
+      // The fill is already at this boundary, so it keeps running untouched.
+      goStep(step + 1, false);
+    }, delay);
+  }
+
+  /** (Re)starts the active fill partway in, at the current phase's start. */
+  function startFill() {
+    if (!running) return;
+    const fill = fillFor(index);
+    if (!fill) return;
+    const offset = (step / stepsOf(slides[index])) * durationMs;
+    fill.style.animation = 'none';
+    // Force reflow so re-assigning the same animation restarts it.
+    void fill.offsetWidth;
+    fill.style.animation = `story-progress ${durationMs}ms linear ${-offset}ms forwards`;
+    if (reduceMotion || paused) fill.style.animationPlayState = 'paused';
+  }
+
+  function goStep(target: number, restartFill = true) {
+    const slide = slides[index];
+    step = target;
+    applyStep(slide, step, true);
+    if (restartFill) startFill();
+    scheduleStep(durationMs / stepsOf(slide));
+  }
+
   function show(target: number) {
     const clamped = Math.max(0, Math.min(target, slides.length - 1));
     slides.forEach((slide, i) => {
@@ -96,25 +161,24 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     });
 
     index = clamped;
+    step = 0;
     paintSegments();
 
     const slide = slides[index];
+    if (stepsOf(slide) > 1) applyStep(slide, 0, false);
     onEnter?.(index, slide);
     // Next frame, so any animation reset above has actually been committed.
     requestAnimationFrame(() => slide?.classList.add('has-played'));
 
-    if (!running) return;
-    const fill = fillFor(index);
-    if (!fill) return;
-
-    fill.style.animation = 'none';
-    // Force reflow so re-assigning the same animation restarts it.
-    void fill.offsetWidth;
-    fill.style.animation = `story-progress ${durationMs}ms linear forwards`;
-    if (reduceMotion) fill.style.animationPlayState = 'paused';
+    startFill();
+    scheduleStep(durationMs / stepsOf(slide));
   }
 
   function next() {
+    if (step < stepsOf(slides[index]) - 1) {
+      goStep(step + 1);
+      return;
+    }
     if (index >= slides.length - 1) {
       onComplete?.();
       return;
@@ -123,6 +187,10 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
   }
 
   function previous() {
+    if (step > 0) {
+      goStep(step - 1);
+      return;
+    }
     if (index === 0) {
       show(0);
       return;
@@ -134,6 +202,11 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     root.classList.add('is-paused');
     const fill = fillFor(index);
     if (fill) fill.style.animationPlayState = 'paused';
+    if (!paused && stepTimer !== null) {
+      stepRemaining = Math.max(0, stepDueAt - performance.now());
+      clearStepTimer();
+    }
+    paused = true;
   }
 
   function resume() {
@@ -141,6 +214,10 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     root.classList.remove('is-paused');
     const fill = fillFor(index);
     if (fill) fill.style.animationPlayState = 'running';
+    if (paused) {
+      paused = false;
+      if (step < stepsOf(slides[index]) - 1) scheduleStep(stepRemaining);
+    }
   }
 
   function cancelHold() {
@@ -259,6 +336,7 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     stop() {
       running = false;
       cancelHold();
+      clearStepTimer();
       clearAnimation(index);
       root.classList.remove('is-paused');
     },
@@ -269,6 +347,7 @@ export function createStoryPlayer(options: StoryPlayerOptions): StoryPlayer {
     destroy() {
       running = false;
       cancelHold();
+      clearStepTimer();
       root.removeEventListener('pointerdown', onPointerDown);
       root.removeEventListener('pointermove', onPointerMove);
       root.removeEventListener('pointerup', endPointer);

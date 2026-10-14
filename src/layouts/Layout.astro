@@ -3,6 +3,15 @@ import appleSplashTags from "./splash-tags.html?raw";
 import { TAB_ORDER } from "../utils/tabs";
 import { TAB_SURFACES, TAB_THEME_COLORS, TAB_BOTTOM_COLORS, cssWash } from "../utils/tabTheme";
 import cacheData from "../../public/cache-version.json";
+import logoMarkSvg from "../../public/logo-mark.svg?raw";
+
+// Inlined so the glyph is in the first frame — an <img> can paint a beat after
+// the overlay, which flashes against the identical launch image. Ids are
+// prefixed so they can't collide with gradients elsewhere on the page.
+const splashGlyphSvg = logoMarkSvg
+	.replace(/id="(\w+)"/g, 'id="splash-$1"')
+	.replace(/url\(#(\w+)\)/g, "url(#splash-$1)")
+	.replace("<svg ", '<svg class="splash-glyph" width="76" height="76" aria-hidden="true" ');
 
 interface Props {
 	title: string;
@@ -125,14 +134,20 @@ const washStyles = [
 			/>
 		</noscript>
 		<style is:inline>
-			/* Critical inline styles for Splash Screen to prevent FOUC (jumpiness) */
+			/* Critical inline styles for Splash Screen to prevent FOUC (jumpiness).
+			   Must stay pixel-identical to the apple-touch-startup-image that
+			   scripts/generate-pwa-icons.js renders (SPLASH_GLYPH_PT / SPLASH_GLOW_PT),
+			   because iOS swaps that image for this overlay on first paint. */
 			#pwa-splash-screen {
 				position: fixed;
 				top: 0;
 				left: 0;
 				right: 0;
 				bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
-				background-color: #000000;
+				background:
+					radial-gradient(190px 165px at 50% 50%, rgba(168, 85, 247, 0.22) 0%, rgba(255, 45, 85, 0.06) 70%, rgba(7, 5, 13, 0) 100%),
+					radial-gradient(circle farthest-corner at 50% 50%, #241c3a 0%, #110e18 50%, #07050d 100%);
+				background-color: #07050d;
 				z-index: 9999;
 				display: flex;
 				align-items: center;
@@ -144,47 +159,21 @@ const washStyles = [
 				visibility: hidden;
 				pointer-events: none;
 			}
-			.splash-logo {
-				opacity: 0;
-				will-change: opacity, transform;
-				animation: splash-logo-fade-in 0.5s var(--ios-spring) 0.1s both;
-			}
-			@keyframes splash-logo-fade-in {
-				from { opacity: 0; transform: scale(0.9) translateY(15px); }
-				to { opacity: 1; transform: scale(1) translateY(0); }
-			}
-			.splash-icon-shell {
-				position: relative;
-				width: 108px;
-				height: 108px;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-			}
-			.splash-icon-bg {
-				position: absolute;
-				inset: 0;
-				border-radius: 27px;
-				background: radial-gradient(circle at 50% 36%, #241c3a 0%, #110e18 50%, #07050d 100%);
-				box-shadow:
-					inset 0 1px 0 rgba(255, 255, 255, 0.06),
-					0 0 48px rgba(168, 85, 247, 0.12);
-			}
 			.splash-glyph {
-				position: relative;
-				width: 62px;
-				height: 62px;
+				width: 76px;
+				height: 76px;
 				display: block;
-				animation: glyph-glow 2s infinite ease-in-out;
+				/* Starts glow-free so the first frame matches the launch image. */
+				animation: glyph-glow 2s 0.2s infinite ease-in-out both;
 			}
 			@keyframes glyph-glow {
 				0%, 100% {
-					filter: drop-shadow(0 0 10px rgba(255, 45, 85, 0.55)) drop-shadow(0 0 22px rgba(168, 85, 247, 0.35));
+					filter: drop-shadow(0 0 0 rgba(255, 45, 85, 0)) drop-shadow(0 0 0 rgba(168, 85, 247, 0));
 					transform: scale(1);
 				}
 				50% {
-					filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.65)) drop-shadow(0 0 32px rgba(0, 240, 255, 0.28));
-					transform: scale(1.06);
+					filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.55)) drop-shadow(0 0 28px rgba(0, 240, 255, 0.22));
+					transform: scale(1.05);
 				}
 			}
 
@@ -357,6 +346,10 @@ const washStyles = [
 			{TAB_ORDER.map((tab) => <div class="bg-layer" data-tab={tab}></div>)}
 		</div>
 
+		{/* See the .status-bar-shield rule: an opaque fixed strip at the top edge
+		    is what stops iOS laying its blurred scroll-edge effect over the page. */}
+		<div class="status-bar-shield" aria-hidden="true" style={`--status-bar-default:${TAB_THEME_COLORS.dashboard}`}></div>
+
 		<!-- Inline dismiss: must not depend on JS bundles (offline reload may block module load) -->
 		<script is:inline>
 			(function () {
@@ -375,18 +368,7 @@ const washStyles = [
 
 		<!-- PWA Loading Splash Screen Overlay -->
 		<div id="pwa-splash-screen">
-			<div class="splash-logo">
-				<div class="splash-icon-shell">
-					<div class="splash-icon-bg" aria-hidden="true"></div>
-					<img
-						class="splash-glyph"
-						src="/logo-mark.svg"
-						width="62"
-						height="62"
-						alt=""
-					/>
-				</div>
-			</div>
+			<Fragment set:html={splashGlyphSvg} />
 		</div>
 
 		<div id="data-update-toast" role="status" aria-live="polite"></div>
@@ -461,6 +443,11 @@ const washStyles = [
 		--font-body:
 			"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
 			sans-serif;
+		/* Every displayed figure — counts, totals, stats — uses the dashboard
+		   stat face: Outfit at 700 with tabular digits, so numbers read as one
+		   family across the app and columns of them line up. */
+		--font-numeric: var(--font-header);
+		--font-numeric-weight: 700;
 
 		/* Motion tokens — every transition uses one of these so nothing animates
 		   on a different curve or timing than its neighbours. */
@@ -520,8 +507,13 @@ const washStyles = [
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
 		--nav-bar-height: 64px;
-		/* Distance from the physical bottom — smaller = nav sits a bit lower. */
-		--nav-bar-gap: 4px;
+		/* Distance from the physical bottom — smaller = nav sits a bit lower.
+		   Added to the safe-area inset, so in the PWA it is negative: the full
+		   ~34px home-indicator inset left a tall empty band under the bar. This
+		   lets the bar reach into the inset, stopping 28px off the bottom edge
+		   (clear of the indicator itself), and never closer than 12px on devices
+		   with little or no inset. */
+		--nav-bar-gap: calc(max(12px, env(safe-area-inset-bottom) - 6px) - env(safe-area-inset-bottom));
 		/* The *only* thing separating content from the bar: --nav-zone-height is
 		   the bar's own offset plus this, so at 0 they butt straight together. */
 		--nav-content-gap: 8px;
@@ -551,7 +543,7 @@ const washStyles = [
 	/* iOS versions with an unreliable display-mode query still report
 	   navigator.standalone, so the class re-asserts the PWA value. */
 	html.is-standalone-pwa {
-		--nav-bar-gap: 4px;
+		--nav-bar-gap: calc(max(12px, env(safe-area-inset-bottom) - 6px) - env(safe-area-inset-bottom));
 	}
 
 	.panel-container {
@@ -641,6 +633,38 @@ const washStyles = [
 		#app-bg-gradient .bg-layer {
 			transition: none;
 		}
+	}
+
+	/* iOS 26 draws a soft blurred "scroll edge" under the status bar of a
+	   home-screen app, reaching well below the bar itself and smearing whatever
+	   sits near the top. WebKit only swaps that for a plain colour fill when it
+	   finds an opaque fixed element pinned to the top edge, so this strip is
+	   that element. It must stay hit-testable (no pointer-events: none) and keep
+	   a solid background-color, or WebKit skips it and the blur comes back.
+	   The colour tracks the top of the active wash (applyThemeColor). */
+	.status-bar-shield {
+		display: none;
+	}
+
+	@media (display-mode: standalone) {
+		.status-bar-shield {
+			display: block;
+		}
+	}
+
+	html.is-standalone-pwa .status-bar-shield {
+		display: block;
+	}
+
+	.status-bar-shield {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: env(safe-area-inset-top);
+		z-index: calc(var(--z-overlay-backdrop) - 1);
+		background-color: var(--status-bar-color, var(--status-bar-default));
+		transition: background-color var(--duration-slow) var(--ios-spring);
 	}
 
 	/* ── Shared bottom sheet / side panel ────────────────────────────────
@@ -1189,6 +1213,13 @@ const washStyles = [
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.scrobble-count-val {
+		font-family: var(--font-numeric);
+		font-weight: var(--font-numeric-weight);
+		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.01em;
 	}
 
 	.scrobble-row-right {

@@ -44,6 +44,7 @@ export function applyThemeColor(tab: string): void {
     if (meta.content !== topColor) meta.content = topColor;
   }
   document.documentElement.style.backgroundColor = bottomColor;
+  document.documentElement.style.setProperty('--status-bar-color', topColor);
 }
 
 /** Drives the ambient background gradient crossfade. */

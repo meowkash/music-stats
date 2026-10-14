@@ -55,6 +55,7 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
         document.body.dataset.activeTab = lastTab;
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta && themeColors[lastTab]) meta.content = themeColors[lastTab];
+        if (themeColors[lastTab]) document.documentElement.style.setProperty('--status-bar-color', themeColors[lastTab]);
         if (bottomColors[lastTab]) document.documentElement.style.backgroundColor = bottomColors[lastTab];
       }
     } catch (e) {

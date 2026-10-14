@@ -1,6 +1,8 @@
 // Slides are HTML strings built once; the player only toggles `.is-active`, so a
 // replay costs a class toggle. Voice is "my"/"the" — one listener, never "your".
-import { escapeHTML, getArtistArtworkUrl, getArtworkThumbHTML, getArtworkUrl } from './ui';
+import { escapeHTML, getArtistArtworkUrl, getArtworkThumbHTML, getArtworkUrl, getBottomColorForUrl, getColorForUrl } from './ui';
+import { rgbToHsl } from './colorSurface';
+import { icon, introIllustration, minutesIllustration, styleIllustration, vibeIllustration } from './recapArt';
 
 // The viewer must live outside `#app-shell`: `.panel-section` is transformed and
 // would become the containing block for the viewer's `position: fixed`.
@@ -73,9 +75,15 @@ export interface RecapIndexEntry {
 }
 
 export interface Story {
-  /** Drives the slide's palette via a data attribute. */
+  /** Drives the slide's default palette via a data attribute. */
   tone: string;
   html: string;
+  /** Artwork blurred behind the slide, when it has one. */
+  backdrop?: string | null;
+  /** Inline palette override (`--c1`…), e.g. colours pulled from artwork. */
+  style?: string;
+  /** Phases played inside the one segment (see utils/storyPlayer.ts). */
+  steps?: number;
 }
 
 const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
@@ -106,20 +114,11 @@ function counter(value: number, formatted = formatNumber(value)): string {
   return `<span class="story-counter" data-count-to="${value}" data-count-text="${escapeHTML(formatted)}">0</span>`;
 }
 
-// The scrim is not decoration — it holds body text at contrast over an arbitrary
-// cover, so it stays even when the image fails to load.
-function backdrop(url: string | null): string {
-  if (!url) return '';
-  return `<div class="story-backdrop" aria-hidden="true">
-    <img src="${escapeHTML(url)}" alt="" decoding="async" />
-  </div>`;
-}
-
-function bars(values: number[], labels: string[], peak: number): string {
+function bars(values: number[], labels: string[], peak: number, extraClass = ''): string {
   const max = Math.max(...values, 1);
-  return `<div class="story-bars" role="img" aria-label="${escapeHTML(labels.join(', '))}">${values
+  return `<div class="story-bars${extraClass ? ` ${extraClass}` : ''}" role="img" aria-label="${escapeHTML(labels.join(', '))}">${values
     .map((value, i) => {
-      const height = Math.max(3, Math.round((value / max) * 100));
+      const height = Math.max(4, Math.round((value / max) * 100));
       return `<div class="story-bar${i === peak ? ' is-peak' : ''}" style="--bar-height:${height}%;--bar-index:${i}">
         <i></i><span>${escapeHTML(labels[i])}</span>
       </div>`;
@@ -149,8 +148,19 @@ function clockDial(byHour: number[], peakHour: number): string {
     })
     .join('');
 
+  // Midnight, 6, noon and 18 marked so the dial reads as a clock at a glance.
+  const ticks = [0, 6, 12, 18]
+    .map((hour) => {
+      const angle = ((hour / 24) * 360 - 90) * (Math.PI / 180);
+      const x = cx + Math.cos(angle) * 18;
+      const y = cy + Math.sin(angle) * 18 + 3.5;
+      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="story-clock-tick">${hour}</text>`;
+    })
+    .join('');
+
   return `<svg class="story-clock" viewBox="0 0 200 200" aria-hidden="true">
     <circle cx="${cx}" cy="${cy}" r="${inner - 6}" class="story-clock-core" />
+    ${ticks}
     ${rays}
   </svg>`;
 }
@@ -234,26 +244,49 @@ function seasonGlyph(season: string): string {
     stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
 
-function artworkUrlFor(
-  kind: 'artist' | 'album' | 'track',
-  item: { name: string; artist?: string; album?: string },
-): string | null {
+type RankedKind = 'artist' | 'album' | 'track';
+type RankedItem = { name: string; artist?: string; album?: string; plays: number };
+
+function artworkUrlFor(kind: RankedKind, item: { name: string; artist?: string; album?: string }): string | null {
   if (kind === 'artist') return getArtistArtworkUrl(item.name);
   if (kind === 'album') return getArtworkUrl('album', item.name, item.artist ?? '', item.name);
   return getArtworkUrl('track', item.name, item.artist ?? '', item.album ?? '');
 }
 
-function artworkFor(kind: 'artist' | 'album' | 'track', item: { name: string; artist?: string; album?: string }): string {
+function artworkFor(kind: RankedKind, item: { name: string; artist?: string; album?: string }): string {
   return getArtworkThumbHTML(artworkUrlFor(kind, item), kind);
 }
 
-function runnerUpList(
-  kind: 'artist' | 'album' | 'track',
-  items: Array<{ name: string; artist?: string; album?: string; plays: number }>,
-): string {
+const hsl = (h: number, s: number, l: number) =>
+  `hsl(${Math.round(((h % 360) + 360) % 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%)`;
+
+/**
+ * A three-colour palette pulled from a cover: its dominant hue plus two
+ * neighbours either side, lifted to a saturation that survives the dark slide.
+ * Near-grey covers return nothing, so the slide keeps its own tone instead of
+ * turning to mud.
+ */
+function artworkPalette(url: string | null): string | undefined {
+  const rgb = getColorForUrl(url);
+  if (!rgb) return undefined;
+  const { h, s } = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  if (s < 0.14) return undefined;
+
+  const sat = Math.min(0.95, Math.max(0.62, s + 0.12));
+  const vars = [
+    `--c1:${hsl(h, sat, 0.6)}`,
+    `--c2:${hsl(h + 38, sat, 0.56)}`,
+    `--c3:${hsl(h - 46, sat * 0.92, 0.52)}`,
+  ];
+  const bottom = getBottomColorForUrl(url);
+  if (bottom) vars.push(`--base:rgb(${bottom.r} ${bottom.g} ${bottom.b})`);
+  return vars.join(';');
+}
+
+function runnerUpList(kind: RankedKind, items: RankedItem[], leaderPlays: number): string {
   return `<ol class="story-runners">${items
     .map(
-      (item, i) => `<li style="--row-index:${i}">
+      (item, i) => `<li style="--row-index:${i};--fill:${Math.max(6, Math.round((item.plays / Math.max(leaderPlays, 1)) * 100))}%">
         <span class="story-runner-rank">${i + 2}</span>
         <span class="story-runner-art">${artworkFor(kind, item)}</span>
         <span class="story-runner-text">
@@ -266,18 +299,59 @@ function runnerUpList(
     .join('')}</ol>`;
 }
 
-function heroSlide(
-  kind: 'artist' | 'album' | 'track',
-  eyebrow: string,
-  item: { name: string; artist?: string; album?: string; plays: number },
+/**
+ * One slide per ranking, played in two phases: the #1 alone and large, then it
+ * shrinks into a header card and the rest of the list rises in underneath.
+ * RecapStory animates the hand-off (the cover FLIPs, the text cross-fades).
+ */
+function rankedSlide(
+  kind: RankedKind,
+  noun: { one: string; many: string },
+  items: RankedItem[],
+  meta: string,
   footnote: string,
-): string {
-  return `${backdrop(artworkUrlFor(kind, item))}
-    <p class="story-eyebrow">${escapeHTML(eyebrow)}</p>
-    <div class="story-hero-art">${artworkFor(kind, item)}</div>
-    <h2 class="story-title">${escapeHTML(item.name)}</h2>
-    ${item.artist ? `<p class="story-subtitle">${escapeHTML(item.artist)}</p>` : ''}
-    <p class="story-footnote">${footnote}</p>`;
+): Story {
+  const [top, ...rest] = items;
+  const url = artworkUrlFor(kind, top);
+  const palette = artworkPalette(url);
+  return {
+    tone: kind,
+    // A near-grey cover blurred behind the slide only greys out its palette, so
+    // the backdrop comes with the extracted colours or not at all.
+    backdrop: palette ? url : null,
+    style: palette,
+    steps: rest.length ? 2 : 1,
+    html: `<p class="story-eyebrow story-swap">
+        <span class="story-swap-a">My top ${escapeHTML(noun.one)}</span>
+        <span class="story-swap-b">My top ${escapeHTML(noun.many)}</span>
+      </p>
+      <div class="story-lead">
+        <span class="story-lead-rank" data-fade>1</span>
+        <div class="story-hero-art" data-flip>${artworkFor(kind, top)}</div>
+        <div class="story-lead-text" data-fade>
+          <h2 class="story-title">${escapeHTML(top.name)}</h2>
+          ${top.artist ? `<p class="story-subtitle">${escapeHTML(top.artist)}</p>` : ''}
+          <p class="story-lead-meta">${meta}</p>
+        </div>
+      </div>
+      ${rest.length ? runnerUpList(kind, rest, top.plays) : ''}
+      <p class="story-footnote story-split-foot">${footnote}</p>`,
+  };
+}
+
+function hourIcon(hour: number): string {
+  if (hour >= 5 && hour < 10) return icon('sunrise');
+  if (hour >= 10 && hour < 17) return icon('sun');
+  if (hour >= 17 && hour < 21) return icon('sunset');
+  return icon('moon');
+}
+
+// Dawn orange, midday gold, dusk pink, night indigo — the card wears its hour.
+function hourColor(hour: number): string {
+  if (hour >= 5 && hour < 10) return '#fb923c';
+  if (hour >= 10 && hour < 17) return '#facc15';
+  if (hour >= 17 && hour < 21) return '#f472b6';
+  return '#818cf8';
 }
 
 export function buildStories(recap: Recap): Story[] {
@@ -288,6 +362,7 @@ export function buildStories(recap: Recap): Story[] {
     tone: 'intro',
     html: `<p class="story-eyebrow">My year in music</p>
       <h1 class="story-year">${recap.year}</h1>
+      ${introIllustration()}
       <p class="story-lede">I pressed play ${counter(totals.scrobbles)} times across ${counter(totals.activeDays)} days.</p>
       <p class="story-hint">Tap to begin</p>`,
   });
@@ -296,6 +371,7 @@ export function buildStories(recap: Recap): Story[] {
   stories.push({
     tone: 'minutes',
     html: `<p class="story-eyebrow">Time spent listening</p>
+      ${minutesIllustration()}
       <h2 class="story-stat${minutesText.length > 6 ? ' is-long' : ''}">${counter(totals.minutes)}</h2>
       <p class="story-subtitle">minutes</p>
       <p class="story-lede">That's ${hoursLabel(totals.minutes)}.</p>
@@ -307,57 +383,39 @@ export function buildStories(recap: Recap): Story[] {
   });
 
   if (topArtists.length) {
-    stories.push({
-      tone: 'artist',
-      html: heroSlide('artist', 'My top artist', topArtists[0], `${counter(topArtists[0].plays)} plays · ${topArtists[0].share}% of the year`),
-    });
-
-    if (topArtists.length > 1) {
-      stories.push({
-        tone: 'artist',
-        html: `${backdrop(artworkUrlFor('artist', topArtists[1]))}
-          <p class="story-eyebrow">Also on heavy rotation</p>
-          <h2 class="story-title-sm">The top artists</h2>
-          ${runnerUpList('artist', topArtists.slice(1))}
-          <p class="story-footnote">${counter(totals.artists)} artists in total.</p>`,
-      });
-    }
+    stories.push(
+      rankedSlide(
+        'artist',
+        { one: 'artist', many: 'artists' },
+        topArtists,
+        `${counter(topArtists[0].plays)} plays · ${topArtists[0].share}% of the year`,
+        `${counter(totals.artists)} artists in total.`,
+      ),
+    );
   }
 
   if (topAlbums.length) {
-    stories.push({
-      tone: 'album',
-      html: heroSlide('album', 'My top album', topAlbums[0], `${counter(topAlbums[0].plays)} plays`),
-    });
-
-    if (topAlbums.length > 1) {
-      stories.push({
-        tone: 'album',
-        html: `${backdrop(artworkUrlFor('album', topAlbums[1]))}
-          <p class="story-eyebrow">The rest of the shelf</p>
-          <h2 class="story-title-sm">The top albums</h2>
-          ${runnerUpList('album', topAlbums.slice(1))}
-          <p class="story-footnote">${counter(totals.albums)} albums played this year.</p>`,
-      });
-    }
+    stories.push(
+      rankedSlide(
+        'album',
+        { one: 'album', many: 'albums' },
+        topAlbums,
+        `${counter(topAlbums[0].plays)} plays`,
+        `${counter(totals.albums)} albums played this year.`,
+      ),
+    );
   }
 
   if (topTracks.length) {
-    stories.push({
-      tone: 'track',
-      html: heroSlide('track', 'My top track', topTracks[0], `${counter(topTracks[0].plays)} plays`),
-    });
-
-    if (topTracks.length > 1) {
-      stories.push({
-        tone: 'track',
-        html: `${backdrop(artworkUrlFor('track', topTracks[1]))}
-          <p class="story-eyebrow">On repeat</p>
-          <h2 class="story-title-sm">The top tracks</h2>
-          ${runnerUpList('track', topTracks.slice(1))}
-          <p class="story-footnote">${counter(totals.tracks)} different tracks in all.</p>`,
-      });
-    }
+    stories.push(
+      rankedSlide(
+        'track',
+        { one: 'track', many: 'tracks' },
+        topTracks,
+        `${counter(topTracks[0].plays)} plays`,
+        `${counter(totals.tracks)} different tracks in all.`,
+      ),
+    );
   }
 
   if (topGenres.length) {
@@ -385,7 +443,7 @@ export function buildStories(recap: Recap): Story[] {
 
     if (recap.genreTrend.names.length > 1) {
       stories.push({
-        tone: 'genre',
+        tone: 'stream',
         html: `<p class="story-eyebrow">How the taste moved</p>
           <h2 class="story-title-sm">Genres across ${recap.year}</h2>
           ${genreStream(recap.genreTrend)}`,
@@ -393,28 +451,38 @@ export function buildStories(recap: Recap): Story[] {
     }
   }
 
+  // Hour, weekday and month share one slide, the way the seasons do: three
+  // cards, each in its own colour, instead of three near-identical bar charts.
   stories.push({
-    tone: 'clock',
-    html: `<p class="story-eyebrow">My favourite time to listen</p>
-      <h2 class="story-title">${escapeHTML(ordinalHour(clock.peakHour))}</h2>
-      ${clockDial(clock.byHour, clock.peakHour)}
-      <p class="story-lede"><strong>${escapeHTML(clock.label)}</strong> — ${escapeHTML(clock.blurb)}</p>`,
-  });
-
-  stories.push({
-    tone: 'week',
-    html: `<p class="story-eyebrow">The loudest day of the week</p>
-      <h2 class="story-title">${escapeHTML(week.peakWeekdayName)}</h2>
-      ${bars(week.byWeekday, WEEKDAY_INITIALS, week.peakWeekday)}
-      <p class="story-footnote">${counter(week.byWeekday[week.peakWeekday])} plays landed on a ${escapeHTML(week.peakWeekdayName)}.</p>`,
-  });
-
-  stories.push({
-    tone: 'month',
-    html: `<p class="story-eyebrow">The biggest month</p>
-      <h2 class="story-title">${escapeHTML(months.peakMonthName)}</h2>
-      ${bars(months.byMonth, MONTH_INITIALS, months.peakMonth)}
-      <p class="story-footnote">${counter(months.byMonth[months.peakMonth])} plays in ${escapeHTML(months.peakMonthName)} alone.</p>`,
+    tone: 'when',
+    html: `<p class="story-eyebrow">When the music played</p>
+      <h2 class="story-title-sm">${escapeHTML(clock.label)}</h2>
+      <div class="story-when">
+        <div class="story-when-card is-clock" style="--card-color:${hourColor(clock.peakHour)};--row-index:0">
+          ${clockDial(clock.byHour, clock.peakHour)}
+          <div class="story-when-text">
+            <span class="story-when-label">${hourIcon(clock.peakHour)}Peak hour</span>
+            <b class="story-when-value">${escapeHTML(ordinalHour(clock.peakHour))}</b>
+            <span class="story-when-note">${escapeHTML(clock.blurb)}</span>
+          </div>
+        </div>
+        <div class="story-when-card" style="--card-color:#2dd4bf;--row-index:1">
+          <div class="story-when-head">
+            <span class="story-when-label">${icon('week')}Loudest day</span>
+            <b class="story-when-value">${escapeHTML(week.peakWeekdayName)}</b>
+          </div>
+          ${bars(week.byWeekday, WEEKDAY_INITIALS, week.peakWeekday, 'is-mini')}
+          <span class="story-when-note">${counter(week.byWeekday[week.peakWeekday])} plays on ${escapeHTML(week.peakWeekdayName)}s</span>
+        </div>
+        <div class="story-when-card" style="--card-color:#fb7185;--row-index:2">
+          <div class="story-when-head">
+            <span class="story-when-label">${icon('month')}Biggest month</span>
+            <b class="story-when-value">${escapeHTML(months.peakMonthName)}</b>
+          </div>
+          ${bars(months.byMonth, MONTH_INITIALS, months.peakMonth, 'is-mini')}
+          <span class="story-when-note">${counter(months.byMonth[months.peakMonth])} plays in ${escapeHTML(months.peakMonthName)} alone</span>
+        </div>
+      </div>`,
   });
 
   stories.push({
@@ -439,15 +507,18 @@ export function buildStories(recap: Recap): Story[] {
     html: `<p class="story-eyebrow">The record books</p>
       <h2 class="story-title-sm">Moments that stood out</h2>
       <div class="story-facts">
-        <div class="story-fact" style="--row-index:0">
+        <div class="story-fact" style="--row-index:0;--fact-color:var(--c2)">
+          <span class="story-fact-icon">${icon('bolt')}</span>
           <span class="story-fact-value">${counter(milestones.busiestDay.plays)}</span>
           <span class="story-fact-label">plays on ${escapeHTML(milestones.busiestDay.date)}<br />the busiest day</span>
         </div>
-        <div class="story-fact" style="--row-index:1">
+        <div class="story-fact" style="--row-index:1;--fact-color:var(--c1)">
+          <span class="story-fact-icon">${icon('flame')}</span>
           <span class="story-fact-value">${counter(milestones.longestStreak)}</span>
           <span class="story-fact-label">days in a row<br />the longest streak</span>
         </div>
-        <div class="story-fact" style="--row-index:2">
+        <div class="story-fact" style="--row-index:2;--fact-color:var(--c3)">
+          <span class="story-fact-icon">${icon('calendarCheck')}</span>
           <span class="story-fact-value">${counter(totals.activeDays)}</span>
           <span class="story-fact-label">days with music<br />out of the whole year</span>
         </div>
@@ -458,6 +529,7 @@ export function buildStories(recap: Recap): Story[] {
   stories.push({
     tone: 'style',
     html: `<p class="story-eyebrow">My listening style</p>
+      ${styleIllustration(recap.style.label)}
       <h2 class="story-title">${escapeHTML(recap.style.label)}</h2>
       <p class="story-lede">${escapeHTML(recap.style.blurb)}</p>
       <p class="story-footnote">${counter(totals.artists)} artists · ${counter(totals.tracks)} tracks · ${counter(totals.scrobbles)} plays</p>`,
@@ -465,14 +537,14 @@ export function buildStories(recap: Recap): Story[] {
 
   stories.push({
     tone: 'finale',
-    html: `${topArtists[0] ? backdrop(artworkUrlFor('artist', topArtists[0])) : ''}
-      <p class="story-eyebrow">My ${recap.year} vibe</p>
+    html: `<p class="story-eyebrow">My ${recap.year} vibe</p>
+      ${vibeIllustration(recap.vibe.label)}
       <h2 class="story-title">${escapeHTML(recap.vibe.label)}</h2>
       <p class="story-lede">${escapeHTML(recap.vibe.blurb)}</p>
       <div class="story-finale-summary">
         <span><b>${escapeHTML(topArtists[0]?.name ?? '—')}</b>top artist</span>
         <span><b>${escapeHTML(topGenres[0]?.name ?? '—')}</b>top genre</span>
-        <span><b>${formatNumber(totals.minutes)}</b>minutes</span>
+        <span><b class="is-number">${formatNumber(totals.minutes)}</b>minutes</span>
       </div>
       <p class="story-hint">That's a wrap on ${recap.year}</p>`,
   });

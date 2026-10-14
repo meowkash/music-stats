@@ -32,8 +32,9 @@
     overscroll-behavior-x: contain;
     scrollbar-width: none;
     /* The rail is a scroll container, so it clips at its padding box. This
-       padding has to hold the ring glow, or the glow is cut into a rectangle. */
-    padding: 12px 10px 4px;
+       padding has to hold the ring halo (3px + its blur), or the glow is cut
+       into a rectangle. Kept tight so the rings sit high on the page. */
+    padding: 7px 10px 4px;
     scroll-padding-inline: 10px;
   }
 
@@ -58,6 +59,10 @@
   }
 
   .recap-story-ring {
+    position: relative;
+    /* Contains the halo's negative z-index so it stays behind the avatar
+       without dropping under anything outside the ring. */
+    isolation: isolate;
     width: 58px;
     height: 58px;
     border-radius: 50%;
@@ -72,6 +77,67 @@
       );
     box-shadow: 0 2px 12px var(--year-glow);
     transition: transform var(--duration-fast) var(--ios-spring);
+  }
+
+  /* A slow light orbiting the ring: a soft halo outside it plus a thin glint
+     travelling along the ring itself. Both are low-opacity and slow on purpose
+     — enough to catch the eye on the home screen, never enough to pull it. */
+  .recap-story-ring::before,
+  .recap-story-ring::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: recap-ring-orbit 9s linear infinite;
+    /* Each ring starts at a different point so the row never pulses in step. */
+    animation-delay: calc(var(--ring-index, 0) * -2.3s);
+  }
+
+  .recap-story-ring::before {
+    inset: -3px;
+    z-index: -1;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 200deg,
+      hsl(calc(var(--year-hue) + 20) 100% 74% / 0.9) 300deg,
+      transparent 360deg
+    );
+    filter: blur(4px);
+    opacity: 0.5;
+  }
+
+  .recap-story-ring::after {
+    inset: 0;
+    z-index: 2;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 280deg,
+      rgba(255, 255, 255, 0.7) 335deg,
+      transparent 360deg
+    );
+    /* Only the outer 2px band — the ring — catches the glint. */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+    opacity: 0.55;
+  }
+
+  @keyframes recap-ring-orbit {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .recap-story-ring::before,
+    .recap-story-ring::after {
+      animation: none;
+    }
+
+    .recap-story-ring::after {
+      display: none;
+    }
   }
 
   .recap-story-avatar {
@@ -153,8 +219,8 @@
       return `<img class="recap-story-photo" src="${escapeHTML(src)}" alt="" decoding="async" draggable="false" referrerpolicy="no-referrer" crossorigin="anonymous">`;
     }
 
-    function cardHTML(entry: RecapIndexEntry): string {
-      return `<button class="recap-story" data-year="${entry.year}" type="button" style="${recapThemeVars(entry.year)}" aria-label="${entry.year} recap">
+    function cardHTML(entry: RecapIndexEntry, index: number): string {
+      return `<button class="recap-story" data-year="${entry.year}" type="button" style="${recapThemeVars(entry.year)};--ring-index:${index}" aria-label="${entry.year} recap">
         <span class="recap-story-ring" aria-hidden="true">
           <span class="recap-story-avatar">${photoHTML(entry.topArtist)}${getArtworkFallbackIcon("artist")}</span>
         </span>
@@ -168,7 +234,7 @@
           '<div class="no-data-message">No recaps yet — check back after a few more months of listening.</div>';
         return;
       }
-      rail.innerHTML = entries.map(cardHTML).join("");
+      rail.innerHTML = entries.map((entry, i) => cardHTML(entry, i)).join("");
     }
 
     rail.addEventListener("click", (event) => {

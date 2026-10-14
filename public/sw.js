@@ -1,7 +1,7 @@
-const SHELL_CACHE = 'music-stats-shell-1791473995';
-const DATA_CACHE = 'music-stats-data-1791473995';
+const SHELL_CACHE = 'music-stats-shell-1791510286';
+const DATA_CACHE = 'music-stats-data-1791510286';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1791473995';
+const CACHE_VERSION = '1791510286';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -190,6 +190,43 @@ async function respondWithPwaIcon(event) {
   }
 }
 
+const ASTRO_ASSET_RE = /\/_astro\/[\w.-]+\.(?:js|css)/g;
+const RELATIVE_CHUNK_RE = /["'\`]\.\/([\w.-]+\.js)["'\`]/g;
+const MAX_BUILD_ASSETS = 200;
+
+// Hashed bundles change names every build, so they can't be listed here; walk
+// them from the shell HTML instead. Without this every deploy wiped the shell
+// cache and the next launch fetched every module from the network before the
+// splash could dismiss.
+async function precacheBuildAssets(cache) {
+  const shell = await cache.match('/');
+  if (!shell) return;
+
+  const queue = [...new Set((await shell.text()).match(ASTRO_ASSET_RE) || [])];
+  const seen = new Set(queue);
+
+  while (queue.length && seen.size <= MAX_BUILD_ASSETS) {
+    const batch = queue.splice(0);
+    await Promise.allSettled(batch.map(async url => {
+      const response = await fetch(url, { cache: 'reload' });
+      if (!response.ok) return;
+      await cache.put(url, response.clone());
+      if (!url.endsWith('.js')) return;
+
+      const source = await response.text();
+      const found = [
+        ...(source.match(ASTRO_ASSET_RE) || []),
+        ...[...source.matchAll(RELATIVE_CHUNK_RE)].map(m => '/_astro/' + m[1]),
+      ];
+      for (const next of found) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }));
+  }
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then(async cache => {
@@ -203,6 +240,7 @@ self.addEventListener('install', event => {
             .catch(err => console.warn('[SW] Could not pre-cache:', url, err))
         )
       );
+      await precacheBuildAssets(cache);
     }).then(() => self.skipWaiting())
   );
 });

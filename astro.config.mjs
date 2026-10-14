@@ -23,6 +23,12 @@ export default defineConfig({
   // Used to build absolute URLs (og:url, og:image, etc.) for social share
   // previews - without this Astro falls back to a localhost URL.
   site: 'https://music.aakashkap.com',
+  // Inline the CSS so a home-screen launch can paint straight from the cached
+  // HTML: a render-blocking <link> costs a service-worker round trip, or a
+  // network fetch whenever a deploy has rotated the bundle hash.
+  build: {
+    inlineStylesheets: 'always',
+  },
   vite: {
     define: {
       __CACHE_VERSION__: JSON.stringify(cacheVersion),

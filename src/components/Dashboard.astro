@@ -25,7 +25,7 @@ import Recaps from "./Recaps.astro";
       </div>
       <div class="stat-content">
         <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
-        <span class="stat-label">Scrobbles</span>
+        <span class="stat-label">Plays</span>
       </div>
     </div>
 
@@ -125,9 +125,12 @@ import Recaps from "./Recaps.astro";
     flex: 0 0 auto;
   }
 
+  /* Not four equal columns: the total runs to seven characters and the daily
+     average to two, so equal widths crowd the left edge and leave the right one
+     loose. Weighting the columns by their typical width evens the side gaps. */
   .stats-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.02fr) minmax(0, 0.98fr) minmax(0, 0.8fr);
     padding: 14px 6px 12px;
     background: rgba(255, 255, 255, 0.02);
   }
@@ -203,9 +206,9 @@ import Recaps from "./Recaps.astro";
   /* One soft glow rather than two stacked ones: the double halo smeared the
      digits into each other at this size. */
   .stat-value {
-    font-family: var(--font-header);
+    font-family: var(--font-numeric);
     font-size: 26px;
-    font-weight: 700;
+    font-weight: var(--font-numeric-weight);
     color: #fff;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
