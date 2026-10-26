@@ -139,7 +139,10 @@ try {
   await p.click('.tab-btn[data-tab="statistics"]');
   await p.waitForFunction(() => document.body.dataset.activeTab === 'statistics');
   const chartFile = fs.readdirSync(path.join(dist, '_astro')).find(f => f.startsWith('chart.'));
-  await p.waitForFunction(async url => (await import(url)).Chart.getChart('yearlyCompareChart')?.data.datasets.length > 0, `/_astro/${chartFile}`);
+  // waitForFunction does not await an async predicate (a pending Promise is
+  // truthy), so load Chart.js into the page once and poll synchronously.
+  await p.evaluate(async url => { window.__Chart = (await import(url)).Chart; }, `/_astro/${chartFile}`);
+  await p.waitForFunction(() => window.__Chart.getChart('yearlyCompareChart')?.data.datasets.length > 0);
   await p.click('#yearsFilterBtn');
   await p.locator('#yearsFilterPopover label[data-year="2023"]').click();
   await p.click('#yearsFilterBtn');
@@ -155,7 +158,7 @@ try {
   }
   next.generation = 'fixture-next-generation'; overrides.set('/data/manifest.json', JSON.stringify(next));
   await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await p.waitForFunction(async ({ url, expected }) => { const { Chart } = await import(url); return Chart.getChart('yearlyCompareChart').data.datasets.find(d => d.label === '2026').data.at(-1) === expected; }, { url: `/_astro/${chartFile}`, expected: before + 123 }, { timeout: 30000 });
+  await p.waitForFunction(expected => window.__Chart.getChart('yearlyCompareChart')?.data.datasets.find(d => d.label === '2026')?.data.at(-1) === expected, before + 123, { timeout: 30000 });
   assert.equal(await p.locator('#yearsFilterPopover input[value="2023"]').isChecked(), false);
   await p.click('.tab-btn[data-tab="rankings"]'); await p.waitForFunction(() => document.body.dataset.activeTab === 'rankings');
   await p.waitForFunction(() => document.querySelector('#leaderboardListSongs .scrobble-row-title')?.textContent.startsWith('UPDATED '));
@@ -167,8 +170,10 @@ try {
   const detailRows = await p.locator('#overlaySongsList .scrobble-row').count();
   assert.ok(detailRows > 0 && detailRows <= 72);
   assert.ok(await p.locator('#overlayAlbumsList .overlay-album-card').count() <= 60);
-  await p.keyboard.press('Escape'); await p.waitForTimeout(350);
-  assert.equal(await p.locator('#overlaySongsList .scrobble-row').count(), 0);
+  // The sheet releases its lists once its exit has played out; wait for that
+  // rather than a fixed time, so retiming the exit cannot break the check.
+  await p.keyboard.press('Escape');
+  await p.waitForFunction(() => document.querySelectorAll('#overlaySongsList .scrobble-row').length === 0, null, { timeout: 2000 });
   assert.deepEqual(errors, []); evidence.push('A real generation swap refreshes chart/rankings, preserves filters, and details release bounded lists on close'); await c.close();
 
   // Exercise the real service worker: all lazy bundles must survive offline,
