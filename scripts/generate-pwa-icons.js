@@ -9,6 +9,9 @@ const svgPath = path.join(publicDir, 'favicon.svg');
 const glyphPath = path.join(publicDir, 'logo-mark.svg');
 const splashTagsPath = path.resolve('src/layouts/splash-tags.html');
 
+// Keep in sync with public/favicon.svg and the loading overlay in Layout.astro.
+const ICON_BACKGROUND = '#121212';
+
 const SIZES = [
   { name: 'icon-192.png', size: 192 },
   { name: 'icon-512.png', size: 512 },
@@ -62,10 +65,10 @@ function fullBleedIconSvg(svg) {
 }
 
 async function renderOpaqueIcon(svg, size) {
-  // Flatten onto the logo's outer stop so any residual alpha can't go white.
+  // Flatten onto the icon background so residual alpha cannot turn white.
   return sharp(fullBleedIconSvg(svg))
     .resize(size, size)
-    .flatten({ background: { r: 7, g: 5, b: 13 } })
+    .flatten({ background: ICON_BACKGROUND })
     .png({ compressionLevel: 9, force: true })
     .toBuffer();
 }
@@ -134,7 +137,7 @@ async function generateFavicon(svg) {
 }
 
 // Share sheets use og:image, so it tracks the app icon rather than a stale mark.
-// Background matches the favicon.svg / splash-icon-bg radial gradient.
+// Background matches the flat charcoal app icon and launch screen.
 async function generateOgImage(svg) {
   const width = 1200;
   const height = 630;
@@ -142,26 +145,12 @@ async function generateOgImage(svg) {
   const iconLeft = Math.round((width - iconSize) / 2);
   const iconTop = Math.round((height - iconSize) / 2);
 
-  // Keep the squircle for the OG banner (sits on our own gradient, not iOS chrome).
+  // Keep the squircle for the OG banner; the matching background hides its edges.
   const icon = await sharp(svg).resize(iconSize, iconSize).png().toBuffer();
 
-  // Same stops / focal point as public/favicon.svg and .splash-icon-bg.
   const background = Buffer.from(`
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="bg" cx="50%" cy="36%" r="88%">
-          <stop offset="0%" stop-color="#241c3a"/>
-          <stop offset="50%" stop-color="#110e18"/>
-          <stop offset="100%" stop-color="#07050d"/>
-        </radialGradient>
-        <radialGradient id="ellipseGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#a855f7" stop-opacity="0.22"/>
-          <stop offset="70%" stop-color="#ff2d55" stop-opacity="0.06"/>
-          <stop offset="100%" stop-color="#07050d" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="${width}" height="${height}" fill="url(#bg)"/>
-      <ellipse cx="${width / 2}" cy="${Math.round(height * 0.54)}" rx="480" ry="280" fill="url(#ellipseGlow)"/>
+      <rect width="${width}" height="${height}" fill="${ICON_BACKGROUND}"/>
     </svg>
   `);
 
@@ -180,29 +169,13 @@ function splashName(width, height) {
 
 // Mirrors #pwa-splash-screen in src/layouts/Layout.astro: the launch image is
 // replaced by that overlay on first paint, so any difference reads as a flash.
-// Change SPLASH_GLYPH_PT / SPLASH_GLOW_PT there too.
+// Change SPLASH_GLYPH_PT in the overlay too.
 const SPLASH_GLYPH_PT = 76;
-const SPLASH_GLOW_PT = { rx: 190, ry: 165 };
 
-function splashBackgroundSvg(width, height, dpr) {
-  // circle farthest-corner at 50% 50%, i.e. the CSS radial-gradient default.
-  const r = Math.hypot(width / 2, height / 2);
+function splashBackgroundSvg(width, height) {
   return Buffer.from(`
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="${width / 2}" cy="${height / 2}" r="${r}">
-          <stop offset="0%" stop-color="#241c3a"/>
-          <stop offset="50%" stop-color="#110e18"/>
-          <stop offset="100%" stop-color="#07050d"/>
-        </radialGradient>
-        <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#a855f7" stop-opacity="0.22"/>
-          <stop offset="70%" stop-color="#ff2d55" stop-opacity="0.06"/>
-          <stop offset="100%" stop-color="#07050d" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="${width}" height="${height}" fill="url(#bg)"/>
-      <ellipse cx="${width / 2}" cy="${height / 2}" rx="${SPLASH_GLOW_PT.rx * dpr}" ry="${SPLASH_GLOW_PT.ry * dpr}" fill="url(#glow)"/>
+      <rect width="${width}" height="${height}" fill="${ICON_BACKGROUND}"/>
     </svg>
   `);
 }
@@ -229,7 +202,7 @@ async function generateSplashScreens() {
       .png()
       .toBuffer();
     const out = path.join(splashDir, splashName(width, height));
-    await sharp(splashBackgroundSvg(width, height, dpr))
+    await sharp(splashBackgroundSvg(width, height))
       .composite([
         {
           input: glyph,

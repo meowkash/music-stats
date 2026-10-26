@@ -138,7 +138,7 @@ const washStyles = [
 		<style is:inline>
 			/* Critical inline styles for Splash Screen to prevent FOUC (jumpiness).
 			   Must stay pixel-identical to the apple-touch-startup-image that
-			   scripts/generate-pwa-icons.js renders (SPLASH_GLYPH_PT / SPLASH_GLOW_PT),
+			   scripts/generate-pwa-icons.js renders (SPLASH_GLYPH_PT / ICON_BACKGROUND),
 			   because iOS swaps that image for this overlay on first paint. */
 			#pwa-splash-screen {
 				position: fixed;
@@ -146,10 +146,7 @@ const washStyles = [
 				left: 0;
 				right: 0;
 				bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
-				background:
-					radial-gradient(190px 165px at 50% 50%, rgba(168, 85, 247, 0.22) 0%, rgba(255, 45, 85, 0.06) 70%, rgba(7, 5, 13, 0) 100%),
-					radial-gradient(circle farthest-corner at 50% 50%, #241c3a 0%, #110e18 50%, #07050d 100%);
-				background-color: #07050d;
+				background: #121212;
 				z-index: 9999;
 				display: flex;
 				align-items: center;
@@ -165,18 +162,6 @@ const washStyles = [
 				width: 76px;
 				height: 76px;
 				display: block;
-				/* Starts glow-free so the first frame matches the launch image. */
-				animation: glyph-glow 2s 0.2s infinite ease-in-out both;
-			}
-			@keyframes glyph-glow {
-				0%, 100% {
-					filter: drop-shadow(0 0 0 rgba(255, 45, 85, 0)) drop-shadow(0 0 0 rgba(168, 85, 247, 0));
-					transform: scale(1);
-				}
-				50% {
-					filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.55)) drop-shadow(0 0 28px rgba(0, 240, 255, 0.22));
-					transform: scale(1.05);
-				}
 			}
 
 			#data-update-toast {
