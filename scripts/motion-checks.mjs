@@ -165,26 +165,16 @@ export async function checkMobileMotion(browser, origin) {
     evidence.push({ shortPhone: short });
     evidence.push({ landscapePhone: landscape });
 
+    // Driven by the page's own mouse: touch sent through a second CDP session
+    // left CI's headless shell dropping the click of the navbar tap after it.
     async function dragControl(selector, attr, expected) {
       const group = page.locator(selector), buttons = group.locator(':scope > button');
       const from = await buttons.first().boundingBox(), to = await buttons.last().boundingBox();
-      const input = browser.browserType().name() === 'chromium' ? await context.newCDPSession(page) : null;
-      const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
-      const end = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
-      if (input) await input.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
-      else { await page.mouse.move(start.x, start.y); await page.mouse.down(); }
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
       await page.waitForTimeout(240);
       const scale = await group.locator('.sliding-highlight').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a);
       assert.ok(scale > 1.1, `${selector} must lift on hold`);
-      if (input) {
-        try {
-          for (let i = 1; i <= 8; i++) {
-            await input.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + (end.x - start.x) * i / 8, y: start.y + (end.y - start.y) * i / 8 }] });
-            await page.waitForTimeout(16);
-          }
-          await input.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-        } finally { await input.detach(); }
-      } else { await page.mouse.move(end.x, end.y, { steps: 8 }); await page.mouse.up(); }
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 }); await page.mouse.up();
       await page.waitForFunction(({ selector, attr, expected }) => document.querySelector(`${selector} > button.active, ${selector} > button.is-active`)?.getAttribute(attr) === expected, { selector, attr, expected });
       await page.waitForTimeout(230);
       assert.equal(await group.evaluate(el => el.classList.contains('segmented-lens')), false);

@@ -42,3 +42,4 @@ bench/records/
 
 # local test evidence written by test:browser / test:mobile
 /Verification/
+*.png
