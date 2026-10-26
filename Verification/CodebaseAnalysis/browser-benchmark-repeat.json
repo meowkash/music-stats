@@ -1,0 +1,69 @@
+{
+  "recordedAt": "2026-10-22T16:07:27.293Z",
+  "node": "v26.12.0",
+  "scenarios": {
+    "sheet-open-warm": {
+      "runs": 3,
+      "frameCount": 92,
+      "p50Frame": 16.6,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToFirstMove": 66
+    }
+  },
+  "data": {
+    "merge": {
+      "artwork.json": {
+        "shards": 64,
+        "totalKB": 3734,
+        "parseMs": 11.4,
+        "mergeMs": 6.3,
+        "entries": 27974
+      },
+      "colors.json": {
+        "shards": 64,
+        "totalKB": 1398,
+        "parseMs": 6.6,
+        "mergeMs": 0.9,
+        "entries": 7898
+      },
+      "catalog.json": {
+        "shards": 64,
+        "totalKB": 3382,
+        "parseMs": 14.7,
+        "mergeMs": 9.6,
+        "entries": 4
+      }
+    },
+    "dailyDelta": {
+      "oneArtist": {
+        "scrobbles": 182,
+        "changedShards": 1,
+        "totalShards": 64,
+        "deltaKB": 82,
+        "wholeDatasetKB": 3382,
+        "deltaRatio": 0.024
+      },
+      "fewArtists": {
+        "scrobbles": 40,
+        "changedShards": 5,
+        "totalShards": 64,
+        "deltaKB": 353,
+        "wholeDatasetKB": 3382,
+        "deltaRatio": 0.104
+      },
+      "varied": {
+        "scrobbles": 40,
+        "changedShards": 30,
+        "totalShards": 64,
+        "deltaKB": 1642,
+        "wholeDatasetKB": 3382,
+        "deltaRatio": 0.486
+      }
+    }
+  }
+}

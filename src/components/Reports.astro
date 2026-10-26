@@ -1,4 +1,6 @@
 ---
+import { getBootSnapshot } from "../utils/bootSnapshot";
+const { report } = getBootSnapshot();
 ---
 
 <div class="glass-card reports-card" id="reportsCard">
@@ -16,14 +18,14 @@
     <button class="reports-arrow" id="reportsPrev" type="button" aria-label="Previous period">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
     </button>
-    <p class="reports-period-label" id="reportsPeriodLabel">—</p>
+    <p class="reports-period-label" id="reportsPeriodLabel">{report.rangeLabel}</p>
     <button class="reports-arrow" id="reportsNext" type="button" aria-label="Next period">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
     </button>
   </div>
 
   <div class="reports-hero">
-    <h2 class="reports-total"><span id="reportsTotal">—</span> Plays</h2>
+    <h2 class="reports-total"><span id="reportsTotal">{report.currentTotal.toLocaleString()}</span> Plays</h2>
     <p class="reports-vs" id="reportsVs"></p>
   </div>
 
@@ -68,7 +70,8 @@
 
   .reports-range-highlight {
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.1);
+    /* Clears toward glass as the lens lifts (--lens, liquidGlass.ts). */
+    background: rgba(255, 255, 255, calc(0.1 - 0.08 * var(--lens, 0)));
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.1),
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
@@ -271,7 +274,6 @@
   import { buildReport, rangeNoun, type ReportRange } from "../utils/reports";
   import { createReportsChart } from "../utils/reportsChart";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
-  import { bindHorizontalSwipe } from "../utils/horizontalSwipe";
 
   const CURRENT: [number, number, number, number] = [1, 0.3, 0.38, 1];
   const PREVIOUS: [number, number, number, number] = [0.38, 0.09, 0.14, 1];
@@ -378,17 +380,6 @@
       render();
     });
 
-    bindHorizontalSwipe({
-      element: document.querySelector(".reports-range") as HTMLElement,
-      onSwipeLeft: () => {
-        const i = buttons.findIndex((b) => b.classList.contains("is-active"));
-        if (i >= 0 && i < buttons.length - 1) selectRange(buttons[i + 1]);
-      },
-      onSwipeRight: () => {
-        const i = buttons.findIndex((b) => b.classList.contains("is-active"));
-        if (i > 0) selectRange(buttons[i - 1]);
-      },
-    });
 
     async function load() {
       try {

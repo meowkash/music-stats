@@ -91,6 +91,11 @@ async function runScenario(browser, scenario, origin) {
   await context.addInitScript(() => window.__bench.start());
 
   const page = await context.newPage();
+  const frameInterval = await page.evaluate(() => new Promise(resolve => {
+    const samples = []; let last = 0;
+    const tick = now => { if (last) samples.push(now - last); last = now; if (samples.length < 12) requestAnimationFrame(tick); else resolve(samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)]); };
+    requestAnimationFrame(tick);
+  }));
   page.on('pageerror', (err) => console.error(`  ! page error: ${err.message}`));
 
   let summary = null;
@@ -108,11 +113,12 @@ async function runScenario(browser, scenario, origin) {
   }
 
   if (!summary) throw new Error(`${scenario.name} never called record()`);
-  return { ...summary, ...deriveMarks(summary) };
+  return { ...summary, frameInterval, ...deriveMarks(summary) };
 }
 
 function aggregate(runs) {
   const keys = [
+    'frameInterval',
     'frameCount',
     'p50Frame',
     'p95Frame',
@@ -144,7 +150,11 @@ function compare(name, current, baseline) {
 
     // The floor stops a metric that is small in absolute terms from failing on
     // a large relative swing — 2ms to 4ms is noise, not a regression.
-    const limit = Math.max(was * tolerance, floor);
+    // Frame budgets are measured in display refresh intervals. Older records
+    // predate this field, so their median frame is the best available cadence.
+    const cadence = ['p95Frame', 'maxFrame'].includes(metric)
+      ? Math.max(1, (current.frameInterval || current.p50Frame) / (baseline.frameInterval || baseline.p50Frame || 16.7)) : 1;
+    const limit = Math.max(was * tolerance * cadence, floor * cadence);
     if (now > limit) {
       failures.push({ metric, was, now, limit: Math.round(limit * 10) / 10 });
     }
@@ -207,9 +217,10 @@ async function main() {
     ? scenarios.filter((s) => s.name.includes(flags.only))
     : scenarios;
 
-  const browser = await chromium.launch({ headless: !flags.headed });
+  const browser = await chromium.launch({ headless: !flags.headed, ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
   const results = {};
   const verdicts = [];
+  const errors = [];
 
   console.log(`\nScenarios (median of ${flags.repeat})`);
 
@@ -222,6 +233,7 @@ async function main() {
           runs.push(await runScenario(browser, scenario, server.origin));
         }
       } catch (err) {
+        errors.push(scenario.name);
         console.log(`  ERR  ${scenario.name}: ${err.message}`);
         continue;
       } finally {
@@ -261,7 +273,7 @@ async function main() {
   if (flags.json) console.log(JSON.stringify(record, null, 2));
 
   const regressed = verdicts.filter((v) => v.status === 'regressed');
-  if (regressed.length && !flags.update) {
+  if (errors.length || (regressed.length && !flags.update)) {
     console.log(`\n${regressed.length} scenario(s) regressed.`);
     process.exit(1);
   }

@@ -1,4 +1,6 @@
 ---
+import { getBootSnapshot } from "../utils/bootSnapshot";
+const { stats } = getBootSnapshot();
 import Reports from "./Reports.astro";
 import Recaps from "./Recaps.astro";
 ---
@@ -24,7 +26,7 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <h3 class="stat-value text-pink" id="stat-total-scrobbles">-</h3>
+        <h3 class="stat-value text-pink" id="stat-total-scrobbles">{stats.total.toLocaleString()}</h3>
         <span class="stat-label">Plays</span>
       </div>
     </div>
@@ -46,7 +48,7 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <h3 class="stat-value text-cyan" id="stat-year-scrobbles">-</h3>
+        <h3 class="stat-value text-cyan" id="stat-year-scrobbles">{stats.currentYear.toLocaleString()}</h3>
         <span class="stat-label">This year</span>
       </div>
     </div>
@@ -66,7 +68,7 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <h3 class="stat-value text-violet" id="stat-active-days">-</h3>
+        <h3 class="stat-value text-violet" id="stat-active-days">{stats.activeDays.toLocaleString()}</h3>
         <span class="stat-label">Active days</span>
       </div>
     </div>
@@ -85,7 +87,7 @@ import Recaps from "./Recaps.astro";
         </svg>
       </div>
       <div class="stat-content">
-        <h3 class="stat-value text-green" id="stat-daily-avg">-</h3>
+        <h3 class="stat-value text-green" id="stat-daily-avg">{stats.dailyAverage.toLocaleString()}</h3>
         <span class="stat-label">Per day</span>
       </div>
     </div>
@@ -284,7 +286,7 @@ import Recaps from "./Recaps.astro";
         let activeDays = 0;
         let totalPossibleDays = 0;
         let currentYearScrobbles = 0;
-        const currentYearStr = String(new Date().getFullYear());
+        const currentYearStr = String(new Date().getUTCFullYear());
 
         for (const [yearStr, dayCounts] of Object.entries(totals)) {
           let sum = 0;

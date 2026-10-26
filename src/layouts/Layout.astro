@@ -56,7 +56,7 @@ const washStyles = [
 		<meta charset="UTF-8" />
 		<meta
 			name="viewport"
-			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+			content="width=device-width, initial-scale=1.0, viewport-fit=cover"
 		/>
 		<meta name="color-scheme" content="dark" />
 		<link rel="icon" type="image/svg+xml" href={`/favicon.svg?v=${cacheData.version}`} />
@@ -368,7 +368,8 @@ const washStyles = [
 			})();
 		</script>
 
-		<!-- PWA Loading Splash Screen Overlay -->
+		<noscript><style>#pwa-splash-screen { display: none; }</style></noscript>
+			<!-- PWA Loading Splash Screen Overlay -->
 		<div id="pwa-splash-screen">
 			<Fragment set:html={splashGlyphSvg} />
 		</div>
@@ -623,8 +624,9 @@ const washStyles = [
 		);
 	}
 
-	/* Promote only while a JS-driven crossfade is writing opacity. */
-	body:has(.main-tab-bar.nav-animating) #app-bg-gradient .bg-layer {
+	/* Promote only while a JS-driven crossfade is writing opacity — the page
+	   glide after a tab is chosen, never a lens drag. */
+	body:has(.main-tab-bar.nav-paging) #app-bg-gradient .bg-layer {
 		will-change: opacity;
 	}
 
@@ -667,6 +669,10 @@ const washStyles = [
 		z-index: calc(var(--z-overlay-backdrop) - 1);
 		background-color: var(--status-bar-color, var(--status-bar-default));
 		transition: background-color var(--duration-slow) var(--ios-spring);
+	}
+
+	body:has(.main-tab-bar.nav-paging) .status-bar-shield {
+		transition: none;
 	}
 
 	/* ── Shared bottom sheet / side panel ────────────────────────────────
@@ -976,9 +982,14 @@ const washStyles = [
 
 	.scrobble-row.clickable-entity.is-pressed,
 	.carousel-item.clickable-entity.is-pressed {
-		transform: none !important;
-		opacity: 0.72;
-		transition: opacity 0.12s var(--ios-spring) !important;
+		transform: scale(0.985);
+		opacity: 1;
+		background-color: rgba(255, 255, 255, 0.065);
+	}
+
+	.scrobble-row.clickable-entity,
+	.carousel-item.clickable-entity {
+		transition: transform 180ms var(--ios-spring), background-color 180ms ease-out;
 	}
 
 	body.overlay-open .scrobble-row.clickable-entity.is-pressed,
@@ -1245,6 +1256,93 @@ const washStyles = [
 		transform-origin: 0 0;
 		pointer-events: none;
 		z-index: 1;
+	}
+
+	.segmented-control {
+		touch-action: pan-y;
+		user-select: none;
+		-webkit-user-select: none;
+	}
+	/* Liquid-glass optics (liquidGlass.ts): copies of the buttons under the
+	   lens, compressed through the rim bands and magnified through the core.
+	   They exist only while a lens is lifted; the transforms are written per
+	   frame. No will-change on the copies: a fixed raster scale would blur the
+	   magnified labels, and they are small enough to repaint. */
+	.lens-optics,
+	.lens-optics-band,
+	.lens-optics-core {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+	.lens-optics {
+		overflow: hidden;
+		z-index: 0;
+	}
+	.lens-optics-content {
+		position: absolute;
+		left: 0;
+		top: 0;
+		transform-origin: 0 0;
+	}
+	.segmented-control .sliding-highlight::before,
+	.segmented-control .sliding-highlight::after {
+		content: '';
+		position: absolute;
+		inset: -1px;
+		border-radius: inherit;
+		opacity: 0;
+		transition: opacity 150ms ease-out;
+		pointer-events: none;
+	}
+	/* Glass body under the refracted labels: a faint fill, a lift shadow and a
+	   glint that slides against the direction of travel. */
+	.segmented-control .sliding-highlight::before {
+		background:
+			radial-gradient(60% 50% at var(--lens-glint-x, 50%) 0%, rgba(255, 255, 255, 0.3), transparent 72%),
+			radial-gradient(50% 40% at calc(100% - var(--lens-glint-x, 50%)) 100%, rgba(255, 255, 255, 0.12), transparent 72%),
+			linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(170, 210, 255, 0.015) 45%, rgba(230, 180, 255, 0.03));
+		box-shadow:
+			0 8px 22px rgba(0, 0, 0, 0.28),
+			inset 0 1.5px 1px -0.5px rgba(255, 255, 255, 0.5),
+			inset 0 -1.5px 1px -0.5px rgba(255, 255, 255, 0.2),
+			inset 6px 0 10px -8px rgba(255, 130, 175, 0.35),
+			inset -6px 0 10px -8px rgba(120, 215, 255, 0.35);
+	}
+	/* Above the refracted copies: a chromatic rim, light splitting at the
+	   glass edge. Its hue turns with the glint. */
+	.segmented-control .sliding-highlight::after {
+		z-index: 1;
+		padding: 1.25px;
+		background:
+			conic-gradient(
+				from var(--lens-glint-angle, 200deg),
+				rgba(255, 150, 195, 0.75),
+				rgba(255, 240, 190, 0.5),
+				rgba(160, 230, 255, 0.75),
+				rgba(195, 175, 255, 0.6),
+				rgba(255, 150, 195, 0.75)
+			);
+		-webkit-mask:
+			linear-gradient(#000 0 0) content-box,
+			linear-gradient(#000 0 0);
+		-webkit-mask-composite: xor;
+		mask:
+			linear-gradient(#000 0 0) content-box exclude,
+			linear-gradient(#000 0 0);
+	}
+	.segmented-control.segmented-lens .sliding-highlight::before,
+	.segmented-control.segmented-lens .sliding-highlight::after { opacity: 1; }
+	.segmented-control.segmented-dragging { cursor: grabbing; }
+	.segmented-control.segmented-dragging .sliding-highlight { will-change: transform; }
+	.segmented-control.segmented-dragging > button.is-pressed,
+	.segmented-control.segmented-dragging > button:active,
+	.main-tab-bar.nav-dragging .tab-btn.is-pressed { transform: none !important; }
+	@media (prefers-reduced-motion: reduce) {
+		.segmented-control .sliding-highlight::before,
+		.segmented-control .sliding-highlight::after { display: none; }
+		.scrobble-row.clickable-entity { transition: none; }
 	}
 
 	.main-tab-bar.nav-animating .sliding-highlight,

@@ -2,7 +2,7 @@ import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from 
 import { promoteCanonicalArtworkCache } from './artwork-keys.js';
 import { canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { createAlbumGroups } from './album-groups.js';
-import { parseCSVLine } from './scrobble-source.js';
+import { parseCSVLine, csvRecords } from './scrobble-source.js';
 import fs from 'fs';
 import path from 'path';
 import { writeDataset } from './data-files.js';
@@ -37,7 +37,7 @@ function main() {
   }
 
   const content = fs.readFileSync(CSV_PATH, 'utf-8');
-  const lines = content.split('\n');
+  const lines = csvRecords(content);
   const overrides = loadOverrides();
   const albumGroupKey = createAlbumGroups((function* () {
     for (const line of lines.slice(1)) {
@@ -218,6 +218,10 @@ function main() {
   for (const [yearStr, daysData] of Object.entries(yearlyFiles)) {
     const yearFilePath = path.join(PUBLIC_DATA_DIR, `year-${yearStr}.json`);
     fs.writeFileSync(yearFilePath, JSON.stringify(daysData), 'utf-8');
+  }
+  for (const name of fs.readdirSync(PUBLIC_DATA_DIR)) {
+    const match = name.match(/^year-(\d+)\.json$/);
+    if (match && !yearlyFiles[match[1]]) fs.unlinkSync(path.join(PUBLIC_DATA_DIR, name));
   }
   console.log(`Wrote yearly details files to ${PUBLIC_DATA_DIR}/year-[YYYY].json`);
 

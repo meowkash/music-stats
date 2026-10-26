@@ -3,23 +3,9 @@ import path from 'path';
 import { isStaticArtworkUrl, normalizeStaticArtworkUrl } from './artwork-utils.js';
 import { artworkCacheKey, storeArtworkInCache } from './artwork-keys.js';
 
-// Load environment variables from .env if present
-const envPath = path.resolve('.env');
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf-8');
-  envContent.split(/\r?\n/).forEach(line => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return;
-    const firstEquals = trimmed.indexOf('=');
-    if (firstEquals === -1) return;
-    const key = trimmed.slice(0, firstEquals).trim();
-    let val = trimmed.slice(firstEquals + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    process.env[key] = val;
-  });
-}
+import { csvRecords } from './scrobble-source.js';
+import { loadEnv } from './lastfm-client.js';
+loadEnv();
 
 const API_KEY = process.env.LASTFM_API_KEY;
 const USERNAME = process.env.LASTFM_USERNAME;
@@ -48,7 +34,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function main() {
   console.log(`Starting Last.FM sync for user: ${USERNAME}`);
-  
+
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
@@ -59,14 +45,14 @@ async function main() {
   if (fs.existsSync(CSV_PATH)) {
     console.log("Reading existing scrobbles.csv...");
     const content = fs.readFileSync(CSV_PATH, 'utf-8');
-    const lines = content.split('\n');
-    
+    const lines = csvRecords(content);
+
     // Header check
     if (lines.length > 1) {
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        
+
         // Basic CSV parser (handles quotes)
         const parts = [];
         let current = '';
@@ -130,10 +116,12 @@ async function main() {
   let page = 1;
   let totalPages = 1;
   let newTracks = [];
+  const untilUts = Math.floor(Date.now() / 1000);
+  let expectedTotal = null;
 
   do {
     console.log(`Fetching page ${page} of ${totalPages}...`);
-    let url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${USERNAME}&api_key=${API_KEY}&format=json&limit=200&page=${page}`;
+    let url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${USERNAME}&api_key=${API_KEY}&format=json&limit=200&page=${page}&to=${untilUts}`;
     if (fromUts > 0) {
       url += `&from=${fromUts}`;
     }
@@ -142,11 +130,13 @@ async function main() {
     let retries = 3;
     while (retries > 0) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         data = await response.json();
+        if (data.error) throw new Error(`Last.fm API error ${data.error}: ${data.message || 'unknown'}`);
+        if (!data.recenttracks || !data.recenttracks['@attr']) throw new Error('Malformed Last.fm pagination response');
         break;
       } catch (err) {
         retries--;
@@ -158,13 +148,19 @@ async function main() {
 
     const recenttracks = data.recenttracks;
     if (!recenttracks) {
-      console.warn("No recent tracks returned. Stopping.");
-      break;
+      throw new Error('Missing recenttracks: original CSV preserved');
     }
 
     const attr = recenttracks['@attr'] || {};
-    totalPages = parseInt(attr.totalPages, 10) || 1;
-    
+    const pages = Number(attr.totalPages);
+    const total = Number(attr.total);
+    if (!Number.isInteger(pages) || pages < 0 || !Number.isInteger(total) || total < 0 || Number(attr.page) !== page) {
+      throw new Error('Invalid Last.fm pagination: original CSV preserved');
+    }
+    if (expectedTotal !== null && expectedTotal !== total) throw new Error('History changed during pagination; retry the snapshot');
+    expectedTotal = total;
+    totalPages = Math.max(1, pages);
+
     const rawTracks = recenttracks.track;
     if (rawTracks) {
       const tracksArr = Array.isArray(rawTracks) ? rawTracks : [rawTracks];
@@ -174,10 +170,11 @@ async function main() {
           continue;
         }
 
-        if (!track.date || !track.date.uts) {
-          continue;
+        if (!Number.isInteger(Number(track.date?.uts)) || Number(track.date.uts) <= 0 || !track.name || !track.artist?.['#text']) {
+          throw new Error('Malformed scrobble: original CSV preserved');
         }
 
+        if (Number(track.date.uts) <= fromUts || Number(track.date.uts) >= untilUts) throw new Error('Scrobble outside the requested snapshot');
         newTracks.push({
           uts: parseInt(track.date.uts, 10),
           artist: track.artist['#text'] || '',
@@ -203,21 +200,21 @@ async function main() {
       }
     }
 
-    // Save artwork progressively
-    if (Object.keys(artworkCache).length > 0) {
-      fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
-    }
-
     page++;
     await delay(300); // 300ms delay to keep requests below 5/sec rate limit
   } while (page <= totalPages);
 
+  if (newTracks.length !== expectedTotal) throw new Error(`Incomplete history: expected ${expectedTotal}, received ${newTracks.length}; original CSV preserved`);
+  const previousOverlap = existingScrobbles.filter(s => s.uts > fromUts && s.uts < untilUts).length;
+  if (previousOverlap >= 20 && newTracks.length < previousOverlap / 2 && process.env.ALLOW_HISTORY_REDUCTION !== '1') {
+    throw new Error('Suspicious history reduction; original CSV preserved. Verify deletions before setting ALLOW_HISTORY_REDUCTION=1.');
+  }
   console.log(`Fetched ${newTracks.length} tracks from API.`);
 
   // Merge datasets:
   // 1. Filter out old tracks that overlap with our fetch range (anything >= fromUts)
-  const filteredExisting = fromUts > 0 
-    ? existingScrobbles.filter(s => s.uts < fromUts) 
+  const filteredExisting = fromUts > 0
+    ? existingScrobbles.filter(s => s.uts <= fromUts || s.uts >= untilUts)
     : [];
 
   // 2. Combine and sort by uts ascending
@@ -239,8 +236,13 @@ async function main() {
   // Write back to CSV
   const header = 'uts,artist,album,track\n';
   const rows = uniqueCombined.map(s => `${s.uts},${escapeCSV(s.artist)},${escapeCSV(s.album)},${escapeCSV(s.track)}`).join('\n');
-  
-  fs.writeFileSync(CSV_PATH, header + rows, 'utf-8');
+
+  // Preserve the last valid snapshot before atomically replacing the canonical file.
+  if (fs.existsSync(CSV_PATH)) fs.copyFileSync(CSV_PATH, `${CSV_PATH}.previous`);
+  const nextPath = `${CSV_PATH}.next`;
+  fs.writeFileSync(nextPath, header + rows, 'utf-8');
+  fs.renameSync(nextPath, CSV_PATH);
+  fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache), 'utf-8');
   console.log(`Successfully wrote database to ${CSV_PATH}`);
 
   // Artwork Backfilling Logic
@@ -282,7 +284,7 @@ async function main() {
     const [album, artist] = albumKey.split('|');
     try {
       const url = `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&format=json`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (res.ok) {
         const data = await res.json();
         if (data.album && data.album.image) {
@@ -304,10 +306,10 @@ async function main() {
 
   for (const artist of missingArtists) {
     try {
-      // Last.fm artist.getinfo no longer provides images consistently, but we can search for their top tracks/albums 
+      // Last.fm artist.getinfo no longer provides images consistently, but we can search for their top tracks/albums
       // Or just try artist.getinfo anyway as fallback
       const url = `https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&format=json`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (res.ok) {
         const data = await res.json();
         if (data.artist && data.artist.image) {

@@ -632,6 +632,11 @@ function main() {
     });
   }
 
+  for (const name of fs.readdirSync(PUBLIC_DATA_DIR)) {
+    const match = name.match(/^recap-(\d+)\.json$/);
+    if (match && !index.some(entry => entry.year === Number(match[1]))) fs.unlinkSync(path.join(PUBLIC_DATA_DIR, name));
+  }
+
   // Newest first — that is the order the year picker offers them in.
   index.sort((a, b) => b.year - a.year);
   fs.writeFileSync(

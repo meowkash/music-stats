@@ -8,7 +8,6 @@ import {
 import {
   artworkContentHash,
   getStaticArtworkSources,
-  normalizeStaticArtworkUrl,
 } from './artwork';
 import { upgradeHeroArtwork } from './artworkPrefetch';
 
@@ -16,8 +15,9 @@ function preloadImage(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(url);
-    img.onerror = () => reject(new Error('Artwork load failed'));
+    const timer = setTimeout(() => { img.src = ''; reject(new Error('Artwork load timed out')); }, 10000);
+    img.onload = () => { clearTimeout(timer); resolve(url); };
+    img.onerror = () => { clearTimeout(timer); reject(new Error('Artwork load failed')); };
     img.src = url;
   });
 }
@@ -53,7 +53,6 @@ export interface OverlayColorPair {
 
 let activeLayerIsFront = true;
 let currentLoadId = 0;
-let currentWashId = 0;
 
 function getActiveLayer(els: OverlayArtworkElements): HTMLImageElement {
   return activeLayerIsFront ? els.front : els.back;
@@ -65,6 +64,7 @@ function runDualLayerCrossfade(
   durationMs: number,
   direction: OverlayNavDirection,
   onStart: () => void,
+  isCurrent: () => boolean,
 ): Promise<void> {
   const transition = dualLayerTransition(durationMs);
 
@@ -77,14 +77,15 @@ function runDualLayerCrossfade(
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (!isCurrent()) { resolve(); return; }
         onStart();
         incoming.style.opacity = '1';
         incoming.style.transform = slideTransform(direction, 'in-end');
         active.style.opacity = '0';
         active.style.transform = slideTransform(direction, 'out');
+        setTimeout(resolve, durationMs);
       });
     });
-    setTimeout(resolve, durationMs);
   });
 }
 
@@ -114,7 +115,8 @@ function hideOverlayShimmer(wrapper: HTMLElement | null): void {
   const shimmer = wrapper.querySelector('.artwork-shimmer');
   if (shimmer) {
     shimmer.classList.add('artwork-shimmer-hide');
-    setTimeout(() => shimmer.remove(), 120);
+    const token = currentLoadId;
+    setTimeout(() => { if (token === currentLoadId) shimmer.remove(); }, 120);
   }
 }
 
@@ -217,7 +219,7 @@ export async function crossfadeOverlayArtwork(
     await runDualLayerCrossfade(active, incoming, durationMs, direction, () => {
       bgBlur.style.backgroundImage = `url('${loadedUrl}')`;
       bgBlur.style.opacity = '0.45';
-    });
+    }, () => loadId === currentLoadId);
 
     if (loadId !== currentLoadId) return;
 
@@ -237,12 +239,13 @@ export async function crossfadeOverlayArtwork(
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          if (loadId !== currentLoadId) { resolve(); return; }
           incoming.style.opacity = '1';
           incoming.style.transform = slideTransform(direction, 'in-end');
           bgBlur.style.opacity = '0.45';
+          setTimeout(resolve, durationMs);
         });
       });
-      setTimeout(resolve, durationMs);
     });
 
     if (loadId !== currentLoadId) return;
@@ -253,7 +256,18 @@ export async function crossfadeOverlayArtwork(
   hideOverlayShimmer(wrapper);
 }
 
+/** Stop pending media and freeze its current rendered pose without clearing it. */
+export function freezeOverlayArtwork(els: OverlayArtworkElements, washes: HTMLElement[] = []): void {
+  currentLoadId++;
+  const layers = [els.front, els.back, els.bgBlur, ...washes];
+  const poses = layers.map(layer => { const style = getComputedStyle(layer); return { opacity: style.opacity, transform: style.transform }; });
+  layers.forEach((layer, index) => { layer.style.transition = 'none'; Object.assign(layer.style, poses[index]); });
+}
+
 export function resetOverlayArtworkLayers(els: OverlayArtworkElements): void {
+  currentLoadId++;
+  els.wrapper?.querySelectorAll('.artwork-shimmer').forEach(shimmer => shimmer.remove());
+  els.wrapper?.classList.remove('artwork-loading');
   activeLayerIsFront = true;
   els.front.classList.remove('is-visible');
   els.back.classList.remove('is-visible');
@@ -286,65 +300,4 @@ export function applyOverlayBackground(
   const value = `rgb(${bottom.r}, ${bottom.g}, ${bottom.b})`;
   scrollContainer.style.setProperty('--overlay-bg-bottom', value);
   panel.style.setProperty('--overlay-bg-bottom', value);
-}
-
-export async function crossfadeColorWash(
-  front: HTMLElement,
-  back: HTMLElement,
-  colors: OverlayColorPair,
-  durationMs = OVERLAY_CROSSFADE_MS,
-): Promise<void> {
-  const washId = ++currentWashId;
-  const transition = `opacity ${durationMs}ms ${OVERLAY_EASE}`;
-  front.style.transition = transition;
-  back.style.transition = transition;
-
-  back.style.background = washGradient(colors);
-  back.style.opacity = '0';
-
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        back.style.opacity = '1';
-        front.style.opacity = '0';
-      });
-    });
-    setTimeout(resolve, durationMs);
-  });
-
-  if (washId !== currentWashId) return;
-
-  front.style.background = washGradient(colors);
-  front.style.opacity = '1';
-  back.style.opacity = '0';
-}
-
-/** Wash and artwork cross-dissolve in parallel (iOS-style). */
-export async function crossfadeOverlayVisuals(
-  artworkEls: OverlayArtworkElements,
-  washFront: HTMLElement,
-  washBack: HTMLElement,
-  imgUrl: string | null,
-  colors: OverlayColorPair,
-  durationMs = OVERLAY_CROSSFADE_MS,
-  direction: OverlayNavDirection = 'forward',
-): Promise<void> {
-  const staticUrl = imgUrl ? normalizeStaticArtworkUrl(imgUrl) : null;
-  const active = getActiveLayer(artworkEls);
-  const newHash = staticUrl ? artworkContentHash(staticUrl) : '';
-
-  const washPromise = crossfadeColorWash(washFront, washBack, colors, durationMs);
-
-  if (staticUrl && isSameArtworkVisible(active, newHash)) {
-    await washPromise;
-    return;
-  }
-
-  const artworkPromise = staticUrl
-    ? loadBestArtworkSource(staticUrl).then((preloadedUrl) =>
-        crossfadeOverlayArtwork(artworkEls, staticUrl, durationMs, direction, preloadedUrl),
-      )
-    : crossfadeOverlayArtwork(artworkEls, null, durationMs, direction);
-
-  await Promise.all([washPromise, artworkPromise]);
 }

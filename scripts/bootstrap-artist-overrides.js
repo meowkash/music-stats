@@ -156,7 +156,7 @@ function main() {
   }
 
   const mergedSingles = [...new Set([...(existing.singleEntities ?? []), ...singleEntities])].sort();
-  const mergedAliases = { ...(existing.aliases ?? {}), ...aliases };
+  const mergedAliases = { ...aliases, ...(existing.aliases ?? {}) };
 
   const output = {
     _generated: new Date().toISOString(),

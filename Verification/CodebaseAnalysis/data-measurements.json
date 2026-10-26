@@ -1,0 +1,51 @@
+{
+  "merge": {
+    "artwork.json": {
+      "shards": 64,
+      "totalKB": 3734,
+      "parseMs": 9.1,
+      "mergeMs": 10.7,
+      "entries": 27974
+    },
+    "colors.json": {
+      "shards": 64,
+      "totalKB": 1398,
+      "parseMs": 6.5,
+      "mergeMs": 0.8,
+      "entries": 7898
+    },
+    "catalog.json": {
+      "shards": 64,
+      "totalKB": 3382,
+      "parseMs": 18,
+      "mergeMs": 12,
+      "entries": 4
+    }
+  },
+  "dailyDelta": {
+    "oneArtist": {
+      "scrobbles": 182,
+      "changedShards": 1,
+      "totalShards": 64,
+      "deltaKB": 82,
+      "wholeDatasetKB": 3382,
+      "deltaRatio": 0.024
+    },
+    "fewArtists": {
+      "scrobbles": 40,
+      "changedShards": 5,
+      "totalShards": 64,
+      "deltaKB": 353,
+      "wholeDatasetKB": 3382,
+      "deltaRatio": 0.104
+    },
+    "varied": {
+      "scrobbles": 40,
+      "changedShards": 30,
+      "totalShards": 64,
+      "deltaKB": 1642,
+      "wholeDatasetKB": 3382,
+      "deltaRatio": 0.486
+    }
+  }
+}

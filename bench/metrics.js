@@ -15,6 +15,8 @@ window.__bench = {
   marks: {},
 
   start() {
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    if (this.observer) this.observer.disconnect();
     this.frames = [];
     this.longTasks = [];
     this.marks = {};

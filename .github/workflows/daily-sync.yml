@@ -1,11 +1,11 @@
-name: Daily Sync and Deploy
+name: Sync and Deploy
 
 on:
   push:
     branches:
       - main
   schedule:
-    - cron: '0 2 * * *' # Runs at 2:00 AM UTC every day
+    - cron: '0 0,6,12,18 * * *' # Every six hours, on the hour, UTC
   workflow_dispatch:
     inputs:
       refresh_artwork_and_colors:
@@ -13,6 +13,10 @@ on:
         type: boolean
         default: false
         required: false
+
+concurrency:
+  group: music-stats-sync
+  cancel-in-progress: false
 
 jobs:
   sync_and_deploy:
@@ -35,6 +39,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Run ingestion regression tests
+        run: npm test
+
       - name: Ensure Data Directory Exists
         run: mkdir -p src/data public/data
 
@@ -44,14 +51,14 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
         run: |
-          aws s3 cp s3://music-stats/scrobbles.csv src/data/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No scrobbles.csv found in R2"
-          aws s3 cp s3://music-stats/artwork.json src/data/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No artwork.json found in R2"
+          aws s3 cp s3://music-stats/scrobbles.csv src/data/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          aws s3 cp s3://music-stats/artwork.json src/data/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           # colors.json is sharded into public/data/colors/NN.json; readDataset()
           # reassembles the directory, and writeDataset() deletes the monolith.
-          aws s3 sync s3://music-stats/colors/ public/data/colors/ --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No colors shards found in R2"
+          aws s3 sync s3://music-stats/colors/ public/data/colors/ --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           # Without this the Last.fm enrichment restarts from empty every run and
           # re-fetches the whole catalogue (~13k requests) instead of just what's new.
-          aws s3 cp s3://music-stats/recap-meta-cache.json src/data/recap-meta-cache.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com || echo "No recap-meta-cache.json found in R2"
+          aws s3 cp s3://music-stats/recap-meta-cache.json src/data/recap-meta-cache.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
 
       - name: Fetch Latest Scrobbles
         env:
@@ -74,7 +81,7 @@ jobs:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_USERNAME: ${{ secrets.LASTFM_USERNAME }}
           # Bounds a cold-cache run; the cache is restored from R2 so coverage
-          # converges across daily runs rather than stalling one build for an hour.
+          # converges across scheduled runs rather than stalling one build for an hour.
           RECAP_TRACK_LIMIT: '4000'
           RECAP_ARTIST_LIMIT: '2000'
           # Full re-resolve: tick the box on a manual run, or put [refresh artwork]
@@ -92,6 +99,8 @@ jobs:
 
       - name: Verify build artifacts
         run: |
+          npm run check
+          npm run check:data
           test -f dist/data/manifest.json
           test -f dist/data/meta.json
           node -e "
@@ -107,12 +116,20 @@ jobs:
             console.log('✓ tracks', meta.tracks.length);
           "
 
+      - name: Install browser for regression checks
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify startup, refresh, offline, and scrolling
+        run: npm run test:browser
+
       - name: Upload Updated Database back to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
         run: |
+          backup_slot=$(( ${{ github.run_number }} % 28 ))
+          aws s3 cp src/data/scrobbles.csv.previous "s3://music-stats/backups/scrobbles-${backup_slot}.csv" --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 cp src/data/scrobbles.csv s3://music-stats/scrobbles.csv --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 cp src/data/artwork.json s3://music-stats/artwork.json --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           aws s3 sync public/data/colors/ s3://music-stats/colors/ --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com

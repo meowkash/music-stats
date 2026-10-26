@@ -85,7 +85,7 @@ async function extractMaterialColor(url) {
     throw new Error('Animated or unsupported artwork URL');
   }
 
-  const response = await fetch(staticUrl);
+  const response = await fetch(staticUrl, { signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const buffer = Buffer.from(await response.arrayBuffer());
 

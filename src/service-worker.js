@@ -1,0 +1,288 @@
+// @ts-nocheck -- runs in ServiceWorkerGlobalScope, separately from DOM scripts.
+const SHELL_CACHE = '__SHELL_CACHE__';
+const DATA_CACHE = '__DATA_CACHE__';
+const IMAGE_CACHE = 'music-stats-images-v1';
+const CACHE_VERSION = '__CACHE_VERSION__';
+
+/** Cache wins after this long so a captive or crawling network can't hang the app. */
+const DATA_NETWORK_TIMEOUT_MS = 3000;
+
+const STATIC_ASSETS = [
+  '/',
+  '/manifest.json',
+  '/favicon.svg',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/logo-mark.svg',
+  '/og-image.png',
+  '/icons/icon-32.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png'
+];
+
+// Network-first. /manifest.json is here because without its ?v= buster the
+// cache-first branch would pin the install-time copy and never see a redeploy.
+const PWA_ICON_PATHS = new Set([
+  '/manifest.json',
+  '/favicon.svg',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/og-image.png',
+  '/icons/icon-32.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+]);
+
+const SHELL_FALLBACK_URLS = ['/', '/index.html'];
+
+// cdn-images.dzcdn.net is here because the resolver falls back to Deezer for
+// artist images, which iTunes' musicArtist entity almost never returns.
+const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'cdn-images.dzcdn.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
+
+function isArtworkRequest(url) {
+  return ARTWORK_HOSTS.some(host => url.hostname === host);
+}
+
+function dataPathname(url) {
+  if (url.pathname.startsWith('/data/') && url.pathname.endsWith('.json')) {
+    return url.pathname;
+  }
+  return null;
+}
+
+function cacheKeyForPath(pathname) {
+  return new Request(pathname, { mode: 'same-origin' });
+}
+
+function jsonUnavailable() {
+  return new Response('{}', {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// Network-first with a deadline. The write completes via waitUntil even when the
+// cached copy was served, so a slow response still refreshes for next launch.
+function respondWithDataJson(event, dataPath) {
+  const cacheKey = cacheKeyForPath(dataPath);
+  // 'fresh' is set only by the manifest read and hash-verified downloads; keying
+  // off 'v' matched every request and made the deadline below unreachable.
+  const mustBeFresh = new URL(event.request.url).searchParams.has('fresh');
+
+  const network = fetch(event.request);
+  // Cache I/O is opportunistic and never holds a usable network body hostage.
+  event.waitUntil(network.then(async response => {
+    if (response.ok) {
+      const cache = await caches.open(DATA_CACHE);
+      await cache.put(cacheKey, response.clone());
+    }
+  }).catch(() => {}));
+
+  // The manifest and generation downloads must not lose a race to stale JSON —
+  // the client hashes every byte and aborts the whole update on mismatch.
+  if (dataPath === '/data/manifest.json') return network.catch(() => jsonUnavailable());
+  if (mustBeFresh) {
+    return network.catch(async () => {
+      const cache = await caches.open(DATA_CACHE);
+      return (await cache.match(cacheKey)) || jsonUnavailable();
+    });
+  }
+
+  return (async () => {
+    let timer;
+    const deadline = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), DATA_NETWORK_TIMEOUT_MS);
+    });
+
+    let winner = null;
+    try {
+      winner = await Promise.race([network.catch(() => null), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (winner && winner.ok) return winner;
+
+    const cache = await caches.open(DATA_CACHE);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+
+    // Nothing cached to fall back on, so waiting out the network beats failing.
+    const late = await network.catch(() => null);
+    return late || jsonUnavailable();
+  })();
+}
+
+// Cache-first, in a cache deploys never clear. Pre-split builds wrote artwork
+// into DATA_CACHE, so a legacy hit is promoted rather than re-downloaded.
+async function respondWithArtwork(event) {
+  const cache = await caches.open(IMAGE_CACHE);
+  const cached = await cache.match(event.request);
+  if (cached) return cached;
+
+  const dataCacheStore = await caches.open(DATA_CACHE);
+  const legacy = await dataCacheStore.match(event.request);
+  if (legacy) {
+    event.waitUntil(cache.put(event.request, legacy.clone()));
+    return legacy;
+  }
+
+  // Deliberately does NOT cache: artworkPrefetch.ts owns IMAGE_CACHE and stores a
+  // ~3.6 KB non-opaque entry. Writing here would race it and win with originals.
+  return fetch(event.request);
+}
+
+async function matchShellCache(cache, request) {
+  const direct = await cache.match(request);
+  if (direct) return direct;
+  for (const url of SHELL_FALLBACK_URLS) {
+    const hit = await cache.match(url);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+async function respondWithShell(event) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await matchShellCache(cache, event.request);
+  if (cached) return cached;
+  // A shell belongs to its dependency graph. Updates arrive via installation
+  // of the next worker, never by replacing HTML under an old graph.
+  return fetch(event.request);
+}
+
+/** Network-first for install icons so a deploy can't leave Safari on a stale mark. */
+async function respondWithPwaIcon(event) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const response = await fetch(event.request);
+    if (response.ok) {
+      await cache.put(event.request, response.clone());
+    }
+    return response;
+  } catch {
+    // ignoreSearch because STATIC_ASSETS pre-caches bare paths while the page
+    // requests '/apple-touch-icon.png?v=<version>'; an exact match never hit.
+    const cached = await cache.match(event.request, { ignoreSearch: true });
+    return cached || Response.error();
+  }
+}
+
+const ASTRO_ASSET_RE = /\/_astro\/[\w.-]+\.(?:js|css)/g;
+const RELATIVE_CHUNK_RE = /["'\`]\.\/([\w.-]+\.js)["'\`]/g;
+const MAX_BUILD_ASSETS = 200;
+
+// Hashed bundles change names every build, so they can't be listed here; walk
+// them from the shell HTML instead. Without this every deploy wiped the shell
+// cache and the next launch fetched every module from the network before the
+// splash could dismiss.
+async function precacheBuildAssets(cache) {
+  const shell = await cache.match('/');
+  if (!shell) throw new Error('Critical shell missing');
+
+  const queue = [...new Set((await shell.text()).match(ASTRO_ASSET_RE) || [])];
+  const seen = new Set(queue);
+
+  while (queue.length) {
+    if (seen.size > MAX_BUILD_ASSETS) throw new Error('Bundle graph exceeds precache budget');
+    const batch = queue.splice(0);
+    await Promise.all(batch.map(async url => {
+      const response = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error('Critical bundle unavailable: ' + url);
+      await cache.put(url, response.clone());
+      if (!url.endsWith('.js')) return;
+
+      const source = await response.text();
+      const found = [
+        ...(source.match(ASTRO_ASSET_RE) || []),
+        ...[...source.matchAll(RELATIVE_CHUNK_RE)].map(m => '/_astro/' + m[1]),
+      ];
+      for (const next of found) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }));
+  }
+}
+
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL_CACHE);
+    const response = await fetch('/', { cache: 'reload', signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('Critical shell download failed');
+    await cache.put('/', response);
+    await precacheBuildAssets(cache);
+    // Optional branding assets cannot invalidate the complete shell graph.
+    await Promise.allSettled(STATIC_ASSETS.filter(url => url !== '/').map(async url => {
+      const asset = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(10000) });
+      if (asset.ok) await cache.put(url, asset);
+    }));
+    // Keep the old controller alive until its clients close; no skipWaiting.
+  })());
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.map(key => {
+          if (key === DATA_CACHE || key === SHELL_CACHE || key === IMAGE_CACHE) return;
+          if (
+            key.startsWith('music-stats-shell-') ||
+            key.startsWith('music-stats-data-') ||
+            key.startsWith('aakashmusic-cache-')
+          ) {
+            console.log('[SW] Clearing old cache:', key);
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const requestUrl = new URL(event.request.url);
+  const dataPath = dataPathname(requestUrl);
+
+  if (dataPath) {
+    event.respondWith(respondWithDataJson(event, dataPath));
+    return;
+  }
+
+  if (event.request.mode === 'navigate' || requestUrl.pathname === '/') {
+    event.respondWith(respondWithShell(event));
+    return;
+  }
+
+  if (isArtworkRequest(requestUrl)) {
+    event.respondWith(respondWithArtwork(event));
+    return;
+  }
+
+  if (PWA_ICON_PATHS.has(requestUrl.pathname)) {
+    event.respondWith(respondWithPwaIcon(event));
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) return cachedResponse;
+      return fetch(event.request).then(response => {
+        if (
+          event.request.method === 'GET' &&
+          (response.status === 200 || response.status === 0) &&
+          (requestUrl.pathname.includes('/_astro/') || requestUrl.hostname === 'fonts.gstatic.com')
+        ) {
+          const responseClone = response.clone();
+          caches.open(SHELL_CACHE).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return response;
+      });
+    })
+  );
+});

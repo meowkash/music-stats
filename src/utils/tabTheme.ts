@@ -93,14 +93,14 @@ export function themeBottomColorForTab(tab: string): string {
 // a constant per tab, built once here and crossfaded by navBar.ts in step with
 // the wash itself. A convex lens flips what it sees at its rim, so the wash's
 // bottom hue gathers along the top edge and its top hue along the bottom, and
-// the centre stays clear.
+// the centre stays clear. Kept faint so the lens reads as clear glass.
 export function lensRefractionCss(tab: TabId): string {
   const { top, bottom } = TAB_SURFACES[tab];
   const rgb = ([r, g, b]: Wash) => `${r}, ${g}, ${b}`;
   const lo = rgb(bottom);
   const hi = rgb(top);
   return [
-    `radial-gradient(ellipse closest-side at 50% 50%, rgba(${lo}, 0) 60%, rgba(${lo}, 0.05) 76%, rgba(${lo}, 0.14) 94%, rgba(${lo}, 0.09) 100%)`,
-    `linear-gradient(to bottom, rgba(${lo}, 0.12) 0%, rgba(${lo}, 0) 34%, rgba(${hi}, 0) 66%, rgba(${hi}, 0.09) 100%)`,
+    `radial-gradient(ellipse closest-side at 50% 50%, rgba(${lo}, 0) 70%, rgba(${lo}, 0.03) 82%, rgba(${lo}, 0.08) 95%, rgba(${lo}, 0.05) 100%)`,
+    `linear-gradient(to bottom, rgba(${lo}, 0.06) 0%, rgba(${lo}, 0) 24%, rgba(${hi}, 0) 76%, rgba(${hi}, 0.05) 100%)`,
   ].join(', ');
 }

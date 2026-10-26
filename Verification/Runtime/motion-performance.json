@@ -1,0 +1,169 @@
+{
+  "recordedAt": "2026-10-24T16:18:15.988Z",
+  "node": "v26.12.1",
+  "scenarios": {
+    "boot-cold": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 3,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.7,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToContent": 45
+    },
+    "boot-warm": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 1,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.7,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToContent": 24
+    },
+    "sheet-open-warm": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 46,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToFirstMove": 45
+    },
+    "sheet-open-during-sync": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 54,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "sheet-open-cold-artwork": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 56,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToFirstMove": 28
+    },
+    "sheet-navigate": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 50,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "sheet-dismiss": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 118,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "tab-swipe": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 110,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 50,
+      "droppedFrames": 3,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "leaderboard-scroll": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 86,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    }
+  },
+  "data": {
+    "merge": {
+      "artwork.json": {
+        "shards": 64,
+        "totalKB": 3781,
+        "parseMs": 12.3,
+        "mergeMs": 5.9,
+        "entries": 28286
+      },
+      "colors.json": {
+        "shards": 64,
+        "totalKB": 1422,
+        "parseMs": 6.6,
+        "mergeMs": 1.2,
+        "entries": 8023
+      },
+      "catalog.json": {
+        "shards": 64,
+        "totalKB": 3388,
+        "parseMs": 15.4,
+        "mergeMs": 5.3,
+        "entries": 4
+      }
+    },
+    "dailyDelta": {
+      "oneArtist": {
+        "scrobbles": 182,
+        "changedShards": 1,
+        "totalShards": 64,
+        "deltaKB": 81,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.024
+      },
+      "fewArtists": {
+        "scrobbles": 40,
+        "changedShards": 5,
+        "totalShards": 64,
+        "deltaKB": 356,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.105
+      },
+      "varied": {
+        "scrobbles": 40,
+        "changedShards": 30,
+        "totalShards": 64,
+        "deltaKB": 1663,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.491
+      }
+    }
+  }
+}

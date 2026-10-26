@@ -1,0 +1,52 @@
+{
+  "browser": "155.0.4283.62",
+  "cases": [
+    {
+      "name": "statistics-refresh",
+      "before": 7135,
+      "after": 7135,
+      "expected": 7258
+    },
+    {
+      "name": "rankings-metadata-refresh",
+      "before": "New Gold (feat. Bootie Brown & Tame Impala)",
+      "after": "New Gold (feat. Bootie Brown & Tame Impala)",
+      "expectedPrefix": "UPDATED "
+    },
+    {
+      "name": "refresh-results",
+      "first": {
+        "value": 1
+      },
+      "failedRefresh": 0,
+      "concurrentRefresh": 0,
+      "actualRefresh": 1,
+      "final": {
+        "value": 2
+      }
+    },
+    {
+      "name": "storage-unavailable-refresh",
+      "before": {
+        "value": 1
+      },
+      "changed": 1,
+      "activeGeneration": "2",
+      "after": {
+        "value": 1
+      },
+      "bootHint": "{\"generation\":\"2\",\"complete\":true,\"artworkCached\":0}"
+    },
+    {
+      "name": "inflight-generation-race",
+      "changed": 2,
+      "activeGeneration": "2",
+      "oldRead": {
+        "slow": 1
+      },
+      "subsequentRead": {
+        "slow": 1
+      }
+    }
+  ]
+}

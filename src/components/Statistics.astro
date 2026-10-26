@@ -1,4 +1,6 @@
 ---
+import { getBootSnapshot } from "../utils/bootSnapshot";
+const boot = getBootSnapshot();
 ---
 
 <div class="compare-container glass-card panel-container panel-fill">
@@ -18,17 +20,24 @@
 
   <div class="chart-plot">
     <canvas id="yearlyCompareChart"></canvas>
+    <div class="chart-load-status" id="chartLoadStatus" role="status" hidden>
+      <span>Unable to load the chart.</span>
+      <button id="chartReloadBtn" type="button">Reload page</button>
+    </div>
   </div>
   <div class="stats-legend shrink-0" id="statsLegend"></div>
   <div class="year-story-card shrink-0">
     <div class="year-story-viewport" id="yearStoryViewport">
-      <div class="year-story-track" id="yearStoryTrack"></div>
+      <div class="year-story-track" id="yearStoryTrack" set:html={boot.stories}></div>
     </div>
     <div class="year-story-dots" id="yearStoryDots"></div>
   </div>
 </div>
 
 <style>
+  .chart-load-status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
+  .chart-load-status[hidden] { display: none; }
+  .chart-load-status button { padding: 8px 16px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; color: var(--text-primary); background: rgba(255, 255, 255, 0.06); font: inherit; }
   .compare-container.panel-fill {
     /* Keep dropdown visible; chart still fills via flex + min-height. */
     overflow: visible;
@@ -357,15 +366,16 @@
     // Keep a daily label array so datasets stay day-aligned; ticks render months only.
     const xLabels = Array.from({ length: 366 }, (_, i) => String(i));
 
+    let dataEpoch = 0;
     async function loadData() {
+      const epoch = ++dataEpoch;
       try {
         const [totals, stats, meta] = await Promise.all([
           fetchAppJson<YearlyTotals>("/data/yearly-totals.json"),
           fetchAppJson<Record<string, unknown>>("/data/yearly-stats.json"),
           loadMetaCache(),
-          loadArtworkCache(),
-          loadColorsCache(),
         ]);
+        if (epoch !== dataEpoch) return;
         rawTotals = totals;
         rawStats = stats;
         metaDict = meta;
@@ -373,7 +383,7 @@
         if (meta?.tracks) {
           for (let i = 0; i < meta.tracks.length; i++) {
             const t = meta.tracks[i];
-            if (t && t[2] && !albumToArtist.has(t[2])) {
+            if (t && t[2] >= 0 && !albumToArtist.has(t[2])) {
               albumToArtist.set(t[2], t[1]);
             }
           }
@@ -401,7 +411,10 @@
       const color = yearColorMap[year] || "#888";
       const dailyCounts = totals[year] || [];
       let sum = 0;
-      const chartData = dailyCounts.map((count) => {
+      const leap = new Date(Date.UTC(Number(year), 1, 29)).getUTCMonth() === 1;
+      const aligned = [...dailyCounts];
+      if (!leap && aligned.length > 59) aligned.splice(59, 0, 0);
+      const chartData = aligned.map((count) => {
         sum += count;
         return sum;
       });
@@ -445,14 +458,22 @@
             m.Tooltip,
           );
           return m.Chart;
-        });
+        }).catch(error => { chartLibrary = null; throw error; });
       }
       return chartLibrary;
     }
 
     async function ensureChart() {
       if (chart) return;
-      const ChartCtor = await loadChartLibrary();
+      let ChartCtor: typeof ChartType;
+      const status = document.getElementById('chartLoadStatus')!;
+      try { ChartCtor = await loadChartLibrary(); }
+      catch (error) {
+        console.warn('Chart library unavailable; retry when connected', error);
+        status.hidden = false;
+        return;
+      }
+      status.hidden = true;
       if (chart) return;
 
       const ctx = (document.getElementById("yearlyCompareChart") as HTMLCanvasElement)?.getContext("2d");
@@ -656,15 +677,8 @@
         }
       }
 
-      const currentLabels = new Set(chart.data.datasets.map((d: any) => d.label));
-      const sortedYears = Array.from(selectedYears).sort().reverse();
-
-      for (const year of sortedYears) {
-        if (!currentLabels.has(year)) {
-          const ds = buildDataset(year, rawTotals!);
-          if (ds) chart.data.datasets.push(ds);
-        }
-      }
+      chart.data.datasets = Array.from(selectedYears).sort().reverse()
+        .map(year => buildDataset(year, rawTotals!)).filter(Boolean);
 
       chart.update();
     }
@@ -673,10 +687,14 @@
       const years = Object.keys(totals)
         .filter((y) => {
           const parsed = parseInt(y, 10);
-          return !isNaN(parsed) && parsed >= 2023;
+          return !isNaN(parsed);
         })
         .sort()
         .reverse();
+      const initial = Object.keys(yearColorMap).length === 0;
+      const known = new Set(Object.keys(yearColorMap));
+      yearColorMap = {};
+      for (const year of [...selectedYears]) if (!years.includes(year)) selectedYears.delete(year);
       years.forEach((year, idx) => {
         yearColorMap[year] = colors[idx % colors.length];
       });
@@ -686,12 +704,13 @@
           const color = yearColorMap[year];
           const glow = hexToRgba(color, 0.4);
           const ledGlow = hexToRgba(color, 0.85);
-          selectedYears.add(year);
+          if (initial || !known.has(year)) selectedYears.add(year);
+          const checked = selectedYears.has(year);
           return `
-          <label class="checkbox-label checked" 
-                 style="--year-color: ${color}; --year-color-glow: ${glow}; --year-led-glow: ${ledGlow};" 
+          <label class="checkbox-label ${checked ? "checked" : ""}"
+                 style="--year-color: ${color}; --year-color-glow: ${glow}; --year-led-glow: ${ledGlow};"
                  data-year="${year}">
-            <input type="checkbox" value="${year}" checked />
+            <input type="checkbox" value="${year}" ${checked ? "checked" : ""} />
             <span class="led-indicator"></span>
             <span class="year-text">${year}</span>
           </label>
@@ -750,13 +769,17 @@
     // Deferred until the tab is actually shown, so a visitor who never opens
     // Statistics never pays for chart.js at all.
     if (getActiveTab() === "statistics") void ensureChart();
+    document.getElementById('chartReloadBtn')!.addEventListener('click', () => window.location.reload());
+    window.addEventListener('online', () => { if (getActiveTab() === 'statistics') void ensureChart(); });
     window.addEventListener("tab-navigated", (e: Event) => {
       if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") void ensureChart();
     });
 
     loadData();
+    void Promise.all([loadArtworkCache(), loadColorsCache()]).then(() => renderYearStories()).catch(() => {});
+    onPathsUpdated(["/data/colors.json", "/data/artwork.json"], () => renderYearStories());
     onPathsUpdated(
-      ["/data/yearly-totals.json", "/data/yearly-stats.json", "/data/colors.json", "/data/artwork.json"],
+      ["/data/meta.json", "/data/yearly-totals.json", "/data/yearly-stats.json"],
       () => loadData(),
     );
   });

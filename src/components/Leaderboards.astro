@@ -1,4 +1,6 @@
 ---
+import { getBootSnapshot } from "../utils/bootSnapshot";
+const boot = getBootSnapshot();
 import SwipeableDeck from "./SwipeableDeck.astro";
 ---
 
@@ -116,7 +118,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   </div>
 
   <!-- Swipeable Songs / Albums / Artists lists -->
-  <SwipeableDeck tabs={["Songs", "Albums", "Artists"]} idPrefix="leaderboard">
+  <SwipeableDeck tabs={["Songs", "Albums", "Artists"]} idPrefix="leaderboard" initialRows={{ songs: boot.rows(boot.rankings.tracks, "track"), albums: boot.rows(boot.rankings.albums, "album"), artists: boot.rows(boot.rankings.artists, "artist") }}>
     <Fragment slot="header-songs">Songs</Fragment>
     <Fragment slot="header-albums">Albums</Fragment>
     <Fragment slot="header-artists">Artists</Fragment>
@@ -336,7 +338,12 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .range-highlight {
     border-radius: var(--radius-pill);
-    background: var(--range-color, var(--accent-pink));
+    /* Tinted glass rather than solid paint while the lens is lifted. */
+    background: color-mix(
+      in srgb,
+      var(--range-color, var(--accent-pink)) calc(100% - 72% * var(--lens, 0)),
+      transparent
+    );
     box-shadow: 0 4px 12px var(--range-glow, var(--accent-pink-glow));
   }
 
@@ -426,7 +433,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .sub-tab-highlight {
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.1);
+    /* Clears toward glass as the lens lifts (--lens, liquidGlass.ts). */
+    background: rgba(255, 255, 255, calc(0.1 - 0.08 * var(--lens, 0)));
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.1),
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
@@ -653,19 +661,16 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     getArtworkUrl,
     getArtistArtworkUrl,
     loadArtworkCache,
+    getArtworkCacheSync,
     loadMetaCache,
     initArtworkImages,
     escapeHTML,
   } from "../utils/ui";
+  import { queryMusic } from "../utils/analytics";
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { MetaData } from "../types/music";
   import {
-    loadYearsData,
-    getYearsInRange,
-    aggregateTrackCounts,
-    rollupByCategory,
     rawArtistNamesForCanonical,
-    nameCollator,
     type ArtistRollupMode,
     type RollupItem,
   } from "../utils/scrobbles";
@@ -722,55 +727,10 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       artists: "artists",
     } as const;
 
-    // The rollup (three passes over ~13k tracks) depends only on window + artist
-    // mode, so it is cached under that key and typing costs a filter and a sort.
-    let rollupKey = "";
-    let rollupCounts: Map<number, number> | null = null;
-    let rollupMeta: MetaData | null = null;
-    const baseByTab: Partial<Record<RankingTab, RankItem[]>> = {};
-
-    function invalidateRollups() {
-      rollupKey = "";
-      rollupCounts = null;
-      for (const tab of RANKING_TABS) delete baseByTab[tab];
-    }
-
-    function baseItems(tab: RankingTab): RankItem[] {
-      const cached = baseByTab[tab];
-      if (cached) return cached;
-      if (!rollupCounts || !rollupMeta) return [];
-      const category = CATEGORY_FOR_TAB[tab];
-      const items = rollupByCategory(rollupCounts, rollupMeta, category, {
-        artistMode: category === "artists" ? artistRankingMode : undefined,
-      });
-      baseByTab[tab] = items;
-      return items;
-    }
-
-    function compareItems(a: RankItem, b: RankItem): number {
-      const primary = playtimeMode
-        ? b.playtimeMs - a.playtimeMs
-        : b.count - a.count;
-      return primary || nameCollator.compare(a.name, b.name);
-    }
-
-    function prepareTab(tab: RankingTab): RankItem[] {
-      const existing = itemsByTab[tab];
-      if (existing) return existing;
-
-      const query = searchQuery.trim().toLowerCase();
-      const base = baseItems(tab);
-      const items = query
-        ? base.filter(
-            (item) =>
-              item.name.toLowerCase().includes(query) ||
-              (item.subtitle && item.subtitle.toLowerCase().includes(query)),
-          )
-        : base.slice();
-
-      items.sort(compareItems);
-      itemsByTab[tab] = items;
-      return items;
+    let queryWindow = { start: "", end: "" };
+    function invalidateRollups() { renderedTabs.clear(); }
+    function queryTab(tab: RankingTab): Promise<RankItem[]> {
+      return queryMusic<RankItem[]>({ ...queryWindow, category: CATEGORY_FOR_TAB[tab], artistMode: artistRankingMode, playtime: playtimeMode, search: searchQuery });
     }
 
     const rootEl = document.querySelector(
@@ -828,7 +788,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     async function loadMeta() {
-      if (meta) return meta;
       try {
         const [metaResult, totals] = await Promise.all([
           loadMetaCache(),
@@ -837,7 +796,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
           ).catch(() => null),
         ]);
         meta = metaResult;
-        artworkCache = await loadArtworkCache();
+        artworkCache = getArtworkCacheSync() || {};
 
         if (totals) {
           availableYears = Object.keys(totals)
@@ -970,127 +929,49 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     }
 
     function ensurePage(tab: RankingTab) {
-      if (renderedTabs.has(tab)) {
-        // Already painted for this data epoch.
-        return;
-      }
-      if (!rollupCounts) return;
-      paintPage(tab, prepareTab(tab));
+      if (renderedTabs.has(tab) || !queryWindow.start) return;
+      const epoch = dataEpoch;
+      void queryTab(tab).then(items => {
+        if (epoch !== dataEpoch) return;
+        paintPage(tab, items);
+      }).catch(error => console.warn('Ranking query failed', error));
     }
-
-    // Re-sorts in place and plays rows old position → new. Routing these through
-    // updateLeaderboard() tore the page down to a spinner and read as a flash.
-    function resortLeaderboard() {
-      if (!rollupCounts) {
-        void updateLeaderboard();
-        return;
-      }
-
-      const tabs = isDesktopLayout() ? [...RANKING_TABS] : [activeTab()];
-      const captures = new Map<
-        RankingTab,
-        ReturnType<typeof captureRowPositions>
-      >();
-      for (const tab of tabs) {
-        if (renderedTabs.has(tab))
-          captures.set(tab, captureRowPositions(listEl(tab)));
-      }
-
-      // Drop the sorted snapshots but keep the rollup — that is the expensive part.
-      renderedTabs.clear();
-      for (const tab of RANKING_TABS) delete itemsByTab[tab];
-
-      for (const tab of tabs) {
-        paintPage(tab, prepareTab(tab));
-        const before = captures.get(tab);
-        if (before) playFlip(listEl(tab), before, { viewport: pageEl(tab) });
-      }
-    }
-
-    async function updateLeaderboard() {
+    function resortLeaderboard() { void updateLeaderboard(true); }
+    async function updateLeaderboard(animate = false) {
       const epoch = ++dataEpoch;
-
       rootEl.classList.remove("is-empty");
-      for (const tab of RANKING_TABS) {
-        listEl(tab).innerHTML =
-          '<div class="no-data-message">Aggregating plays...</div>';
-      }
-
       try {
         const dictionary = await loadMeta();
-        if (epoch !== dataEpoch) return;
-        if (!dictionary) {
-          for (const tab of RANKING_TABS) {
-            listEl(tab).innerHTML =
-              '<div class="no-data-message">Failed to load metadata</div>';
-          }
-          return;
-        }
-
-        let startStr = startDateInput.value;
-        let endStr = endDateInput.value;
-
+        if (epoch !== dataEpoch || !dictionary) return;
+        let startStr = startDateInput.value, endStr = endDateInput.value;
         if (activeRange !== "custom") {
-          const end = new Date();
-          const start = new Date();
-
-          if (activeRange === "7d") start.setDate(end.getDate() - 7);
-          else if (activeRange === "30d") start.setDate(end.getDate() - 30);
-          else if (activeRange === "90d") start.setDate(end.getDate() - 90);
-          else if (activeRange === "year") start.setMonth(0, 1);
-          else if (activeRange === "all") {
-            const minYear =
-              availableYears.length > 0 ? Math.min(...availableYears) : 2000;
-            start.setFullYear(minYear, 0, 1);
-          }
-
-          startStr = start.toISOString().split("T")[0];
-          endStr = end.toISOString().split("T")[0];
-          startDateInput.value = startStr;
-          endDateInput.value = endStr;
+          const end = new Date(), start = new Date();
+          if (activeRange === "7d") start.setUTCDate(end.getUTCDate() - 6);
+          else if (activeRange === "30d") start.setUTCDate(end.getUTCDate() - 29);
+          else if (activeRange === "90d") start.setUTCDate(end.getUTCDate() - 89);
+          else if (activeRange === "year") start.setUTCMonth(0, 1);
+          else if (activeRange === "all") start.setUTCFullYear((availableYears.length ? Math.min(...availableYears) : new Date().getUTCFullYear()), 0, 1);
+          startStr = start.toISOString().slice(0, 10); endStr = end.toISOString().slice(0, 10);
+          startDateInput.value = startStr; endDateInput.value = endStr;
         }
-
-        const yearsToLoad = getYearsInRange(startStr, endStr);
-        await loadYearsData(yearsToLoad);
+        if (!startStr || !endStr || startStr > endStr) return;
+        queryWindow = { start: startStr, end: endStr };
+        const tabs = isDesktopLayout() ? [...RANKING_TABS] : [activeTab()];
+        const results = await Promise.all(tabs.map(queryTab));
         if (epoch !== dataEpoch) return;
-
-        const key = `${startStr}|${endStr}`;
-        if (key !== rollupKey) {
-          rollupKey = key;
-          rollupCounts = aggregateTrackCounts(yearsToLoad, startStr, endStr);
-          rollupMeta = dictionary;
-          for (const tab of RANKING_TABS) delete baseByTab[tab];
-        }
-
-        // Fresh snapshot — clear painted pages so ensure/paint refill them.
         renderedTabs.clear();
-        for (const tab of RANKING_TABS) {
-          releaseController(tab);
-          delete itemsByTab[tab];
+        for (const tab of RANKING_TABS) delete itemsByTab[tab];
+        for (let i = 0; i < tabs.length; i++) {
+          const tab = tabs[i];
+          const before = animate ? captureRowPositions(listEl(tab)) : null;
+          paintPage(tab, results[i]);
+          if (before) playFlip(listEl(tab), before, { viewport: pageEl(tab) });
         }
-
-        if (isDesktopLayout()) {
-          let anyItems = false;
-          for (const tab of RANKING_TABS) {
-            const items = prepareTab(tab);
-            if (items.length > 0) anyItems = true;
-            paintPage(tab, items);
-          }
-          // Every column empty is one fact about the range, so the deck is
-          // swapped for a single message rather than repeating it three times.
-          rootEl.classList.toggle("is-empty", !anyItems);
-          return;
-        }
-
-        // Active category only — switching is a tap on the capsule, not a swipe.
-        paintPage(activeTab(), prepareTab(activeTab()));
-      } catch (err) {
+        if (isDesktopLayout()) rootEl.classList.toggle("is-empty", results.every(items => !items.length));
+      } catch (error) {
         if (epoch !== dataEpoch) return;
-        console.error("Failed to aggregate data:", err);
-        for (const tab of RANKING_TABS) {
-          listEl(tab).innerHTML =
-            '<div class="no-data-message">Failed to aggregate data</div>';
-        }
+        console.warn('Ranking query failed; preserving displayed data', error);
+        for (const tab of RANKING_TABS) if (!listEl(tab).children.length) listEl(tab).textContent = 'Unable to load rankings. Reconnect to retry.';
       }
     }
 
@@ -1256,7 +1137,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
     function setArtistRankingMode(mode: ArtistRollupMode) {
       artistRankingMode = mode;
-      delete baseByTab.artists;
       writeLocal(ARTIST_MODE_KEY, mode);
       syncArtistRankingToggle();
       // Desktop shows all three columns — artists list must refresh even when
@@ -1318,14 +1198,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     updateLeaderboard();
 
     onPathsUpdated(
-      ["/data/yearly-totals.json", /^\/data\/year-\d+\.json$/],
+      ["/data/meta.json", "/data/yearly-totals.json", /^\/data\/year-\d+\.json$/],
       () => {
         // The window key is unchanged but the underlying scrobbles are not.
         invalidateRollups();
-        void loadMeta().then(() => updateLeaderboard());
+        void updateLeaderboard();
       },
     );
 
+    onPathsUpdated(["/data/artwork.json"], () => {
+      artworkCache = getArtworkCacheSync() || {};
+      for (const tab of [...renderedTabs]) paintPage(tab, itemsByTab[tab] ?? []);
+    });
+    void loadArtworkCache().then(cache => {
+      artworkCache = cache;
+      for (const tab of [...renderedTabs]) paintPage(tab, itemsByTab[tab] ?? []);
+    }).catch(() => {});
     rangeHighlightCtrl.observe();
     subTabHighlightCtrl.observe();
 

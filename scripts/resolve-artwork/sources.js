@@ -4,7 +4,7 @@
 const USER_AGENT = 'music-stats/1.0 (+https://music.aakashkap.com)';
 
 async function getJson(url, { headers } = {}) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers } });
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

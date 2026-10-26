@@ -1,11 +1,9 @@
+import { onPathsUpdated, fetchEntityCatalog, getActiveManifest } from './dataStore';
 import { setOverlayOpen } from './overlayState';
 import type { MetaData } from '../types/music';
 import {
   getArtworkCacheSync,
-  preloadAppData,
-  getMetaCache,
-  getCatalogCache,
-  loadCatalogCache,
+  loadMetaCache,
 } from './ui';
 import { bindEdgeSwipeNav, bindSwipeDismiss } from './overlayGestures';
 import {
@@ -15,74 +13,38 @@ import {
   applyOverlayShell,
   applyOverlayLists,
   clearOverlayContent,
-  crossfadeOverlayContent,
   initOverlayAlbumArtwork,
   type OverlayElements,
 } from './overlayPopulate';
-import { crossfadeOverlayArtwork } from './overlayArtwork';
+import { crossfadeOverlayArtwork, freezeOverlayArtwork } from './overlayArtwork';
 import { resetOverlayArtworkLayers } from './overlayArtwork';
 import {
   OVERLAY_CROSSFADE_MS,
-  OVERLAY_CONTENT_OUT_MS,
   OVERLAY_SLIDE_PX,
   type OverlayNavDirection,
   slideTransform,
-  dualLayerTransition,
-  sleep,
 } from './overlayTransitions';
 import { onEntityDetails, type ArtistCatalogKey } from './events';
 import { onReady } from './dom';
 
-function getCachedData(): { meta: MetaData; catalog: Record<string, unknown> } | null {
-  const meta = getMetaCache() as MetaData | null;
-  const catalog = getCatalogCache();
-  if (!meta || !catalog) return null;
-  return { meta, catalog: catalog as Record<string, unknown> };
+interface DetailData { meta: MetaData; catalog: Record<string, unknown> }
+const detailCache = new Map<string, DetailData>();
+function detailKey(type: string, id: number, artistCatalog?: ArtistCatalogKey): string {
+  return `${getActiveManifest()?.generation}:${type}:${id}:${artistCatalog ?? 'canonicalArtists'}`;
 }
-
-async function ensureData(): Promise<{ meta: MetaData; catalog: Record<string, unknown> } | null> {
-  await preloadAppData();
-  const meta = getMetaCache() as MetaData | null;
-  const catalog = getCatalogCache() || (await loadCatalogCache());
-  if (!meta || !catalog) return null;
-  return { meta, catalog: catalog as Record<string, unknown> };
+function getCachedData(type: string, id: number, artistCatalog?: ArtistCatalogKey): DetailData | null {
+  return detailCache.get(detailKey(type, id, artistCatalog)) ?? null;
 }
-
-function slideContentOut(regions: HTMLElement[], ms: number, direction: OverlayNavDirection): void {
-  const transition = dualLayerTransition(ms);
-  regions.forEach((el) => {
-    el.classList.add('is-sliding');
-    el.style.transition = transition;
-    el.style.opacity = '1';
-    el.style.transform = slideTransform(direction, 'in-end');
-  });
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      regions.forEach((el) => {
-        el.style.opacity = '0';
-        el.style.transform = slideTransform(direction, 'out');
-      });
-    });
-  });
-}
-
-function slideContentIn(regions: HTMLElement[], ms: number, direction: OverlayNavDirection): void {
-  const transition = dualLayerTransition(ms);
-  regions.forEach((el) => {
-    el.classList.add('is-sliding');
-    el.style.transition = 'none';
-    el.style.opacity = '0';
-    el.style.transform = slideTransform(direction, 'in-start');
-  });
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      regions.forEach((el) => {
-        el.style.transition = transition;
-        el.style.opacity = '1';
-        el.style.transform = slideTransform(direction, 'in-end');
-      });
-    });
-  });
+async function ensureData(type: string, id: number, artistCatalog?: ArtistCatalogKey): Promise<DetailData | null> {
+  const key = detailKey(type, id, artistCatalog);
+  const meta = await loadMetaCache() as MetaData | null;
+  const catalog = await fetchEntityCatalog({ type, id, artistCatalog });
+  if (!meta) return null;
+  if (key !== detailKey(type, id, artistCatalog)) return ensureData(type, id, artistCatalog);
+  const data = { meta, catalog: catalog as unknown as Record<string, unknown> };
+  detailCache.set(key, data);
+  if (detailCache.size > 16) detailCache.delete(detailCache.keys().next().value!);
+  return data;
 }
 
 function clearContentTransition(regions: HTMLElement[]): void {
@@ -98,9 +60,16 @@ export function initDetailOverlay(): void {
   const backdrop = document.getElementById('detailsOverlayBackdrop') as HTMLDivElement;
   const panel = document.getElementById('detailsOverlayPanel') as HTMLDivElement;
   const overlayScrollContainer = document.getElementById('overlayScrollContainer') as HTMLDivElement;
-  const overlayHeaderContent = document.getElementById('overlayHeaderContent') as HTMLDivElement;
-  const overlayContentWrapper = document.getElementById('overlayContentWrapper') as HTMLDivElement;
   const overlayCloseBtn = document.getElementById('overlayCloseBtn') as HTMLButtonElement;
+  const loadStatus = document.getElementById('overlayLoadStatus')!;
+  const loadMessage = document.getElementById('overlayLoadMessage')!;
+  const retryButton = document.getElementById('overlayRetryBtn') as HTMLButtonElement;
+  function showLoadStatus(message: string | null, failed = false): void {
+    loadStatus.hidden = message === null;
+    loadMessage.textContent = message ?? '';
+    retryButton.hidden = !failed;
+    panel.setAttribute('aria-busy', String(message !== null && !failed));
+  }
 
   const elements: OverlayElements = {
     overlayArtworkFront: document.getElementById('overlayArtworkFront') as HTMLImageElement,
@@ -119,11 +88,37 @@ export function initDetailOverlay(): void {
     overlayAlbumsList: document.getElementById('overlayAlbumsList') as HTMLElement,
   };
 
-  const contentRegions = [
-    elements.overlayArtworkWrapper,
-    overlayHeaderContent,
-    overlayContentWrapper,
-  ];
+  const contentRegions = [overlayScrollContainer];
+  const artworkElements = {
+    front: elements.overlayArtworkFront, back: elements.overlayArtworkBack,
+    fallback: elements.overlayArtworkFallback, bgBlur: elements.overlayBgBlur,
+    wrapper: elements.overlayArtworkWrapper,
+  };
+  let navigationAnimations: Animation[] = [];
+  let outgoingLayer: HTMLElement | null = null;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function clearNavigation() {
+    navigationAnimations.forEach(animation => animation.cancel());
+    navigationAnimations = [];
+    outgoingLayer?.remove(); outgoingLayer = null;
+    clearContentTransition(contentRegions);
+  }
+  function captureOutgoing(): { layer: HTMLElement; transform: string; opacity: string } {
+    const pose = getComputedStyle(overlayScrollContainer);
+    const transform = pose.transform, opacity = pose.opacity;
+    const layer = overlayScrollContainer.cloneNode(true) as HTMLElement;
+    layer.removeAttribute('id');
+    layer.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    layer.setAttribute('aria-hidden', 'true'); layer.inert = true;
+    layer.classList.add('overlay-navigation-snapshot');
+    layer.style.cssText += ';position:absolute;inset:0;z-index:5;pointer-events:none;overflow:hidden;transition:none;contain:paint;';
+    // Only one bounded outgoing DOM snapshot exists, without listeners or observers.
+    const scrollTop = overlayScrollContainer.scrollTop;
+    clearNavigation();
+    panel.append(layer); layer.scrollTop = scrollTop;
+    outgoingLayer = layer;
+    return { layer, transform, opacity };
+  }
   type NavEntry = { type: string; id: number; artistCatalog?: ArtistCatalogKey };
   let currentEntity: NavEntry | null = null;
   const navHistory: NavEntry[] = [];
@@ -148,6 +143,12 @@ export function initDetailOverlay(): void {
   }
 
   function runCloseCleanup() {
+    panel.style.transition = '';
+    backdrop.style.transition = '';
+    clearNavigation();
+    showLoadStatus(null);
+    document.body.classList.remove('overlay-open');
+    clearOverlayContent(elements);
     panel.classList.remove('sheet-closing');
     panel.style.removeProperty('--overlay-bg-bottom');
     overlayScrollContainer.style.removeProperty('--overlay-bg-bottom');
@@ -169,28 +170,36 @@ export function initDetailOverlay(): void {
       closeCleanupTimer = null;
     }
 
-    // Invalidates any deferred populate still queued from the open.
+    // Freeze the complete visible scene through the exit. Deferred artwork,
+    // navigation and data callbacks cannot alter text/cover layers mid-dismiss.
     currentOpenToken++;
+    navigationAnimations.forEach(animation => animation.pause());
+    freezeOverlayArtwork(artworkElements, [elements.overlayColorWash, elements.overlayColorWashBack]);
 
     panel.classList.add('sheet-closing');
     panel.classList.remove('visible');
     backdrop.classList.remove('visible');
-    document.body.classList.remove('overlay-open');
-    setOverlayOpen('detail', false);
+    const durations = getComputedStyle(panel).transitionDuration.split(',').map(value => parseFloat(value) * (value.trim().endsWith('ms') ? 1 : 1000));
+    const exitMs = Math.max(...durations, 0);
+    setOverlayOpen('detail', false, exitMs + 80);
     currentEntity = null;
     navHistory.length = 0;
     forwardStack.length = 0;
     panel.style.transform = '';
 
-    // Let the slide-out start on the compositor before tearing down artwork /
-    // lists — that sync work was the main source of the "delayed" dismiss feel.
-    // Must outlast --duration-sheet-out, or artwork is torn down while the
-    // panel is still on screen.
+    // transitionend is authoritative, with a duration-based fallback for a
+    // cancelled transition or reduced motion. Swipe exits can last up to 300ms.
     closeCleanupTimer = setTimeout(() => {
       closeCleanupTimer = null;
       runCloseCleanup();
-    }, 280);
+    }, exitMs + 80);
   }
+
+  panel.addEventListener('transitionend', event => {
+    if (event.target !== panel || event.propertyName !== 'transform' || !closeCleanupTimer || panel.classList.contains('visible')) return;
+    clearTimeout(closeCleanupTimer); closeCleanupTimer = null;
+    runCloseCleanup();
+  });
 
   async function openDetails(
     type: string,
@@ -228,20 +237,29 @@ export function initDetailOverlay(): void {
     // The entrance is a compositor-driven transform. Nothing that costs main
     // thread — data loads, list building, artwork decode — may run before it
     // starts, or the sheet sits still and then jumps.
-    const cached = getCachedData();
+    const cached = getCachedData(type, id, artistCatalog);
     if (isColdOpen && !cached) {
       // Data still loading. Blank the previous entity's content and bring the
       // sheet up now; text and lists fill in behind the animation.
       clearOverlayContent(elements);
+      elements.overlayTitle.textContent = 'Loading details…';
       startEntrance();
     }
 
-    const data = cached ?? (await ensureData());
-    if (openToken !== currentOpenToken) return;
-    if (!data) {
-      if (isColdOpen) closeDetails();
+    showLoadStatus(cached ? null : 'Loading…');
+    let data: DetailData;
+    try {
+      const loaded = cached ?? await ensureData(type, id, artistCatalog);
+      if (!loaded) throw new Error('Detail metadata unavailable');
+      data = loaded;
+    } catch (error) {
+      if (openToken !== currentOpenToken) return;
+      console.warn('Detail load failed', error);
+      showLoadStatus('Unable to load details. Please try again.', true);
       return;
     }
+    if (openToken !== currentOpenToken) return;
+    showLoadStatus(null);
 
     const artworkCache = getArtworkCacheSync() || {};
     const catalogKey = artistCatalog ?? (type === 'artist' ? 'canonicalArtists' : undefined);
@@ -285,40 +303,29 @@ export function initDetailOverlay(): void {
       return;
     }
 
-    overlayScrollContainer.scrollTo({ top: 0, behavior: 'auto' });
-
-      const contentInMs = fromEdgeSwipe
-        ? OVERLAY_CROSSFADE_MS
-        : OVERLAY_CROSSFADE_MS - OVERLAY_CONTENT_OUT_MS;
-
-      const visualsPromise = crossfadeOverlayContent(
-        payload,
-        elements,
-        OVERLAY_CROSSFADE_MS,
-        direction,
-        overlayScrollContainer,
-        panel,
-      );
-
-      if (fromEdgeSwipe) {
-        // Edge swipe already drove content to this direction's "out" end state.
-        contentRegions.forEach((el) => {
-          el.classList.add('is-sliding');
-          el.style.transition = 'none';
-          el.style.opacity = '0';
-          el.style.transform = slideTransform(direction, 'out');
-        });
-      } else {
-        slideContentOut(contentRegions, OVERLAY_CONTENT_OUT_MS, direction);
-        await sleep(OVERLAY_CONTENT_OUT_MS);
-      }
-
-      applyOverlayContent(payload, elements, artworkCache, overlayScrollContainer, panel);
-      slideContentIn(contentRegions, contentInMs, direction);
-
-      await visualsPromise;
-      initOverlayAlbumArtwork(elements.overlayAlbumsList);
-      clearContentTransition(contentRegions);
+    const outgoing = captureOutgoing();
+    freezeOverlayArtwork(artworkElements, [elements.overlayColorWash, elements.overlayColorWashBack]);
+    resetOverlayArtworkLayers(artworkElements);
+    overlayScrollContainer.scrollTop = 0;
+    applyOverlayContent(payload, elements, artworkCache, overlayScrollContainer, panel);
+    const duration = reduceMotion.matches ? 0 : fromEdgeSwipe ? 220 : 270;
+    const timing: KeyframeAnimationOptions = { duration, easing: 'cubic-bezier(0.22, 0.8, 0.25, 1)', fill: 'both' };
+    overlayScrollContainer.classList.add('is-sliding');
+    const incoming = overlayScrollContainer.animate([
+      { transform: slideTransform(direction, 'in-start'), opacity: 0 },
+      { transform: 'translate3d(0, 0, 0)', opacity: 1 },
+    ], timing);
+    const leaving = outgoing.layer.animate([
+      { transform: outgoing.transform === 'none' ? 'translate3d(0, 0, 0)' : outgoing.transform, opacity: outgoing.opacity },
+      { transform: slideTransform(direction, 'out'), opacity: 0 },
+    ], timing);
+    navigationAnimations = [incoming, leaving];
+    // A slow/missing cover only affects its own fade, never the content slide.
+    void crossfadeOverlayArtwork(artworkElements, payload.imgUrl, OVERLAY_CROSSFADE_MS, direction);
+    await Promise.all(navigationAnimations.map(animation => animation.finished.catch(() => {})));
+    if (openToken !== currentOpenToken) return;
+    clearNavigation();
+    initOverlayAlbumArtwork(elements.overlayAlbumsList);
   }
 
   function goBackOrClose() {
@@ -332,6 +339,11 @@ export function initDetailOverlay(): void {
   }
 
   overlayCloseBtn.addEventListener('click', goBackOrClose);
+  retryButton.addEventListener('click', () => {
+    if (!currentEntity) return;
+    const { type, id, artistCatalog } = currentEntity;
+    void openDetails(type, id, 'back', artistCatalog).catch(error => console.warn('Detail retry failed', error));
+  });
 
   backdrop.addEventListener('click', closeDetails);
 
@@ -380,7 +392,28 @@ export function initDetailOverlay(): void {
   });
 
   bindOverlayClicks(panel, (type, id, catalog) => openDetails(type, id, 'push', catalog));
-  onEntityDetails(({ type, id, artistCatalog }) => openDetails(type, id, 'push', artistCatalog));
+  let refreshFrame = 0;
+  function refreshWhenStill() {
+    cancelAnimationFrame(refreshFrame);
+    if (!currentEntity || !panel.classList.contains('visible')) return;
+    const moving = panel.classList.contains('sheet-dragging') || panel.getAnimations().some(animation => animation.playState === 'running') || navigationAnimations.length > 0;
+    if (moving) { refreshFrame = requestAnimationFrame(refreshWhenStill); return; }
+    const entity = currentEntity, token = currentOpenToken;
+    void ensureData(entity.type, entity.id, entity.artistCatalog).then(data => {
+      if (!data || token !== currentOpenToken) return;
+      if (panel.classList.contains('sheet-dragging') || navigationAnimations.length) { refreshFrame = requestAnimationFrame(refreshWhenStill); return; }
+      const scrollTop = overlayScrollContainer.scrollTop;
+      const payload = buildOverlayPayload(entity.type, entity.id, data.meta, data.catalog, getArtworkCacheSync() || {}, entity.artistCatalog ?? 'canonicalArtists');
+      applyOverlayContent(payload, elements, getArtworkCacheSync() || {}, overlayScrollContainer, panel);
+      overlayScrollContainer.scrollTop = scrollTop;
+    }).catch(error => console.warn('Detail refresh failed; preserving visible content', error));
+  }
+  onPathsUpdated(['/data/meta.json', '/data/catalog.json', '/data/artwork.json', '/data/colors.json'], () => {
+    detailCache.clear();
+    cancelAnimationFrame(refreshFrame);
+    refreshFrame = requestAnimationFrame(refreshWhenStill);
+  });
+  onEntityDetails(({ type, id, artistCatalog }) => { void openDetails(type, id, 'push', artistCatalog).catch(error => console.warn('Detail rendering failed', error)); });
 
   // iOS text autosizing can cache inflated sizes across rotation when the
   // sheet is open; reset inline layout state after the viewport settles.

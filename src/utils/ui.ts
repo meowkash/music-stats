@@ -1,3 +1,4 @@
+import type { MetaData } from '../types/music';
 import { fetchAppJson, onPathsUpdated } from './dataStore';
 import { getGlowStyle } from './theme';
 import { getStaticArtworkSources, getThumbArtworkSources, normalizeStaticArtworkUrl, resolveAlbumArtwork, resolveArtistArtwork, resolveArtistArtworkFromCandidates, resolveArtworkFromCache, resolveTrackArtwork, type ArtworkEntityType } from './artwork';
@@ -54,9 +55,10 @@ export async function loadArtworkCache(): Promise<Record<string, string>> {
   if (artworkCache) return artworkCache;
   try {
     artworkCache = await fetchAppJson<Record<string, string>>('/data/artwork.json');
+    window.dispatchEvent(new CustomEvent('data-updated', { detail: { path: '/data/artwork.json', data: artworkCache } }));
   } catch (e) {
     console.error('Failed to load artwork.json', e);
-    artworkCache = {};
+    throw e;
   }
   return artworkCache;
 }
@@ -65,53 +67,25 @@ export function getArtworkCacheSync(): Record<string, string> | null {
   return artworkCache;
 }
 
-// meta.json: eager; catalog.json (~2MB): idle preload for detail overlay
-let metaCache: { artists: string[]; albums: string[]; tracks: [string, number, number][] } | null = null;
-let catalogCache: Record<string, unknown> | null = null;
-let catalogPromise: Promise<void> | null = null;
+// Metadata is shared; the full catalog remains in the repository worker.
+let metaCache: MetaData | null = null;
 
 export async function loadMetaCache(): Promise<typeof metaCache> {
   if (metaCache) return metaCache;
   try {
-    metaCache = await fetchAppJson<{
-      artists: string[];
-      albums: string[];
-      tracks: [string, number, number][];
-    }>('/data/meta.json');
+    metaCache = await fetchAppJson<MetaData>('/data/meta.json');
   } catch (e) {
     console.error('Failed to load meta.json', e);
   }
   return metaCache;
 }
 
-export async function loadCatalogCache(): Promise<Record<string, unknown> | null> {
-  if (catalogCache) return catalogCache;
-  if (!catalogPromise) {
-    catalogPromise = fetchAppJson<Record<string, unknown>>('/data/catalog.json')
-      .then((catalog) => { catalogCache = catalog; })
-      .catch((e) => console.error('Failed to load catalog.json', e));
-  }
-  await catalogPromise;
-  return catalogCache;
-}
-
-function scheduleIdle(fn: () => void) {
-  if ('requestIdleCallback' in window) {
-    (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => void })
-      .requestIdleCallback(fn, { timeout: 2000 });
-  } else {
-    // Safari lacks requestIdleCallback
-    setTimeout(fn, 150);
-  }
-}
-
 export async function preloadAppData(): Promise<void> {
-  await Promise.all([loadMetaCache(), loadArtworkCache()]);
-  scheduleIdle(() => { loadCatalogCache(); });
+  await loadMetaCache();
+  void loadArtworkCache().catch(() => {});
 }
 
 export function getMetaCache() { return metaCache; }
-export function getCatalogCache() { return catalogCache; }
 
 export function getArtworkUrl(
   type: string,
@@ -159,7 +133,7 @@ export function getArtworkThumbHTML(
   return `
     ${shimmerHtml}
     <img class="artwork-img" src="${escapeHTML(lowRes)}" alt="" crossorigin="anonymous"
-         decoding="async" data-artwork-thumb="true" data-fallback-src="${escapeHTML(highRes)}" />
+         decoding="async" loading="lazy" data-artwork-thumb="true" data-fallback-src="${escapeHTML(highRes)}" />
   `;
 }
 
@@ -316,9 +290,12 @@ function loadArtworkWithRetry(
     }
     scheduleRetry(() => {
       holdsRetrySlot = true;
+      if (!img.isConnected) { settled = true; releaseSlot(); return; }
       tryLoad();
     });
   };
+
+  img.addEventListener('artwork-dispose', () => { settled = true; detach(); releaseSlot(); }, { once: true });
 
   const tryLoad = () => {
     if (settled) {
@@ -441,6 +418,15 @@ export function initArtworkImages(scope: RenderScope = document) {
   );
 }
 
+export function disposeArtworkImages(scope: ParentNode): void {
+  scope.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+    unwatchStall(img);
+    img.dispatchEvent(new Event('artwork-dispose'));
+    img.onload = img.onerror = null;
+    img.removeAttribute('src');
+  });
+}
+
 export function initOverlayAlbumArtwork(container: ParentNode = document) {
   container.querySelectorAll('.overlay-album-card-artwork img.artwork-img').forEach((el) => {
     bindOverlayAlbumCardImage(el as HTMLImageElement);
@@ -491,8 +477,8 @@ export async function loadColorsCache() {
   if (colorsCache) return;
   if (!colorsPromise) {
     colorsPromise = fetchAppJson<Record<string, ColorEntry>>('/data/colors.json')
-      .then((data) => { colorsCache = data; resolvedColorEntries.clear(); })
-      .catch((e) => { console.error('Failed to load colors.json', e); colorsCache = {}; });
+      .then((data) => { colorsCache = data; resolvedColorEntries.clear(); window.dispatchEvent(new CustomEvent('data-updated', { detail: { path: '/data/colors.json', data } })); })
+.catch((e) => { colorsPromise = null; throw e; });
   }
   await colorsPromise;
   // Components render in parallel with this load, so anything that painted
@@ -500,22 +486,28 @@ export async function loadColorsCache() {
   repaintPendingGlows();
 }
 
-onPathsUpdated(['/data/artwork.json'], ({ data }) => {
-  artworkCache = data as Record<string, string>;
+onPathsUpdated(['/data/artwork.json'], ({ data, path }) => {
+  if (!path) return;
+  artworkCache = data ? data as Record<string, string> : null;
 });
 
-onPathsUpdated(['/data/meta.json'], ({ data }) => {
-  metaCache = data as typeof metaCache;
+onPathsUpdated(['/data/meta.json'], ({ data, path }) => {
+  if (!path) return;
+  metaCache = data ? data as typeof metaCache : null;
 });
 
-onPathsUpdated(['/data/catalog.json'], ({ data }) => {
-  catalogCache = data as Record<string, unknown>;
-});
-
-onPathsUpdated(['/data/colors.json'], ({ data }) => {
-  colorsCache = data as Record<string, ColorEntry>;
+onPathsUpdated(['/data/colors.json'], ({ data, path }) => {
+  if (!path) return;
+  colorsCache = data ? data as Record<string, ColorEntry> : null;
+  colorsPromise = null;
   resolvedColorEntries.clear();
+  document.querySelectorAll<HTMLElement>('[data-color-state="resolved"]').forEach(el => { el.dataset.colorState = "pending"; });
   repaintPendingGlows();
+});
+
+if (typeof window !== 'undefined') window.addEventListener('data-retry', () => {
+  void loadArtworkCache().catch(() => {});
+  void loadColorsCache().catch(() => {});
 });
 
 function urlVariants(url: string): string[] {

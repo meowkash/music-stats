@@ -1,8 +1,11 @@
 ---
+import { getBootSnapshot } from "../utils/bootSnapshot";
+import { recapThemeVars } from "../utils/recapTheme";
+const { recaps } = getBootSnapshot();
 ---
 
 <div class="recaps-stories shrink-0" id="recapsCard">
-  <div class="recap-rail" id="recapYearRail"></div>
+  <div class="recap-rail" id="recapYearRail">{recaps.years.map((entry, i) => <button class="recap-story" data-year={entry.year} type="button" style={`${recapThemeVars(entry.year)};--ring-index:${i}`} aria-label={`${entry.year} recap`}><span class="recap-story-ring" aria-hidden="true"><span class="recap-story-avatar">♪</span></span><span class="recap-story-year">{entry.year}</span></button>)}</div>
 </div>
 
 <style>
@@ -257,7 +260,6 @@
 
     async function load() {
       try {
-        await loadArtworkCache();
         const { years } = await fetchAppJson<{ years: RecapIndexEntry[] }>("/data/recaps.json");
         renderRail(years ?? []);
       } catch (err) {
@@ -267,6 +269,7 @@
     }
 
     load();
+    void loadArtworkCache().then(() => load()).catch(() => {});
     onPathsUpdated(["/data/recaps.json", "/data/artwork.json"], () => load());
   });
 </script>

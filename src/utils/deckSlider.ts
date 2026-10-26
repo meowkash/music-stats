@@ -14,8 +14,12 @@ export interface DeckSlider {
   isVertical: () => boolean;
   /** Takes the panels off their CSS transitions for JS-driven positioning. */
   begin: () => void;
-  /** Positions the deck at a fractional tab index. */
-  setPosition: (fraction: number) => void;
+  /** Starts a direct glide to `target` from whatever is on screen now. Only
+   *  the panels in view and the destination move; tabs in between are never
+   *  revealed, so a long jump costs the same as a neighbouring one. */
+  glide: (target: number) => void;
+  /** Positions the current glide at progress 0..1. */
+  setGlide: (progress: number) => void;
   /** Hands pointer-events back without dropping compositor layers. */
   end: () => void;
   /** Resting pose after a settle — keeps GPU layers, hides far panels. */
@@ -23,7 +27,8 @@ export interface DeckSlider {
   isActive: () => boolean;
 }
 
-// Reveal destination panels as the gesture begins, to avoid mid-frame paint spikes.
+// Panels move only once a destination is chosen, straight from what is on
+// screen to that destination.
 export function createDeckSlider(): DeckSlider | null {
   const deck = document.querySelector('.view-deck') as HTMLElement | null;
   if (!deck) return null;
@@ -41,7 +46,8 @@ export function createDeckSlider(): DeckSlider | null {
   let deckWidth = deckEl.clientWidth || window.innerWidth;
   let deckHeight = deckEl.clientHeight || window.innerHeight;
   let active = false;
-  let prepared = false;
+  /** Offsets in page strides at the start and end of the current glide. */
+  let gliding: { panel: DeckPanel; from: number; to: number }[] = [];
 
   const desktopQuery = window.matchMedia('(min-width: 768px)');
 
@@ -84,45 +90,59 @@ export function createDeckSlider(): DeckSlider | null {
   function begin() {
     if (active) return;
     active = true;
-    prepared = false;
     measure();
     deckEl.classList.add('tab-dragging');
-    for (const panel of panels) {
-      panel.visible = null;
-      panel.el.style.pointerEvents = 'none';
-    }
+    for (const panel of panels) panel.el.style.pointerEvents = 'none';
   }
 
-  function setPosition(fraction: number) {
+  function glide(target: number) {
+    begin();
+    const pageSize = stride() || 1;
+    const offsetOf = (panel: DeckPanel) =>
+      Number.isNaN(panel.lastOffset) ? panel.index - target : panel.lastOffset / pageSize;
+    const onScreen = panels.filter((p) => p.visible === true && Math.abs(offsetOf(p)) < 0.999);
+    const anchor = onScreen.reduce<DeckPanel | null>(
+      (best, p) => (!best || Math.abs(offsetOf(p)) < Math.abs(offsetOf(best)) ? p : best),
+      null,
+    );
+    const goal = panels.find((p) => p.index === target);
+    if (!goal) return;
+
+    // The destination enters from its own side, butted against whatever is
+    // on screen there, unless it is already in view. Everything moves by the
+    // same amount, so a glide retargeted mid-flight never overlaps panels.
+    const side = anchor && target < anchor.index ? -1 : 1;
+    const offsets = onScreen.map(offsetOf);
+    const enter = onScreen.includes(goal)
+      ? offsetOf(goal)
+      : offsets.length === 0
+        ? side
+        : side > 0
+          ? Math.max(...offsets) + 1
+          : Math.min(...offsets) - 1;
+    gliding = [{ panel: goal, from: enter, to: 0 }];
+    for (const panel of onScreen) {
+      if (panel === goal) continue;
+      const from = offsetOf(panel);
+      let to = from - enter;
+      if (Math.abs(to) < 1) to = to < 0 || (to === 0 && enter > 0) ? -1 : 1;
+      gliding.push({ panel, from, to });
+    }
+    show(goal);
+  }
+
+  function setGlide(progress: number) {
     const vertical = isVertical();
     const pageSize = stride();
-
-    if (active) {
-      if (!prepared) {
-        const center = Math.round(fraction);
-        for (const panel of panels) {
-          if (Math.abs(panel.index - center) <= 1) show(panel);
-        }
-        prepared = true;
-      } else {
-        const lo = Math.floor(fraction);
-        const hi = Math.ceil(fraction);
-        for (const panel of panels) {
-          if (panel.index === lo || panel.index === hi) show(panel);
-        }
-      }
-    }
-
-    for (const panel of panels) {
-      if (active && panel.visible !== true) continue;
-      paintOffset(panel, (panel.index - fraction) * pageSize, vertical);
+    for (const { panel, from, to } of gliding) {
+      paintOffset(panel, (from + (to - from) * progress) * pageSize, vertical);
     }
   }
 
   function end() {
     if (!active) return;
     active = false;
-    prepared = false;
+    gliding = [];
     deckEl.classList.remove('tab-dragging');
   }
 
@@ -157,7 +177,8 @@ export function createDeckSlider(): DeckSlider | null {
     stride,
     isVertical,
     begin,
-    setPosition,
+    glide,
+    setGlide,
     end,
     settle,
     isActive: () => active,

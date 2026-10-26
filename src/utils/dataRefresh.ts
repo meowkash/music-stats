@@ -3,7 +3,6 @@ import {
   revalidateCriticalData,
   type GenerationSwappedDetail,
 } from './dataStore';
-import { isStandalonePwa } from './pwaInstall';
 import { isOverlayOpen, isOverlaySurface } from './overlayState';
 
 let initialized = false;
@@ -113,12 +112,14 @@ async function runManualRefresh(): Promise<void> {
   indicator?.classList.add('refreshing');
 
   try {
-    const changedCount = await refreshAppData();
-    if (changedCount > 0) {
+    const result = await refreshAppData();
+    if (result.status === "updated") {
       showUpdateToast('Data updated');
       pulseRefreshAnimation();
-    } else {
+    } else if (result.status === 'unchanged') {
       showUpdateToast('Already up to date');
+    } else {
+      showUpdateToast(result.status === 'offline' ? 'Offline — showing cached data' : 'Refresh failed — showing cached data');
     }
   } catch (err) {
     console.error('[DataRefresh] Manual pull-to-refresh failed:', err);
@@ -131,7 +132,6 @@ async function runManualRefresh(): Promise<void> {
 }
 
 function initPullToRefresh(): void {
-  if (!isStandalonePwa()) return;
 
   let startY = 0;
   let pulling = false;
@@ -242,6 +242,9 @@ export function initDataRefreshUI(): void {
   window.addEventListener('data-generation-swapped', handleGenerationSwapped);
   document.addEventListener('visibilitychange', handleResume);
   window.addEventListener('offline', hideSplashScreen);
+  window.addEventListener('online', handleResume);
+  window.addEventListener('pageshow', handleResume);
+  setInterval(handleResume, 5 * 60 * 1000);
   initPullToRefresh();
 }
 

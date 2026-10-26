@@ -38,6 +38,7 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
   let dragRafId: number | null = null;
   /** Measured once per gesture — reading it per frame forces a layout flush. */
   let panelHeight = 0;
+  let dismissVersion = 0;
 
   /** Eases past ~60% of the sheet height so it never runs away from the finger. */
   function resist(distance: number): number {
@@ -82,20 +83,27 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
    * time). Duration is derived from remaining travel and release speed instead.
    */
   function dismissWithVelocity(offsetY: number, velocity: number) {
+    const version = ++dismissVersion;
     const remaining = Math.max(panelHeight - offsetY, 0);
     // px/ms. Floor it so a slow release still settles promptly.
     const speed = Math.max(Math.abs(velocity), 0.9);
     const ms = Math.round(Math.min(Math.max(remaining / speed, 130), 300));
 
     panel.style.transition = `transform ${ms}ms cubic-bezier(0.32, 0, 0.67, 0.25)`;
-    if (backdrop) backdrop.style.opacity = '';
+    if (backdrop) {
+      backdrop.style.transition = `opacity ${ms}ms ease-out`;
+      backdrop.style.opacity = '';
+    }
 
     onDismiss();
 
     // Back to the stylesheet's timing once the exit has played out, so the next
     // open is not stuck with this gesture's duration.
     window.setTimeout(() => {
-      panel.style.transition = '';
+      if (version === dismissVersion) {
+        panel.style.transition = '';
+        if (backdrop) backdrop.style.transition = '';
+      }
     }, ms + 60);
   }
 
@@ -103,6 +111,7 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
     if (window.innerWidth >= 768) return;
     if (e.touches.length !== 1) return;
     if (scrollContainer.scrollTop > 5) return;
+    dismissVersion++;
     // Leave edges for interactive back/forward navigation when reserved.
     const leftPx = typeof reserveLeftEdgePx === 'function' ? reserveLeftEdgePx() : reserveLeftEdgePx;
     const rightPx = typeof reserveRightEdgePx === 'function' ? reserveRightEdgePx() : reserveRightEdgePx;
@@ -412,7 +421,6 @@ export function bindEdgeSwipeNav(options: EdgeSwipeNavOptions): void {
     const flick = goingBack ? velocityX > EDGE_FLICK : velocityX < -EDGE_FLICK;
     const commit = progress > EDGE_COMMIT || flick;
     if (commit && canNavigate()) {
-      paint(1);
       for (const el of contentEls) el.style.transition = 'none';
       onNavigate();
       return;

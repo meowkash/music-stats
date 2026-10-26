@@ -1,147 +1,65 @@
-// Main-thread handle on dataSync.worker. Keeps one worker alive for the session
-// and falls back to an in-page download when Workers are unavailable, so the
-// data layer behaves identically either way — just with the cost back on the
-// main thread.
-
-import type { SyncRequest, SyncResponse } from './dataSync.worker';
-import { FILE_STORE, idbKeys, idbSetMany } from './persist/idb';
-import { hashText } from './persist/generations';
-
-interface SyncFile {
-  path: string;
-  hash: string;
-  bytes: number;
-}
-
-export interface SyncOutcome {
-  ok: boolean;
-  storedPaths: string[];
-  failedPaths: string[];
-}
-
+import { selectCatalogEntity, type CatalogEntitySelection, type EntityCatalog } from './catalogEntity';
+import type { ArtworkFallbackIndex } from './artwork';
+import type { RepositoryRequest, RepositoryResponse } from './dataSync.worker';
+import type { ManifestFile } from './persist/generations';
+import type { DatasetKind } from './persist/datasets';
 let worker: Worker | null | undefined;
-let nextRequestId = 1;
-const pending = new Map<number, (result: SyncResponse) => void>();
-
-function failPending(): void {
-  for (const [id, resolve] of pending) {
-    resolve({ id, ok: false, storedPaths: [], failedPaths: [] });
-  }
+let sequence = 0;
+const pending = new Map<number, { resolve: (value: RepositoryResponse) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+function stopWorker(): void {
+  worker?.terminate(); worker = null;
+  for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error('Data worker unavailable')); }
   pending.clear();
 }
-
 function getWorker(): Worker | null {
   if (worker !== undefined) return worker;
-
-  if (typeof Worker === 'undefined') {
-    worker = null;
-    return null;
-  }
-
+  if (typeof Worker === 'undefined') return worker = null;
   try {
-    const created = new Worker(new URL('./dataSync.worker.ts', import.meta.url), {
-      type: 'module',
-    });
-    created.addEventListener('message', (event: MessageEvent<SyncResponse>) => {
-      const resolve = pending.get(event.data.id);
-      if (!resolve) return;
-      pending.delete(event.data.id);
-      resolve(event.data);
-    });
-    created.addEventListener('error', (err) => {
-      console.warn('[DataSync] Worker failed; syncing on the main thread:', err);
-      worker = null;
-      failPending();
-      created.terminate();
-    });
-    worker = created;
-  } catch (err) {
-    console.warn('[DataSync] Worker unavailable; syncing on the main thread:', err);
-    worker = null;
-  }
-
+    worker = new Worker(new URL('./dataSync.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<RepositoryResponse>) => {
+      const entry = pending.get(event.data.id);
+      if (!entry) return;
+      pending.delete(event.data.id); clearTimeout(entry.timer);
+      event.data.ok ? entry.resolve(event.data) : entry.reject(new Error(event.data.error));
+    };
+    worker.onerror = worker.onmessageerror = stopWorker;
+  } catch { worker = null; }
   return worker;
 }
-
-/** Last-resort path: same logic as the worker, paid for on the main thread. */
-async function syncOnMainThread(files: SyncFile[], cacheVersion: string): Promise<SyncOutcome> {
-  const storedPaths: string[] = [];
-  const failedPaths: string[] = [];
-
-  let present: Set<IDBValidKey>;
-  try {
-    present = new Set(await idbKeys(FILE_STORE));
-  } catch {
-    present = new Set();
+async function request(input: Omit<RepositoryRequest, 'id'>): Promise<RepositoryResponse> {
+  const active = getWorker();
+  if (active) {
+    const id = ++sequence;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(stopWorker, Math.max(30000, Math.ceil(input.files.length / 4) * 16000));
+      pending.set(id, { resolve, reject, timer });
+      try { active.postMessage({ ...input, id }); } catch { stopWorker(); }
+    });
   }
-
-  const writes: Array<[string, unknown]> = [];
-
-  for (const file of files.filter((f) => !present.has(f.hash))) {
-    try {
-      const sep = file.path.includes('?') ? '&' : '?';
-      const res = await fetch(`${file.path}${sep}v=${cacheVersion}&fresh=1`, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-
-      const actual = await hashText(text);
-      if (actual !== null && actual !== file.hash) throw new Error('hash mismatch');
-
-      writes.push([file.hash, JSON.parse(text)]);
-      storedPaths.push(file.path);
-    } catch {
-      failedPaths.push(file.path);
-    }
+  // Older browsers keep correctness, with a yield before CPU work. Modern
+  // browsers use the worker for fetch, hash, parse, IDB reads and shard merging.
+  const repository = await import('./dataRepository');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  let data: unknown;
+  if (input.operation === 'read') {
+    data = await repository.readFiles(input.files, input.kind, input.cacheVersion, input.network);
+    if (input.entity) data = selectCatalogEntity(data as EntityCatalog, input.entity);
   }
-
-  if (writes.length) {
-    try {
-      await idbSetMany(FILE_STORE, writes);
-    } catch {
-      return { ok: false, storedPaths: [], failedPaths: files.map((f) => f.path) };
-    }
+  else for (const file of input.files) {
+    await repository.loadFile(file, input.cacheVersion);
+    await new Promise(resolve => setTimeout(resolve, input.gentle ? 50 : 0));
   }
-
-  return { ok: failedPaths.length === 0, storedPaths, failedPaths };
+  return { id: 0, ok: true, persistent: repository.hasPersistence(), data };
+}
+export async function syncFiles(files: ManifestFile[], cacheVersion: string, options: { gentle?: boolean } = {}): Promise<{ ok: boolean; persistent: boolean }> {
+  return request({ operation: 'sync', files, cacheVersion, ...options });
+}
+export async function readDataFiles<T>(files: ManifestFile[], kind: DatasetKind | undefined, cacheVersion: string, network = true): Promise<{ data: T; persistent: boolean; artworkIndex?: ArtworkFallbackIndex }> {
+  const result = await request({ operation: 'read', files, kind, cacheVersion, network });
+  return { data: result.data as T, persistent: result.persistent, artworkIndex: result.artworkIndex };
 }
 
-/**
- * Ensures every listed file is present in the content-addressed store.
- * `gentle` paces the sweep for background backfill, where finishing fast matters
- * far less than not competing with whatever the user is doing.
- */
-export async function syncFiles(
-  files: SyncFile[],
-  cacheVersion: string,
-  options: { gentle?: boolean } = {},
-): Promise<SyncOutcome> {
-  if (!files.length) return { ok: true, storedPaths: [], failedPaths: [] };
-
-  const active = getWorker();
-  if (!active) return syncOnMainThread(files, cacheVersion);
-
-  const id = nextRequestId++;
-  const request: SyncRequest = { id, files, cacheVersion, gentle: options.gentle };
-
-  const response = await new Promise<SyncResponse>((resolve) => {
-    pending.set(id, resolve);
-    try {
-      active.postMessage(request);
-    } catch {
-      pending.delete(id);
-      resolve({ id, ok: false, storedPaths: [], failedPaths: [] });
-    }
-  });
-
-  // A worker that died mid-request reports nothing stored and nothing failed;
-  // retry in-page rather than silently leaving the generation incomplete.
-  if (!response.ok && !response.failedPaths.length && !response.storedPaths.length) {
-    return syncOnMainThread(files, cacheVersion);
-  }
-
-  return {
-    ok: response.ok,
-    storedPaths: response.storedPaths,
-    failedPaths: response.failedPaths,
-  };
+export async function readEntityCatalog(files: ManifestFile[], cacheVersion: string, entity: CatalogEntitySelection): Promise<EntityCatalog> {
+  const result = await request({ operation: 'read', files, kind: 'buckets', cacheVersion, entity });
+  return result.data as EntityCatalog;
 }

@@ -1502,8 +1502,8 @@
 
 <script>
   import { onReady } from "../utils/dom";
-  import { fetchAppJson } from "../utils/dataStore";
-  import { escapeHTML, initArtworkImages, loadArtworkCache, loadColorsCache } from "../utils/ui";
+  import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
+  import { disposeArtworkImages, escapeHTML, initArtworkImages, loadArtworkCache, loadColorsCache } from "../utils/ui";
   import { rafTween } from "../utils/motion";
   import { createStoryPlayer, type StoryPlayer } from "../utils/storyPlayer";
   import { applyRecapTheme } from "../utils/recapTheme";
@@ -1539,6 +1539,39 @@
     let player: StoryPlayer | null = null;
     let cancelCounters: Array<() => void> = [];
     const recapCache = new Map<number, Recap>();
+    let openToken = 0;
+    let visibleRecap: Recap | null = null;
+    onPathsUpdated([/^\/data\/recap-\d+\.json$/], () => recapCache.clear());
+    // Media is optional: enrich the existing slides without restarting the
+    // player, counters, phase, or progress when those larger datasets arrive.
+    function updateStoryMedia() {
+      if (!visibleRecap || viewer.hidden) return;
+      const stories = buildStories(visibleRecap);
+      slidesHost.querySelectorAll<HTMLElement>('.story-slide').forEach((slide, index) => {
+        const story = stories[index];
+        if (!story) return;
+        if (story.style) slide.style.cssText = story.style;
+        const template = document.createElement('template');
+        template.innerHTML = story.html;
+        const covers = template.content.querySelectorAll('.story-hero-art, .story-runner-art');
+        slide.querySelectorAll('.story-hero-art, .story-runner-art').forEach((cover, i) => {
+          const next = covers[i];
+          const nextSource = next?.querySelector('img')?.getAttribute('src');
+          if (!nextSource || cover.querySelector('img')?.getAttribute('src') === nextSource) return;
+          disposeArtworkImages(cover);
+          cover.innerHTML = next.innerHTML;
+          initArtworkImages(cover);
+        });
+        const background = slide.querySelector('.story-bg');
+        if (background && story.backdrop && background.querySelector('img')?.getAttribute('src') !== story.backdrop) {
+          const image = document.createElement('img');
+          image.src = story.backdrop; image.alt = ''; image.decoding = 'async';
+          background.querySelector('img')?.remove();
+          background.prepend(image);
+        }
+      });
+    }
+    onPathsUpdated(['/data/artwork.json', '/data/colors.json'], updateStoryMedia);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Bumped on every phase change, so a hand-off still mid-fade when the next
     // one starts (fast double tap) abandons itself instead of fighting it.
@@ -1656,32 +1689,35 @@
     }
 
     function closeViewer() {
+      openToken++;
+      visibleRecap = null;
       for (const cancel of cancelCounters) cancel();
       cancelCounters = [];
       player?.stop();
       player?.destroy();
       player = null;
       viewer.hidden = true;
+      disposeArtworkImages(slidesHost);
       stage.style.transform = "";
       stage.style.opacity = "";
       setOverlayOpen("story", false);
     }
 
     async function openYear(year: number) {
+      const token = ++openToken;
+      void loadArtworkCache().catch(error => console.warn('Recap artwork unavailable', error));
+      void loadColorsCache().catch(error => console.warn('Recap colors unavailable', error));
       let recap = recapCache.get(year);
       if (!recap) {
-        // Artwork has to be warm before slides are built: the story HTML
-        // resolves cover URLs synchronously.
-        // Colours too: the ranked slides take their palette from the covers.
-        const [payload] = await Promise.all([
-          fetchAppJson<Recap>(`/data/recap-${year}.json`),
-          loadArtworkCache(),
-          loadColorsCache(),
-        ]);
+        const payload = await fetchAppJson<Recap>(`/data/recap-${year}.json`);
+        if (token !== openToken) return;
         recap = payload;
         recapCache.set(year, recap);
       }
 
+      if (token !== openToken) return;
+      visibleRecap = recap;
+      disposeArtworkImages(slidesHost);
       slidesHost.replaceChildren();
       const slides = buildStories(recap).map((story) => {
         const slide = document.createElement("div");
@@ -1722,7 +1758,10 @@
 
     window.addEventListener(RECAP_OPEN_EVENT, (event) => {
       const year = (event as CustomEvent<{ year: number }>).detail?.year;
-      if (year) void openYear(year);
+      if (year) {
+        const request = openYear(year), token = openToken;
+        void request.catch(error => { if (token === openToken) { console.warn("Unable to open recap", error); closeViewer(); } });
+      }
     });
 
     // Stops the tap from also reaching the stage and advancing the story.

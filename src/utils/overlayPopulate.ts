@@ -1,3 +1,5 @@
+import { createInfiniteScroll, type InfiniteScrollController } from './infiniteScroll';
+import { disposeArtworkImages } from './ui';
 import type { MetaData } from '../types/music';
 import {
   escapeHTML,
@@ -13,13 +15,11 @@ import {
 import { getGlowStyle } from './theme';
 import type { ArtistCatalogKey } from './events';
 import {
-  crossfadeOverlayVisuals,
   washGradient,
   applyOverlayBackground,
   type OverlayColorPair,
 } from './overlayArtwork';
 import { OVERLAY_SCRIM } from './colorSurface';
-import { OVERLAY_CROSSFADE_MS, type OverlayNavDirection } from './overlayTransitions';
 
 export interface OverlayElements {
   overlayArtworkFront: HTMLImageElement;
@@ -120,13 +120,13 @@ export function buildOverlayPayload(
     subtitle = albumInfo ? albumInfo.artistName : dictionary.artists[artistId] || 'Unknown Artist';
     imgUrl = getArtworkUrl('album', name, subtitle, name, artworkCache);
     if (albumInfo?.tracks) {
-      sortedTracks = (Object.values(albumInfo.tracks) as { name: string; count: number }[]).sort(
+      sortedTracks = albumInfo.sortedTracks ?? (Object.values(albumInfo.tracks) as { name: string; count: number }[]).sort(
         (a, b) => b.count - a.count,
       );
     }
     artistNameForArtworkLookup = subtitle;
     metadataStr = `Album • ${(albumInfo?.scrobbles ?? 0).toLocaleString()} Plays`;
-    if (artistId) {
+    if (artistId >= 0) {
       const artistInfo = catalogData.artists[artistId];
       if (artistInfo?.albums) {
         albumsToRender = enrichAlbumsForArtwork(
@@ -207,6 +207,8 @@ export function applyOverlayShell(
   panel?: HTMLElement,
 ): void {
   const { overlayTitle, overlaySubtitle, overlayMetadata } = elements;
+  if (panel) panel.dataset.entityType = payload.type;
+  if (scrollContainer) scrollContainer.dataset.entityType = payload.type;
 
   overlayTitle.textContent = payload.name;
 
@@ -231,6 +233,8 @@ export function applyOverlayShell(
 
 /** Bumped on every list build; an in-flight chunk loop stops when it goes stale. */
 let trackListToken = 0;
+let trackController: InfiniteScrollController | null = null;
+let albumController: InfiniteScrollController | null = null;
 
 /**
  * Blanks the previous entity so a sheet that opens before its data has loaded
@@ -238,6 +242,9 @@ let trackListToken = 0;
  */
 export function clearOverlayContent(elements: OverlayElements): void {
   trackListToken++;
+  trackController?.destroy(); trackController = null;
+  albumController?.destroy(); albumController = null;
+  disposeArtworkImages(elements.overlayAlbumsList);
   elements.overlayTitle.textContent = '';
   elements.overlaySubtitle.textContent = '';
   elements.overlayMetadata.textContent = '';
@@ -275,54 +282,23 @@ export function applyOverlayContent(
   applyOverlayLists(payload, elements, artworkCache);
 }
 
-export async function crossfadeOverlayContent(
-  payload: OverlayPayload,
-  elements: OverlayElements,
-  durationMs = OVERLAY_CROSSFADE_MS,
-  direction: OverlayNavDirection = 'forward',
-  scrollContainer?: HTMLElement,
-  panel?: HTMLElement,
-): Promise<void> {
-  if (scrollContainer && panel) {
-    applyOverlayBackground(scrollContainer, panel, payload.colors.bottom);
-  }
-
-  await crossfadeOverlayVisuals(
-    {
-      front: elements.overlayArtworkFront,
-      back: elements.overlayArtworkBack,
-      fallback: elements.overlayArtworkFallback,
-      bgBlur: elements.overlayBgBlur,
-      wrapper: elements.overlayArtworkWrapper,
-    },
-    elements.overlayColorWash,
-    elements.overlayColorWashBack,
-    payload.imgUrl,
-    payload.colors,
-    durationMs,
-    direction,
-  );
-}
-
 /** Rows built in the first pass — more than fills a 92lvh sheet, so the rest can wait. */
 const TRACK_FIRST_CHUNK = 24;
-/** Rows appended per idle callback once the entrance has settled. */
-const TRACK_CHUNK_SIZE = 60;
-
 function renderTrackRows(
   tracks: { name: string; count: number }[],
   offset: number,
   limit: number,
   countStyle: string,
+  rankOffset = 0,
 ): string {
   let html = '';
   const end = Math.min(offset + limit, tracks.length);
   for (let i = offset; i < end; i++) {
     html += generateScrobbleRowHTML(
       {
-        type: 'track',
+        type: '',
         id: 0,
-        rank: i + 1,
+        rank: i + 1 + rankOffset,
         name: tracks[i].name,
         subtitle: '',
         imgUrl: null,
@@ -336,17 +312,13 @@ function renderTrackRows(
   return html;
 }
 
-const scheduleIdle: (cb: () => void) => void =
-  typeof requestIdleCallback === 'function'
-    ? (cb) => void requestIdleCallback(() => cb(), { timeout: 200 })
-    : (cb) => void setTimeout(cb, 16);
-
 function populateTrackList(
   sortedTracks: { name: string; count: number }[] | null,
   overlaySongsList: HTMLElement,
   countStyle: string,
 ): void {
-  const token = ++trackListToken;
+  ++trackListToken;
+  trackController?.destroy(); trackController = null;
   const overlaySongsSection = overlaySongsList.parentElement;
 
   if (sortedTracks === null) {
@@ -361,22 +333,13 @@ function populateTrackList(
     return;
   }
 
-  overlaySongsList.innerHTML = renderTrackRows(sortedTracks, 0, TRACK_FIRST_CHUNK, countStyle);
-  if (sortedTracks.length <= TRACK_FIRST_CHUNK) return;
-
-  // Remaining rows land during idle time. The sheet is already up and the first
-  // screenful is already there, so this is invisible unless you scroll fast.
-  let offset = TRACK_FIRST_CHUNK;
-  const appendNext = () => {
-    if (token !== trackListToken) return;
-    overlaySongsList.insertAdjacentHTML(
-      'beforeend',
-      renderTrackRows(sortedTracks, offset, TRACK_CHUNK_SIZE, countStyle),
-    );
-    offset += TRACK_CHUNK_SIZE;
-    if (offset < sortedTracks.length) scheduleIdle(appendNext);
-  };
-  scheduleIdle(appendNext);
+  trackController = createInfiniteScroll({
+    container: overlaySongsList,
+    root: overlaySongsList.closest('.overlay-scroll-container'),
+    items: sortedTracks,
+    chunkSize: TRACK_FIRST_CHUNK,
+    renderItem: (track, index) => renderTrackRows([track], 0, 1, countStyle, index),
+  });
 }
 
 function populateAlbums(
@@ -391,6 +354,7 @@ function populateAlbums(
   },
 ): void {
   const { overlayAlbumsSection, overlayAlbumsHeader, overlayAlbumsList, artworkCache } = ctx;
+  albumController?.destroy(); albumController = null;
 
   if (albumsToRender.length === 0) {
     overlayAlbumsSection.classList.add('hidden');
@@ -402,8 +366,14 @@ function populateAlbums(
   overlayAlbumsHeader.textContent =
     type === 'artist' ? 'Albums' : `Other Albums by ${artistNameForArtworkLookup}`;
 
-  overlayAlbumsList.innerHTML = albumsToRender
-    .map((alb) => {
+  albumController = createInfiniteScroll({
+    container: overlayAlbumsList,
+    root: overlayAlbumsList,
+    axis: 'x',
+    items: albumsToRender,
+    chunkSize: 12,
+    onChunkRendered: added => added.forEach(row => initOverlayAlbumArtwork(row)),
+    renderItem: (alb) => {
       const albumArtist = alb.artistName ?? artistNameForArtworkLookup;
       const albImg = getArtworkUrl('album', alb.name, albumArtist, alb.name, artworkCache);
       const thumbHtml = getArtworkThumbHTML(albImg, 'album', { shimmer: false });
@@ -414,8 +384,8 @@ function populateAlbums(
           <span class="overlay-album-card-subtitle">${alb.scrobbles.toLocaleString()} Plays</span>
         </div>
       `;
-    })
-    .join('');
+    },
+  });
 }
 
 export { initOverlayAlbumArtwork };
@@ -432,7 +402,7 @@ export function bindOverlayClicks(
     e.stopPropagation();
     const entityType = entity.getAttribute('data-type');
     const entityId = parseInt(entity.getAttribute('data-id') || '0', 10);
-    if (entityType && entityId) {
+    if (entityType && Number.isInteger(entityId) && entityId >= 0) {
       const catalog = entity.getAttribute('data-artist-catalog');
       const artistCatalog =
         catalog === 'artists' || catalog === 'canonicalArtists' ? catalog : undefined;

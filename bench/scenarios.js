@@ -30,7 +30,9 @@ const ROW_SELECTOR = '#leaderboardListSongs .scrobble-row.clickable-entity';
  * heaviest board to build, so it is the honest thing to measure.
  */
 async function openRankings(page) {
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
   await page.click('.tab-btn[data-tab="rankings"]');
+  await page.waitForFunction(() => document.body.dataset.activeTab === 'rankings');
   await page.waitForSelector('.range-btn[data-range="all"]', { timeout: 30000 });
   await page.click('.range-btn[data-range="all"]');
   await page.waitForFunction(
@@ -49,24 +51,20 @@ async function openRankings(page) {
 async function armFirstMoveProbe(page) {
   await page.evaluate(() => {
     const panel = document.getElementById('detailsOverlayPanel');
-    const initial = getComputedStyle(panel).transform;
-    window.__bench.mark('tap');
-
     window.__benchFirstMove = new Promise((resolve) => {
-      const start = performance.now();
-      const check = () => {
-        if (getComputedStyle(panel).transform !== initial) {
-          window.__bench.mark('firstMove');
-          resolve(performance.now() - start);
-          return;
-        }
-        if (performance.now() - start > 10000) {
-          resolve(-1);
-          return;
-        }
+      document.addEventListener('click', () => {
+        const initial = getComputedStyle(panel).transform;
+        const start = performance.now();
+        window.__bench.mark('tap');
+        const check = () => {
+          if (getComputedStyle(panel).transform !== initial) {
+            window.__bench.mark('firstMove'); resolve(performance.now() - start); return;
+          }
+          if (performance.now() - start > 10000) { resolve(-1); return; }
+          requestAnimationFrame(check);
+        };
         requestAnimationFrame(check);
-      };
-      requestAnimationFrame(check);
+      }, { once: true, capture: true });
     });
   });
 }
@@ -74,12 +72,15 @@ async function armFirstMoveProbe(page) {
 /** Drag the sheet down from `fromY` and release, as a finger would. */
 async function dragSheetDown(page, { fromY, toY, steps = 20 }) {
   const x = VIEWPORT.width / 2;
-  await page.mouse.move(x, fromY);
-  await page.mouse.down();
-  for (let i = 1; i <= steps; i++) {
-    await page.mouse.move(x, fromY + ((toY - fromY) * i) / steps);
-  }
-  await page.mouse.up();
+  const input = await page.context().newCDPSession(page);
+  try {
+    await input.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: fromY }] });
+    for (let i = 1; i <= steps; i++) {
+      await input.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: fromY + ((toY - fromY) * i) / steps }] });
+      await page.waitForTimeout(16);
+    }
+    await input.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally { await input.detach(); }
 }
 
 export const scenarios = [
@@ -190,6 +191,25 @@ export const scenarios = [
   },
 
   {
+    name: 'sheet-navigate',
+    description: 'Forward and back within the sheet while artwork is slow.',
+    artworkLatencyMs: 600,
+    async run(page, { origin, record }) {
+      await page.goto(origin, { waitUntil: 'commit' });
+      await waitForBoot(page); await openRankings(page);
+      await page.click(ROW_SELECTOR);
+      await page.waitForSelector('#overlaySubtitle [data-type="artist"]');
+      await page.waitForTimeout(700);
+      await record(async () => {
+        await page.click('#overlaySubtitle [data-type="artist"]');
+        await page.waitForTimeout(400);
+        await page.click('#overlayCloseBtn');
+        await page.waitForTimeout(400);
+      });
+    },
+  },
+
+  {
     name: 'sheet-dismiss',
     description: 'Swipe the detail sheet down to dismiss.',
     async run(page, { origin, record }) {
@@ -202,6 +222,7 @@ export const scenarios = [
       await record(async () => {
         await dragSheetDown(page, { fromY: 120, toY: 700 });
         await page.waitForTimeout(600);
+        await page.waitForFunction(() => !document.getElementById('detailsOverlayPanel').classList.contains('visible'));
       });
     },
   },

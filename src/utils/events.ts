@@ -28,11 +28,11 @@ export function onEntityDetails(handler: (detail: EntityDetailsDetail) => void):
   }) as EventListener);
 }
 
-// id "0" is the placeholder for an entity that never resolved, so it opens nothing.
+// Array-backed entity IDs include zero; unresolved rows omit the ID.
 function emitFrom(el: Element): void {
   const type = el.getAttribute('data-type');
   const idStr = el.getAttribute('data-id');
-  if (!type || !idStr || idStr === '0') return;
+  if (!type || idStr === null || idStr === '' || !Number.isInteger(Number(idStr)) || Number(idStr) < 0) return;
   const catalog = el.getAttribute('data-artist-catalog');
   openEntityDetails(
     type,

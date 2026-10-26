@@ -46,7 +46,7 @@ export function createLastfmClient({ apiKey, minIntervalMs = 210, maxRetries = 4
     for (let attempt = 0; ; attempt++) {
       await takeSlot();
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (res.status === 429 || res.status >= 500) {
           throw new Error(`HTTP ${res.status}`);
         }

@@ -5,33 +5,35 @@ import {
   colorToCss,
   createCssPaintCache,
   parseColor,
-  springTween,
-  SPRING_NAV,
+  rafTween,
   withAlpha,
   type Rgba,
 } from './motion';
+import { createLiquidLens, NAV_LENS } from './liquidGlass';
 import { createPillTrack } from './slidingHighlight';
 import { TAB_ACCENTS, TAB_IDLE_COLOR } from './tabTheme';
-import { TAB_ORDER, getActiveTab, navigateToTab, type TabId } from './tabs';
+import { TAB_ORDER, applyThemeWeights, getActiveTab, navigateToTab, type TabId } from './tabs';
 
 /** While held, the pill lifts into a lens that spills past the bar's edges. */
-const DRAG_SCALE = 1.55;
+const DRAG_SCALE = 1.8;
 /** Time for the pill to lift into the lens once a drag engages. Matches
  *  --duration-normal, the fade the lens layers use on the way in. */
 const LIFT_MS = 240;
 /** Extra lens swell at the midpoint of a tap-driven glide. */
-const TAP_LENS_SWELL = 0.3;
+const TAP_LENS_SWELL = 0.4;
 /** Glide progress at which the lens starts crossfading back into the pill. */
 const LENS_HANDBACK = 0.45;
-/** How much the lens enlarges the icon directly beneath it. */
-const LENS_MAG = 0.22;
+/** Page glide once a tab is chosen; independent of the lens settle. */
+const PAGE_MS = 260;
 /** Distance over which an off-centre grab is pulled onto the finger. */
 const GRAB_DECAY_DISTANCE = 140;
-const TAP_STIFFNESS_PER_TAB = 48;
 const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
-// Owns every nav interaction (taps, pill drag, panel deck) so the pill, tab
-// colours and page move as one rAF animation rather than three transitions.
+// Owns every nav interaction (taps, pill drag, panel deck). Two motions run
+// independently: the control (pill/lens, tab colours) follows the finger, and
+// the page (deck, wash, browser chrome) moves only once a tab is chosen — on
+// release, tap or wheel — straight from what is on screen to that tab. Scrubbing
+// the lens across the bar therefore never reveals, paints or loads a panel.
 export function initNavBar(): void {
   const bar = document.querySelector('.main-tab-bar') as HTMLElement | null;
   const navZone = document.querySelector('.bottom-nav-container') as HTMLElement | null;
@@ -43,6 +45,7 @@ export function initNavBar(): void {
 
   const deck = createDeckSlider();
   const paint = createCssPaintCache();
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const accentRgba: Rgba[] = buttons.map((btn) => {
     const accent = TAB_ACCENTS[(btn.dataset.tab || '') as TabId];
@@ -73,9 +76,9 @@ export function initNavBar(): void {
 
   const paintedBg = bgLayers.map(() => -1);
 
-  function paintBackground(value: number) {
+  function paintBackground(weights: readonly number[]) {
     for (let i = 0; i < bgLayers.length; i++) {
-      const opacity = Math.round(Math.max(0, 1 - Math.abs(value - i)) * 40) / 40;
+      const opacity = Math.round((weights[i] ?? 0) * 40) / 40;
       if (opacity === paintedBg[i]) continue;
       paintedBg[i] = opacity;
       const css = String(opacity);
@@ -108,12 +111,24 @@ export function initNavBar(): void {
     accentFor: (btn) => accentByBtn.get(btn) ?? null,
   });
 
+  const lens = createLiquidLens({ host: highlight, buttons, rectAt: track.rectAt, profile: NAV_LENS });
+
+  const oneHot = (index: number): number[] => TAB_ORDER.map((_, i) => (i === index ? 1 : 0));
+
+  /** Committed tab: the panel that is active and interactive. */
   let activeIndex = Math.max(TAB_ORDER.indexOf(getActiveTab()), 0);
+  /** Tab the page is gliding to; equals activeIndex once it lands. */
+  let pageTarget = activeIndex;
+  /** Wash and chrome weights currently on screen, one per tab. */
+  let pageWeights = oneHot(activeIndex);
   let fraction = activeIndex;
-  let settleFromScale = 1;
   /** Scale last painted, so a re-grab mid-settle lifts from where it is. */
   let currentScale = 1;
-  let cancelTween: (() => void) | null = null;
+  let cancelControl: (() => void) | null = null;
+  let cancelPage: (() => void) | null = null;
+  /** Finger down on the nav, and whether it has claimed the gesture. */
+  let dragging = false;
+  let engaged = false;
 
   const paintedButtons = buttons.map(() => -1);
   const lastButtonColor = buttons.map(() => '');
@@ -139,23 +154,7 @@ export function initNavBar(): void {
       if (css === lastButtonColor[i]) continue;
       lastButtonColor[i] = css;
       buttons[i].style.color = css;
-    }
-  }
-
-  const paintedMag = buttons.map(() => 1);
-
-  // The lens magnifies whatever sits under it, so each button's content grows
-  // with its overlap. Scale is mapped back to 0..1 lens strength first, so a
-  // resting pill (scale 1) never magnifies anything.
-  function paintLens(value: number, scale: number) {
-    const lens = Math.min(Math.max((scale - 1) / (DRAG_SCALE - 1), 0), 1);
-    for (let i = 0; i < buttons.length; i++) {
-      const overlap = Math.max(0, 1 - Math.abs(value - i));
-      const mag = Math.round((1 + LENS_MAG * lens * overlap) * 200) / 200;
-      if (mag === paintedMag[i]) continue;
-      paintedMag[i] = mag;
-      if (mag === 1) buttons[i].style.removeProperty('--lens-mag');
-      else buttons[i].style.setProperty('--lens-mag', String(mag));
+      lens.setColor(i, css);
     }
   }
 
@@ -164,59 +163,74 @@ export function initNavBar(): void {
       paintedButtons[i] = -1;
       lastButtonColor[i] = '';
       buttons[i].style.color = '';
-      paintedMag[i] = 1;
-      buttons[i].style.removeProperty('--lens-mag');
     }
   }
 
-  function render(value: number, scale = 1) {
-    fraction = value;
-    currentScale = scale;
-    track.render(value, { scale });
-    paintButtons(value);
-    paintLens(value, scale);
-    paintBackground(value);
-    deck?.setPosition(value);
+  /** Lens strength 0..1 from the painted scale: a resting pill refracts nothing. */
+  function lensStrength(scale: number) {
+    return Math.min(Math.max((scale - 1) / (DRAG_SCALE - 1), 0), 1);
   }
 
-  function commit(index: number) {
-    activeIndex = index;
-    fraction = index;
-    settleFromScale = 1;
-    currentScale = 1;
+  // The control alone: cheap enough to run on every touchmove.
+  function renderControl(value: number, scale = 1) {
+    fraction = value;
+    currentScale = scale;
+    const pose = track.render(value, { scale, stretch: lens.stretchFor(track.centerAt(value)) });
+    paintButtons(value);
+    if (pose) lens.paint(pose, lensStrength(scale));
+  }
 
-    barEl.classList.remove('nav-animating', 'nav-lens');
-    navigateToTab(TAB_ORDER[index]);
-    deck?.settle(index);
+  function paintPage(weights: readonly number[]) {
+    pageWeights = weights.slice();
+    paintBackground(weights);
+    applyThemeWeights(weights);
+  }
+
+  // Tab colours stay painted until both motions rest, so they never flash
+  // back to the old tab's accent while the page is still on its way.
+  function settleIfIdle() {
+    if (cancelControl || cancelPage || engaged) return;
+    barEl.classList.remove('nav-animating');
     clearButtonPaint();
-    clearBackgroundPaint();
-    track.render(index);
     paint.reset();
   }
 
-  function animateTo(index: number, flingVelocity = 0) {
-    cancelTween?.();
-    barEl.classList.add('nav-animating');
-    beginBackgroundPaint();
-    deck?.begin();
+  function finishControl(index: number) {
+    fraction = index;
+    currentScale = 1;
+    barEl.classList.remove('nav-lens');
+    lens.clear();
+    track.render(index);
+    settleIfIdle();
+  }
+
+  function controlTo(index: number, flingVelocity = 0) {
+    cancelControl?.();
+    cancelControl = null;
+    if (reducedMotion.matches) { renderControl(index); finishControl(index); return; }
 
     const from = fraction;
-    const startScale = settleFromScale;
+    const startScale = currentScale;
     const span = index - from;
     const distance = Math.max(Math.abs(span), 0.35);
+    if (Math.abs(span) < 0.001 && Math.abs(startScale - 1) < 0.001) { finishControl(index); return; }
+    barEl.classList.add('nav-animating');
     // A tap glides as a lens too: it swells mid-flight and settles back into
     // the pill on arrival. A released drag is already a lens and just shrinks.
     const tapSwell = startScale === 1 && span !== 0 ? TAP_LENS_SWELL : 0;
     let lensUp = startScale > 1 || tapSwell > 0;
     if (lensUp) barEl.classList.add('nav-lens');
 
-    cancelTween = springTween(
-      from,
-      index,
-      (value) => {
-        const progress = Math.min(Math.max(span === 0 ? 1 : (value - from) / span, 0), 1);
+    // A bounded settle has no long spring tail. Every interruption starts at
+    // the actual painted pose, including a tap back to the current tab.
+    const duration = Math.min(280, Math.max(160, (190 + distance * 30) / (1 + Math.abs(flingVelocity) * 0.025)));
+    cancelControl = rafTween(
+      0,
+      1,
+      duration,
+      (progress) => {
         const swell = tapSwell * Math.sin(Math.PI * progress);
-        render(value, startScale + (1 - startScale) * progress + swell);
+        renderControl(from + span * progress, startScale + (1 - startScale) * progress + swell);
         // Hand back to the pill partway in, so its face eases in over the
         // tail of the glide instead of snapping on once the spring rests.
         if (lensUp && progress >= LENS_HANDBACK) {
@@ -225,26 +239,62 @@ export function initNavBar(): void {
         }
       },
       () => {
-        cancelTween = null;
-        commit(index);
+        cancelControl = null;
+        finishControl(index);
       },
-      {
-        ...SPRING_NAV,
-        stiffness: SPRING_NAV.stiffness - TAP_STIFFNESS_PER_TAB * Math.min(distance, 3),
-        velocity: flingVelocity,
-        restDelta: 0.002,
+    );
+  }
+
+  function commitPage(index: number) {
+    activeIndex = index;
+    pageTarget = index;
+    pageWeights = oneHot(index);
+    barEl.classList.remove('nav-paging');
+    navigateToTab(TAB_ORDER[index]);
+    deck?.settle(index);
+    clearBackgroundPaint();
+    settleIfIdle();
+  }
+
+  // The page moves once per decision, straight from what is on screen.
+  function pageTo(index: number) {
+    if (index === pageTarget && (cancelPage || index === activeIndex)) return;
+    cancelPage?.();
+    cancelPage = null;
+    pageTarget = index;
+    if (reducedMotion.matches) { commitPage(index); return; }
+
+    barEl.classList.add('nav-animating', 'nav-paging');
+    beginBackgroundPaint();
+    deck?.glide(index);
+    const from = pageWeights.slice();
+    const to = oneHot(index);
+    const weights = from.slice();
+    cancelPage = rafTween(
+      0,
+      1,
+      PAGE_MS,
+      (progress) => {
+        for (let i = 0; i < weights.length; i++) weights[i] = from[i] + (to[i] - from[i]) * progress;
+        paintPage(weights);
+        deck?.setGlide(progress);
+      },
+      () => {
+        cancelPage = null;
+        commitPage(index);
       },
     );
   }
 
   function selectTab(index: number) {
     if (index < 0 || index >= buttons.length) return;
-    if (index === activeIndex) {
+    if (index === pageTarget && (cancelPage || cancelControl)) return;
+    if (index === activeIndex && !cancelPage && !cancelControl) {
       track.render(index);
       return;
     }
-    settleFromScale = 1;
-    animateTo(index);
+    controlTo(index);
+    pageTo(index);
   }
 
   track.measure();
@@ -257,7 +307,7 @@ export function initNavBar(): void {
       resizeRaf = null;
       track.measure();
       deck?.measure();
-      if (!cancelTween) track.render(fraction);
+      if (!cancelControl && !engaged) track.render(fraction);
     });
   });
   buttons.forEach((btn) => resizeObserver.observe(btn));
@@ -277,19 +327,24 @@ export function initNavBar(): void {
     const index = TAB_ORDER.indexOf(tab as TabId);
     if (index === -1 || index === activeIndex) return;
 
-    cancelTween?.();
-    cancelTween = null;
+    cancelControl?.();
+    cancelControl = null;
+    cancelPage?.();
+    cancelPage = null;
     activeIndex = index;
+    pageTarget = index;
+    pageWeights = oneHot(index);
     fraction = index;
-    barEl.classList.remove('nav-lens');
+    currentScale = 1;
+    barEl.classList.remove('nav-lens', 'nav-animating', 'nav-paging');
+    clearBackgroundPaint();
     clearButtonPaint();
+    lens.clear();
     track.render(index);
     deck?.settle(index);
   });
 
   // ── Free-form pill drag + desktop wheel ─────────────────────────────────
-  let dragging = false;
-  let engaged = false;
   let startX = 0;
   let startY = 0;
   let lastPos = 0;
@@ -301,6 +356,7 @@ export function initNavBar(): void {
   let dragRafId: number | null = null;
   let liftScale = 1;
   let liftRafId: number | null = null;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Grows the pill into the lens over LIFT_MS with a slight overshoot. Runs
   // on its own rAF so the lift finishes even if the finger holds still.
@@ -317,8 +373,8 @@ export function initNavBar(): void {
       // the swell reads as one smooth motion rather than a pop.
       const q = p - 1;
       const eased = 1 + 1.6 * q * q * q + 0.6 * q * q;
-      liftScale = fromScale + (DRAG_SCALE - fromScale) * eased;
-      if (pendingPos === null) render(fraction, liftScale);
+      liftScale = reducedMotion.matches ? 1 : fromScale + (DRAG_SCALE - fromScale) * eased;
+      if (pendingPos === null) renderControl(fraction, liftScale);
       liftRafId = p < 1 ? requestAnimationFrame(step) : null;
     };
     liftRafId = requestAnimationFrame(step);
@@ -341,7 +397,7 @@ export function initNavBar(): void {
 
     const delta = pendingPos - (isVerticalNav() ? startY : startX);
     const decay = Math.max(0, 1 - Math.abs(delta) / GRAB_DECAY_DISTANCE);
-    render(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), liftScale);
+    renderControl(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), liftScale);
     pendingPos = null;
   }
 
@@ -364,6 +420,24 @@ export function initNavBar(): void {
     startY = e.touches[0].clientY;
     lastPos = isVerticalNav() ? startY : startX;
     lastTime = performance.now();
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => { if (dragging && !engaged) engageDrag(); }, 140);
+  }
+
+  function engageDrag() {
+    clearTimeout(holdTimer);
+    engaged = true;
+    suppressClick = true;
+    // Only the control is caught; a page already gliding to an earlier
+    // choice keeps going and lands on its own.
+    cancelControl?.(); cancelControl = null;
+    track.measure();
+    barEl.classList.add('nav-animating', 'nav-dragging', 'nav-lens');
+    liftScale = currentScale;
+    startLift();
+    const rect = barEl.getBoundingClientRect();
+    barOrigin = (isVerticalNav() ? rect.top : rect.left) + (isVerticalNav() ? barEl.clientTop : barEl.clientLeft);
+    grabOffset = track.centerAt(fraction) - ((isVerticalNav() ? startY : startX) - barOrigin);
   }
 
   function onTouchMove(e: TouchEvent) {
@@ -380,28 +454,11 @@ export function initNavBar(): void {
       // Claim only when the gesture runs along the bar's own axis.
       if (!(vertical ? isAxisClaimed(dy, dx) : isAxisClaimed(dx, dy))) {
         dragging = false;
+        clearTimeout(holdTimer);
         return;
       }
 
-      engaged = true;
-      suppressClick = true;
-      cancelTween?.();
-      cancelTween = null;
-      track.measure();
-      barEl.classList.add('nav-animating', 'nav-dragging', 'nav-lens');
-      liftScale = currentScale;
-      startLift();
-      beginBackgroundPaint();
-      deck?.begin();
-
-      const rect = barEl.getBoundingClientRect();
-      if (vertical) {
-        barOrigin = rect.top + barEl.clientTop;
-        grabOffset = track.centerAt(fraction) - (startY - barOrigin);
-      } else {
-        barOrigin = rect.left + barEl.clientLeft;
-        grabOffset = track.centerAt(fraction) - (startX - barOrigin);
-      }
+      engageDrag();
     }
 
     e.preventDefault();
@@ -420,6 +477,7 @@ export function initNavBar(): void {
   }
 
   function onTouchEnd() {
+    clearTimeout(holdTimer);
     if (!dragging) return;
     dragging = false;
     cancelPendingDrag(true);
@@ -439,9 +497,21 @@ export function initNavBar(): void {
       buttons.length - 1,
     );
 
-    settleFromScale = liftScale;
     // velocity is px/ms along the bar; convert to tab-index units per second.
-    animateTo(target, (velocity * 1000) / spacing);
+    // The loupe has settled on a choice: only now does the page move.
+    controlTo(target, (velocity * 1000) / spacing);
+    pageTo(target);
+  }
+
+  function onTouchCancel() {
+    clearTimeout(holdTimer);
+    const wasEngaged = engaged;
+    dragging = false; engaged = false;
+    if (!wasEngaged) return;
+    stopLift(); cancelPendingDrag();
+    barEl.classList.remove('nav-dragging');
+    suppressClick = false;
+    controlTo(pageTarget);
   }
 
   // Touchpad / mouse wheel over the nav — steps through tabs along whichever
@@ -471,12 +541,13 @@ export function initNavBar(): void {
 
     const direction = wheelAccum > 0 ? 1 : -1;
     wheelAccum = 0;
-    selectTab(Math.min(Math.max(activeIndex + direction, 0), buttons.length - 1));
+    selectTab(Math.min(Math.max(pageTarget + direction, 0), buttons.length - 1));
   }
 
   navZoneEl.addEventListener('touchstart', onTouchStart, { passive: true });
   navZoneEl.addEventListener('touchmove', onTouchMove, { passive: false });
   navZoneEl.addEventListener('touchend', onTouchEnd, { passive: true });
-  navZoneEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+  navZoneEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
   navZoneEl.addEventListener('wheel', onWheel, { passive: false });
+  document.documentElement.dataset.appReady = 'true';
 }

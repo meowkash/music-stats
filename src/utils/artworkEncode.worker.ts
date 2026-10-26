@@ -12,6 +12,7 @@ export interface EncodeTarget {
 
 export interface EncodeRequest {
   id: number;
+  operation?: 'inventory';
   cacheName: string;
   source: string;
   targets: EncodeTarget[];
@@ -20,6 +21,7 @@ export interface EncodeRequest {
 export interface EncodeResult {
   id: number;
   written: number;
+  urls?: string[];
   /** Storage is full — the caller stops the sweep rather than retrying. */
   quota?: boolean;
 }
@@ -30,7 +32,11 @@ async function warm(request: EncodeRequest): Promise<EncodeResult> {
   try {
     // no-store keeps the full-size original out of the HTTP disk cache —
     // otherwise every image is retained twice, once at source size.
-    const response = await fetch(request.source, { mode: 'cors', cache: 'no-store' });
+    if (request.operation === 'inventory') {
+      const cache = await caches.open(request.cacheName);
+      return { id: request.id, written: 0, urls: (await cache.keys()).map(key => key.url) };
+    }
+    const response = await fetch(request.source, { mode: 'cors', cache: 'no-store', signal: AbortSignal.timeout(12000) });
     if (!response.ok) return { id: request.id, written: 0 };
 
     const cache = await caches.open(request.cacheName);

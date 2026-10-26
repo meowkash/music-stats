@@ -1,14 +1,9 @@
 /** iOS-style cross-dissolve timing for in-sheet navigation */
 export const OVERLAY_CROSSFADE_MS = 220;
-export const OVERLAY_CONTENT_OUT_MS = 90;
 export const OVERLAY_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const OVERLAY_SLIDE_PX = 28;
 
 export type OverlayNavDirection = 'forward' | 'back';
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export function slideTransform(direction: OverlayNavDirection, phase: 'out' | 'in-start' | 'in-end'): string {
   const sign = direction === 'forward' ? 1 : -1;

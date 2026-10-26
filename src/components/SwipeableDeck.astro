@@ -2,22 +2,23 @@
 export interface Props {
   tabs: string[];
   idPrefix: string;
+  initialRows?: Record<string, string>;
 }
 
-const { tabs, idPrefix } = Astro.props;
+const { tabs, idPrefix, initialRows = {} } = Astro.props;
 ---
 
 <div class="swipeable-list-viewport" id={`${idPrefix}Viewport`}>
   <div class="swipeable-list-track" id={`${idPrefix}ListTrack`}>
-    {tabs.map((tab) => (
+    {tabs.map((tab, index) => (
       <div class="swipeable-list-column" data-tab={tab.toLowerCase()}>
         <div class="swipeable-column-header">
           <slot name={`header-${tab.toLowerCase()}`}>
             <span>{tab}</span>
           </slot>
         </div>
-        <div class="swipeable-list-page panel-scroll" data-tab={tab.toLowerCase()} id={`${idPrefix}Page${tab}`}>
-          <div class="swipeable-list" id={`${idPrefix}List${tab}`}></div>
+        <div class:list={["swipeable-list-page panel-scroll", { "panel-scroll-active": index === 0 }]} data-tab={tab.toLowerCase()} id={`${idPrefix}Page${tab}`}>
+          <div class="swipeable-list" id={`${idPrefix}List${tab}`} set:html={initialRows[tab.toLowerCase()] ?? ""}></div>
         </div>
       </div>
     ))}

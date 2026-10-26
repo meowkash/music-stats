@@ -23,11 +23,17 @@ function hashBytes(buffer) {
 
 function collectDataFiles() {
   // Recursive: the sharded datasets live in per-dataset subdirectories.
-  return listDataFiles(DATA_DIR, new Set([MANIFEST_NAME])).map((rel) => {
+  return listDataFiles(DATA_DIR, new Set([MANIFEST_NAME])).filter(rel => !rel.startsWith('versions/')).map((rel) => {
     const bytes = fs.readFileSync(path.join(DATA_DIR, rel));
+    const hash = hashBytes(bytes);
+    const versionDir = path.join(DATA_DIR, 'versions');
+    fs.mkdirSync(versionDir, { recursive: true });
+    const immutable = path.join(versionDir, `${hash}.json`);
+    if (!fs.existsSync(immutable)) fs.writeFileSync(immutable, bytes);
     return {
       path: `/data/${rel}`,
-      hash: hashBytes(bytes),
+      url: `/data/versions/${hash}.json`,
+      hash,
       bytes: bytes.length,
     };
   });
@@ -121,16 +127,19 @@ function generationId(files, artworkUrls) {
   return digest.digest('hex').slice(0, 16);
 }
 
-const files = collectDataFiles();
 const artwork = collectArtworkUrls();
+fs.writeFileSync(path.join(DATA_DIR, 'artwork-urls.json'), JSON.stringify(artwork));
+const files = collectDataFiles();
 const datasets = collectDatasets();
 
 const manifest = {
+  schemaVersion: 2,
   generation: generationId(files, artwork),
   builtAt: new Date().toISOString(),
   files,
   datasets,
-  artwork,
+  artwork: [],
+  artworkPath: '/data/artwork-urls.json',
 };
 
 fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest));

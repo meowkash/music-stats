@@ -1,10 +1,12 @@
 import {
   colorToCss,
+  rafTween,
   lerpColorInto,
   parseColor,
   withAlpha,
   type Rgba,
 } from './motion';
+import { createLiquidLens, SEGMENT_LENS } from './liquidGlass';
 
 export interface PillAccent {
   color: string;
@@ -27,6 +29,18 @@ interface ResolvedAccent {
 export interface PillRenderOptions {
   /** Uniform scale around the pill centre — used for the drag "grab" effect. */
   scale?: number;
+  /** Jelly deformation: grows the main axis by this fraction and thins the
+   *  cross axis to suit, as a fast-moving lens does. */
+  stretch?: number;
+}
+
+/** What render() last wrote: the unscaled rect plus the transform on it. */
+export interface PillPose {
+  rect: Rect;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
 }
 
 export interface PillTrackOptions {
@@ -47,9 +61,9 @@ export interface PillTrack {
   /** Button rect at an integer index, after measure(). */
   rectAt: (index: number) => Rect | null;
   /** Renders the pill at a fractional index. Interpolates geometry and colour. */
-  render: (fraction: number, options?: PillRenderOptions) => void;
+  render: (fraction: number, options?: PillRenderOptions) => PillPose | null;
   /** Renders the pill at an explicit rect (used for direct A→B glides). */
-  renderRect: (rect: Rect, accentIndex?: number, options?: PillRenderOptions) => void;
+  renderRect: (rect: Rect, accentIndex?: number, options?: PillRenderOptions) => PillPose;
   /** Fractional index currently on screen. */
   applied: () => number;
 }
@@ -123,21 +137,29 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
     }
   }
 
-  function renderRect(rect: Rect, accentIndex = 0, renderOptions: PillRenderOptions = {}) {
+  function place(rect: Rect, renderOptions: PillRenderOptions): PillPose {
     const scale = renderOptions.scale ?? 1;
-    const width = rect.width;
-    const height = rect.height;
-    const x = rect.left - (width * (scale - 1)) / 2;
-    const y = rect.top - (height * (scale - 1)) / 2;
+    const stretch = renderOptions.stretch ?? 0;
+    const along = scale * (1 + stretch);
+    const across = scale / (1 + stretch * 0.6);
+    const scaleX = horizontal ? along : across;
+    const scaleY = horizontal ? across : along;
+    const x = rect.left - (rect.width * (scaleX - 1)) / 2;
+    const y = rect.top - (rect.height * (scaleY - 1)) / 2;
 
-    highlightEl.style.width = `${width}px`;
-    highlightEl.style.height = `${height}px`;
+    highlightEl.style.width = `${rect.width}px`;
+    highlightEl.style.height = `${rect.height}px`;
     highlightEl.style.transform =
-      scale === 1
+      scaleX === 1 && scaleY === 1
         ? `translate3d(${x}px, ${y}px, 0)`
-        : `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+        : `translate3d(${x}px, ${y}px, 0) scale(${scaleX}, ${scaleY})`;
+    return { rect, x, y, scaleX, scaleY };
+  }
 
+  function renderRect(rect: Rect, accentIndex = 0, renderOptions: PillRenderOptions = {}) {
+    const pose = place(rect, renderOptions);
     paintAccent(accentIndex);
+    return pose;
   }
 
   function centers(): number[] {
@@ -173,27 +195,14 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
   }
 
   function render(fraction: number, renderOptions: PillRenderOptions = {}) {
-    if (rects.length === 0) return;
+    if (rects.length === 0) return null;
 
-    const scale = renderOptions.scale ?? 1;
     const clamped = Math.min(Math.max(fraction, 0), rects.length - 1);
     appliedFraction = clamped;
     const i0 = Math.floor(clamped);
     const i1 = Math.min(i0 + 1, rects.length - 1);
     const t = clamped - i0;
-    const rect = lerpRect(rects[i0], rects[i1], t);
-
-    const width = rect.width;
-    const height = rect.height;
-    const x = rect.left - (width * (scale - 1)) / 2;
-    const y = rect.top - (height * (scale - 1)) / 2;
-
-    highlightEl.style.width = `${width}px`;
-    highlightEl.style.height = `${height}px`;
-    highlightEl.style.transform =
-      scale === 1
-        ? `translate3d(${x}px, ${y}px, 0)`
-        : `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+    const pose = place(lerpRect(rects[i0], rects[i1], t), renderOptions);
 
     const from = accents[i0];
     const to = accents[i1];
@@ -208,6 +217,7 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
         highlightEl.style.setProperty('--hl-glow', nearest.glow);
       }
     }
+    return pose;
   }
 
   return {
@@ -229,135 +239,177 @@ export interface SlidingHighlightOptions {
   accentFor?: (btn: HTMLElement) => PillAccent | null;
   onSync?: (btn: HTMLElement) => void;
   durationMs?: number;
+  draggable?: boolean;
 }
 
-// Glides from the current painted rect to the tapped button's rect: index-space
-// tweens restart at 0 when state is stale and break across wrapped rows.
+/** Scale a segmented pill lifts to while held. */
+const LIFT_SCALE = 1.4;
+
+/** One interruptible painted pose for tap, keyboard, hold and drag. Expensive
+ * selection callbacks run on release; dragging only paints the small control. */
 export function createSlidingHighlight(options: SlidingHighlightOptions): {
   sync: (btn: HTMLElement, animate?: boolean) => void;
-  /** Paint the pill at a fractional index (e.g. while a pager is dragging). */
   scrub: (fraction: number) => void;
   observe: () => ResizeObserver;
+  destroy: () => void;
 } {
-  const { highlightEl, onSync, durationMs = 240 } = options;
+  const { highlightEl, onSync, durationMs = 190 } = options;
   const buttons = [...options.buttons] as HTMLElement[];
-
-  const track = createPillTrack({
-    highlightEl,
-    buttons,
-    accentFor: options.accentFor,
-  });
-
+  const group = highlightEl.parentElement!;
+  const track = createPillTrack({ highlightEl, buttons, accentFor: options.accentFor });
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let currentIndex = Math.max(0, buttons.findIndex(btn => btn.matches('.active, .is-active')));
+  let paintedRect: Rect | null = null, scale = 1;
   let cancel: (() => void) | null = null;
-  let resizeRaf: number | null = null;
-  let currentIndex = Math.max(
-    0,
-    buttons.findIndex((btn) => btn.classList.contains('active')),
-  );
-  /** Last rect actually painted — source of truth for the next glide's start. */
-  let paintedRect: Rect | null = null;
+  let resizeRaf = 0, liftRaf = 0;
+  let pointer: number | null = null, dragging = false;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  let startX = 0, startY = 0, originX = 0, originY = 0, grabX = 0, fraction = currentIndex;
+  let suppressUntil = 0;
 
-  function paintTo(rect: Rect, accentIndex: number) {
-    track.renderRect(rect, accentIndex);
-    paintedRect = { ...rect };
+  const lens = createLiquidLens({ host: highlightEl, buttons, rectAt: track.rectAt, profile: SEGMENT_LENS });
+
+  group.classList.add('segmented-control');
+  /** Lens strength follows the lift, so the optics ease in and out with it. */
+  function lensStrength() { return Math.min(Math.max((scale - 1) / (LIFT_SCALE - 1), 0), 1); }
+  function stretchAt(rect: Rect) {
+    return lens.stretchFor(rect.left + rect.width / 2);
   }
-
+  function paintTo(rect: Rect, index: number, nextScale = 1) {
+    scale = nextScale;
+    paintedRect = { ...rect };
+    lens.paint(track.renderRect(rect, index, { scale, stretch: stretchAt(rect) }), lensStrength());
+  }
+  function stopLift() { cancelAnimationFrame(liftRaf); liftRaf = 0; }
+  function finish() {
+    group.classList.remove('segmented-lens', 'segmented-dragging');
+    lens.clear();
+  }
   function sync(btn: HTMLElement, animate = true) {
     const index = buttons.indexOf(btn);
-    if (index === -1) return;
-
-    cancel?.();
-    cancel = null;
-
+    if (index < 0) return;
+    cancel?.(); cancel = null;
+    stopLift();
     track.measure();
-    const toRect = track.rectAt(index);
-    if (!toRect || toRect.width <= 0 || toRect.height <= 0) {
-      // Layout not ready (hidden panel). Remember selection; place later.
-      currentIndex = index;
-      return;
-    }
-
-    const fromRect = paintedRect ?? track.rectAt(currentIndex) ?? toRect;
-
-    if (!animate || (fromRect.left === toRect.left && fromRect.top === toRect.top && fromRect.width === toRect.width)) {
-      currentIndex = index;
-      paintTo(toRect, index);
-      onSync?.(btn);
-      return;
-    }
-
-    // Selection updates immediately; the glide catches up visually.
+    const to = track.rectAt(index);
     currentIndex = index;
-    
-    // 1. Prepare start state (color snaps immediately to target)
-    highlightEl.style.transition = 'none';
-    paintTo(fromRect, index);
-    
-    // 2. Force layout flush to apply start state
-    void highlightEl.offsetWidth;
-    
-    // 3. Enable CSS transitions
-    highlightEl.style.transition = `transform ${durationMs}ms var(--ios-spring), width ${durationMs}ms var(--ios-spring), height ${durationMs}ms var(--ios-spring)`;
-    
-    // 4. Set final state
-    paintTo(toRect, index);
-    
-    // 5. Cleanup transition after it finishes
-    let cleaned = false;
-    cancel = () => {
-      if (cleaned) return;
-      cleaned = true;
-      highlightEl.style.transition = 'none';
-      cancel = null;
-    };
-    
-    setTimeout(() => {
-      if (cancel) cancel();
-    }, durationMs + 50);
-
+    buttons.forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
     onSync?.(btn);
+    if (!to?.width || !to.height) return;
+    const from = paintedRect ?? to, fromScale = scale;
+    if (!animate || reduced.matches) { paintTo(to, index); finish(); return; }
+    cancel = rafTween(0, 1, durationMs, progress => {
+      paintTo(lerpRect(from, to, progress), index, fromScale + (1 - fromScale) * progress);
+    }, () => { cancel = null; finish(); });
   }
-
+  function scrub(value: number) {
+    cancel?.(); cancel = null;
+    if (!track.count()) track.measure();
+    fraction = Math.max(0, Math.min(buttons.length - 1, value));
+    const lo = Math.floor(fraction), hi = Math.ceil(fraction);
+    const a = track.rectAt(lo), b = track.rectAt(hi);
+    if (!a || !b) return;
+    paintedRect = lerpRect(a, b, fraction - lo);
+    const pose = track.render(fraction, { scale, stretch: stretchAt(paintedRect) });
+    if (pose) lens.paint(pose, lensStrength());
+  }
+  function fractionAtPoint(x: number, y: number): number {
+    const rects = buttons.map((_, i) => track.rectAt(i)!);
+    const nearestRow = rects.reduce((best, rect) => Math.abs(rect.top + rect.height / 2 - y) < Math.abs(best.top + best.height / 2 - y) ? rect : best);
+    const row = rects.map((rect, index) => ({ rect, index })).filter(({ rect }) => Math.abs(rect.top - nearestRow.top) < 2);
+    if (x <= row[0].rect.left + row[0].rect.width / 2) return row[0].index;
+    for (let i = 1; i < row.length; i++) {
+      const a = row[i - 1], b = row[i];
+      const lo = a.rect.left + a.rect.width / 2, hi = b.rect.left + b.rect.width / 2;
+      if (x <= hi) return a.index + (b.index - a.index) * (x - lo) / (hi - lo);
+    }
+    return row[row.length - 1].index;
+  }
+  function beginDrag() {
+    if (pointer === null || dragging) return;
+    clearTimeout(holdTimer);
+    cancel?.(); cancel = null;
+    track.measure();
+    const rect = group.getBoundingClientRect();
+    originX = rect.left + group.clientLeft; originY = rect.top + group.clientTop;
+    const current = paintedRect ?? track.rectAt(currentIndex)!;
+    grabX = current.left + current.width / 2 - (startX - originX);
+    fraction = fractionAtPoint(current.left + current.width / 2, current.top + current.height / 2);
+    dragging = true;
+    group.classList.add('segmented-lens', 'segmented-dragging');
+    group.setPointerCapture(pointer);
+    const start = performance.now(), fromScale = scale;
+    function lift(now: number) {
+      const progress = Math.min(1, (now - start) / 150);
+      scale = reduced.matches ? 1 : fromScale + (LIFT_SCALE - fromScale) * (1 - (1 - progress) ** 3);
+      scrub(fraction);
+      if (progress < 1 && dragging) liftRaf = requestAnimationFrame(lift);
+    }
+    liftRaf = requestAnimationFrame(lift);
+  }
+  function onDown(event: PointerEvent) {
+    if (event.button !== 0 || !event.isPrimary || pointer !== null) return;
+    pointer = event.pointerId; startX = event.clientX; startY = event.clientY;
+    holdTimer = setTimeout(beginDrag, 140);
+  }
+  function onMove(event: PointerEvent) {
+    if (event.pointerId !== pointer) return;
+    const dx = event.clientX - startX, dy = event.clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx) * 1.2) { clearTimeout(holdTimer); pointer = null; return; }
+      if (Math.abs(dx) < 8) return;
+      beginDrag();
+    }
+    if (event.cancelable) event.preventDefault();
+    const decay = Math.max(0, 1 - Math.abs(dx) / 100);
+    scrub(fractionAtPoint(event.clientX - originX + grabX * decay, event.clientY - originY));
+  }
+  function end(event: PointerEvent, cancelled = false) {
+    if (event.pointerId !== pointer) return;
+    clearTimeout(holdTimer);
+    const id = pointer; pointer = null;
+    if (!dragging) return;
+    dragging = false; stopLift();
+    if (group.hasPointerCapture(id)) group.releasePointerCapture(id);
+    group.classList.remove('segmented-dragging');
+    suppressUntil = performance.now() + 500;
+    const target = cancelled ? currentIndex : Math.round(fraction);
+    if (!cancelled) buttons[target].click();
+    // A selected button's handler may deliberately be a no-op.
+    if (!cancel || currentIndex !== target) sync(buttons[target]);
+  }
+  function onCancel(event: PointerEvent) { end(event, true); }
+  function onClick(event: MouseEvent) {
+    if (event.isTrusted && event.detail > 0 && performance.now() < suppressUntil) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  }
+  function onKey(event: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, currentIndex + (event.key === 'ArrowRight' ? 1 : -1)));
+    buttons[index].focus(); buttons[index].click();
+  }
   const ro = new ResizeObserver(() => {
-    if (resizeRaf !== null) return;
-    resizeRaf = requestAnimationFrame(() => {
-      resizeRaf = null;
-      if (cancel) return;
-      track.measure();
-      const rect = track.rectAt(currentIndex);
-      if (rect && rect.width > 0) paintTo(rect, currentIndex);
-    });
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => { if (!cancel && !dragging) sync(buttons[currentIndex], false); });
   });
-
-  function scrub(fraction: number) {
-    cancel?.();
-    cancel = null;
-    // Measure only when empty — per-frame measure during a pager drag is waste.
-    if (track.count() === 0) track.measure();
-    if (track.count() === 0) return;
-
-    const clamped = Math.min(Math.max(fraction, 0), buttons.length - 1);
-    track.render(clamped);
-
-    // Remember the interpolated rect so the next discrete sync starts here.
-    const i0 = Math.floor(clamped);
-    const i1 = Math.min(i0 + 1, buttons.length - 1);
-    const t = clamped - i0;
-    const a = track.rectAt(i0);
-    const b = track.rectAt(i1);
-    if (a && b) paintedRect = lerpRect(a, b, t);
-
-    currentIndex = Math.round(clamped);
-    // Intentionally no onSync here — callers that scrub (pagers) own accent /
-    // label colour so it can stay locked to the same fraction as the pill.
+  if (options.draggable !== false) {
+    group.addEventListener('pointerdown', onDown);
+    group.addEventListener('pointermove', onMove);
+    group.addEventListener('pointerup', end);
+    group.addEventListener('pointercancel', onCancel);
+    group.addEventListener('click', onClick, true);
+    group.addEventListener('keydown', onKey);
   }
-
   return {
-    sync,
-    scrub,
-    observe: () => {
-      buttons.forEach((btn) => ro.observe(btn));
-      return ro;
+    sync, scrub,
+    observe: () => { buttons.forEach(btn => ro.observe(btn)); return ro; },
+    destroy: () => {
+      clearTimeout(holdTimer); cancel?.(); stopLift(); cancelAnimationFrame(resizeRaf); ro.disconnect(); finish();
+      group.removeEventListener('pointerdown', onDown); group.removeEventListener('pointermove', onMove);
+      group.removeEventListener('pointerup', end); group.removeEventListener('pointercancel', onCancel);
+      group.removeEventListener('click', onClick, true); group.removeEventListener('keydown', onKey);
     },
   };
 }

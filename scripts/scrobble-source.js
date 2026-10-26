@@ -32,6 +32,23 @@ export function parseCSVLine(line) {
   return parts;
 }
 
+/** Split records outside quotes; escaped quotes do not end a quoted field. */
+export function csvRecords(content) {
+  const records = [];
+  let quoted = false, start = 0;
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '"') {
+      if (quoted && content[i + 1] === '"') i++;
+      else quoted = !quoted;
+    } else if (content[i] === '\n' && !quoted) {
+      records.push(content.slice(start, i).replace(/\r$/, '')); start = i + 1;
+    }
+  }
+  if (quoted) throw new Error('Unterminated quoted CSV record');
+  if (start < content.length) records.push(content.slice(start));
+  return records;
+}
+
 // Yields `{ uts, artist, album, track }` per valid row. Streaming as a generator
 // keeps peak memory at one row rather than ~150k parsed arrays.
 export function* readScrobbles(csvPath = CSV_PATH) {
@@ -39,7 +56,7 @@ export function* readScrobbles(csvPath = CSV_PATH) {
     throw new Error(`Raw scrobbles file not found at ${csvPath}. Fetch data first.`);
   }
 
-  const lines = fs.readFileSync(csvPath, 'utf-8').split('\n');
+  const lines = csvRecords(fs.readFileSync(csvPath, 'utf-8'));
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;

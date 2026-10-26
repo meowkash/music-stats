@@ -1,160 +1,83 @@
-// IDB, not localStorage: the payload is ~1.4 MB of JSON and localStorage is
-// synchronous, string-only and ~5 MB capped. Structured clones skip JSON.parse.
-
 const DB_NAME = 'music-stats';
-const DB_VERSION = 1;
-
-/** Content-addressed data files: key is the manifest hash, value is parsed JSON. */
 export const FILE_STORE = 'files';
-/** Pointers and manifests: 'active', 'staging'. */
 export const META_STORE = 'meta';
-
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
 function openDb(): Promise<IDBDatabase | null> {
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise((resolve) => {
-    if (typeof indexedDB === 'undefined') {
-      resolve(null);
-      return;
-    }
-
-    let request: IDBOpenDBRequest;
+  return dbPromise ??= new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') return resolve(null);
+    let settled = false;
+    const finish = (db: IDBDatabase | null) => {
+      if (settled) { db?.close(); return; }
+      settled = true;
+      clearTimeout(timer);
+      resolve(db);
+    };
+    const timer = setTimeout(() => finish(null), 3000);
     try {
-      request = indexedDB.open(DB_NAME, DB_VERSION);
-    } catch (err) {
-      console.warn('[IDB] Failed to open IndexedDB:', err);
-      resolve(null);
-      return;
-    }
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(FILE_STORE)) db.createObjectStore(FILE_STORE);
-      if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE);
-    };
-    request.onsuccess = () => resolve(request.result);
-    // Private browsing and storage-disabled contexts land here. Every caller
-    // treats a null db as "no persistence", falling back to network.
-    request.onerror = (e) => {
-      console.warn('[IDB] Database open error:', e);
-      resolve(null);
-    };
-    request.onblocked = (e) => {
-      console.warn('[IDB] Database open blocked:', e);
-      resolve(null);
-    };
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        for (const name of [FILE_STORE, META_STORE]) {
+          if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
+        }
+      };
+      request.onsuccess = () => {
+        request.result.onversionchange = () => { request.result.close(); dbPromise = null; };
+        finish(request.result);
+      };
+      request.onerror = request.onblocked = () => finish(null);
+    } catch { finish(null); }
   });
-
-  return dbPromise;
 }
 
-function runTransaction<T>(
-  storeName: string,
-  mode: IDBTransactionMode,
-  work: (store: IDBObjectStore) => IDBRequest | null,
-): Promise<T | undefined> {
-  return openDb().then(
-    (db) =>
-      new Promise<T | undefined>((resolve) => {
-        if (!db) {
-          resolve(undefined);
-          return;
-        }
-
-        let request: IDBRequest | null;
-        try {
-          const tx = db.transaction(storeName, mode);
-          request = work(tx.objectStore(storeName));
-          tx.onabort = (e) => {
-            console.warn('[IDB] Transaction aborted on store', storeName, e);
-            resolve(undefined);
-          };
-          tx.onerror = (e) => {
-            console.warn('[IDB] Transaction error on store', storeName, e);
-            resolve(undefined);
-          };
-          if (!request) {
-            tx.oncomplete = () => resolve(undefined);
-            return;
-          }
-        } catch (err) {
-          console.warn('[IDB] Transaction execution failed on store', storeName, err);
-          resolve(undefined);
-          return;
-        }
-
-        request.onsuccess = () => resolve(request.result as T);
-        request.onerror = () => resolve(undefined);
-      }),
-  );
+async function transaction<T>(name: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T> | void): Promise<T | undefined> {
+  const db = await openDb();
+  if (!db) {
+    if (mode === 'readwrite') throw new Error('Persistent storage unavailable');
+    return undefined;
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(name, mode);
+      const request = work(tx.objectStore(name));
+      const timer = setTimeout(() => { try { tx.abort(); } catch {} reject(new Error('Storage transaction timed out')); }, 10000);
+      tx.oncomplete = () => { clearTimeout(timer); resolve(request?.result); };
+      tx.onerror = tx.onabort = () => { clearTimeout(timer); reject(tx.error ?? new Error('Storage transaction failed')); };
+    } catch (error) { reject(error); }
+  });
 }
 
 export function idbGet<T>(store: string, key: IDBValidKey): Promise<T | undefined> {
-  return runTransaction<T>(store, 'readonly', (s) => s.get(key));
+  return transaction<T>(store, 'readonly', s => s.get(key)).catch(() => undefined);
 }
-
-export function idbSet(store: string, key: IDBValidKey, value: unknown): Promise<void> {
-  return runTransaction(store, 'readwrite', (s) => s.put(value, key)).then(() => undefined);
+export async function idbSet(store: string, key: IDBValidKey, value: unknown): Promise<void> {
+  await transaction(store, 'readwrite', s => s.put(value, key));
 }
-
-export function idbKeys(store: string): Promise<IDBValidKey[]> {
-  return runTransaction<IDBValidKey[]>(store, 'readonly', (s) => s.getAllKeys()).then(
-    (keys) => keys ?? [],
-  );
+export async function idbKeys(store: string): Promise<IDBValidKey[]> {
+  return (await transaction<IDBValidKey[]>(store, 'readonly', s => s.getAllKeys()).catch(() => undefined)) ?? [];
 }
-
-/** One transaction for the whole batch — a put per file would be far slower. */
-export function idbSetMany(
-  store: string,
-  entries: Array<[IDBValidKey, unknown]>,
-): Promise<void> {
-  if (entries.length === 0) return Promise.resolve();
-
-  return openDb().then(
-    (db) =>
-      new Promise<void>((resolve) => {
-        if (!db) {
-          resolve();
-          return;
-        }
-        try {
-          const tx = db.transaction(store, 'readwrite');
-          const objectStore = tx.objectStore(store);
-          for (const [key, value] of entries) objectStore.put(value, key);
-          tx.oncomplete = () => resolve();
-          tx.onabort = () => resolve();
-          tx.onerror = () => resolve();
-        } catch (err) {
-          console.warn('[IDB] Bulk put failed on store', store, err);
-          resolve();
-        }
-      }),
-  );
+export async function idbSetMany(store: string, entries: Array<[IDBValidKey, unknown]>): Promise<void> {
+  if (!entries.length) return;
+  await transaction(store, 'readwrite', s => { for (const [key, value] of entries) s.put(value, key); });
 }
-
-export function idbDeleteMany(store: string, keys: IDBValidKey[]): Promise<void> {
-  if (keys.length === 0) return Promise.resolve();
-
-  return openDb().then(
-    (db) =>
-      new Promise<void>((resolve) => {
-        if (!db) {
-          resolve();
-          return;
-        }
-        try {
-          const tx = db.transaction(store, 'readwrite');
-          const objectStore = tx.objectStore(store);
-          for (const key of keys) objectStore.delete(key);
-          tx.oncomplete = () => resolve();
-          tx.onabort = () => resolve();
-          tx.onerror = () => resolve();
-        } catch (err) {
-          console.warn('[IDB] Bulk delete failed on store', store, err);
-          resolve();
-        }
-      }),
-  );
+/** Read and conditionally replace related records in one serialized transaction. */
+export async function idbUpdateMany(store: string, keys: IDBValidKey[], update: (values: unknown[]) => Array<[IDBValidKey, unknown]>): Promise<void> {
+  if (!keys.length) return;
+  await transaction(store, 'readwrite', s => {
+    const values: unknown[] = new Array(keys.length);
+    let remaining = keys.length;
+    keys.forEach((key, index) => {
+      const request = s.get(key);
+      request.onsuccess = () => {
+        values[index] = request.result;
+        if (--remaining) return;
+        try { for (const [key, value] of update(values)) s.put(value, key); }
+        catch { s.transaction.abort(); }
+      };
+    });
+  });
+}
+export async function idbDeleteMany(store: string, keys: IDBValidKey[]): Promise<void> {
+  if (!keys.length) return;
+  await transaction(store, 'readwrite', s => { for (const key of keys) s.delete(key); });
 }

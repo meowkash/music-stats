@@ -1,0 +1,157 @@
+{
+  "recordedAt": "2026-10-23T02:06:30.489Z",
+  "node": "v26.12.0",
+  "scenarios": {
+    "boot-cold": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 3,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.7,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToContent": 39
+    },
+    "boot-warm": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 0,
+      "p50Frame": 0,
+      "p95Frame": 0,
+      "maxFrame": 0,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToContent": 23
+    },
+    "sheet-open-warm": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 46,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToFirstMove": 46
+    },
+    "sheet-open-during-sync": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 54,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "sheet-open-cold-artwork": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 57,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0,
+      "timeToFirstMove": 47
+    },
+    "sheet-dismiss": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 36,
+      "p50Frame": 16.7,
+      "p95Frame": 16.7,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "tab-swipe": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 111,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 33.4,
+      "droppedFrames": 3,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    },
+    "leaderboard-scroll": {
+      "runs": 3,
+      "frameInterval": 16.7,
+      "frameCount": 85,
+      "p50Frame": 16.7,
+      "p95Frame": 16.8,
+      "maxFrame": 16.8,
+      "droppedFrames": 0,
+      "stalls": 0,
+      "longTaskCount": 0,
+      "longTaskMs": 0
+    }
+  },
+  "data": {
+    "merge": {
+      "artwork.json": {
+        "shards": 64,
+        "totalKB": 3734,
+        "parseMs": 10.1,
+        "mergeMs": 6.1,
+        "entries": 27976
+      },
+      "colors.json": {
+        "shards": 64,
+        "totalKB": 1398,
+        "parseMs": 6.8,
+        "mergeMs": 0.9,
+        "entries": 7898
+      },
+      "catalog.json": {
+        "shards": 64,
+        "totalKB": 3388,
+        "parseMs": 17.9,
+        "mergeMs": 11.8,
+        "entries": 4
+      }
+    },
+    "dailyDelta": {
+      "oneArtist": {
+        "scrobbles": 182,
+        "changedShards": 1,
+        "totalShards": 64,
+        "deltaKB": 81,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.024
+      },
+      "fewArtists": {
+        "scrobbles": 40,
+        "changedShards": 5,
+        "totalShards": 64,
+        "deltaKB": 356,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.105
+      },
+      "varied": {
+        "scrobbles": 40,
+        "changedShards": 30,
+        "totalShards": 64,
+        "deltaKB": 1663,
+        "wholeDatasetKB": 3388,
+        "deltaRatio": 0.491
+      }
+    }
+  }
+}

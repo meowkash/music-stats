@@ -1,4 +1,6 @@
 ---
+import { getBootSnapshot, safeJSON } from "../utils/bootSnapshot";
+const boot = getBootSnapshot();
 import Layout from "../layouts/Layout.astro";
 import Dashboard from "../components/Dashboard.astro";
 import RecapStory from "../components/RecapStory.astro";
@@ -13,6 +15,8 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
 ---
 
 <Layout title="Music Stats">
+  <script is:inline id="boot-manifest" type="application/json" set:html={safeJSON(boot.manifest)} />
+  <script is:inline id="boot-data" type="application/json" set:html={safeJSON(boot.data)} />
   <div id="app-shell">
     <main class="view-deck">
       <section class="panel-section active" id="view-dashboard">
@@ -61,6 +65,26 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
     } catch (e) {
       console.warn('Could not restore tab from storage', e);
     }
+    // Early taps work against the server-rendered panels while modules load.
+    document.addEventListener('click', event => {
+      if (document.documentElement.dataset.appReady === 'true') return;
+      const button = event.target.closest?.('.tab-btn');
+      const tab = button?.dataset.tab;
+      const target = tabOrder.indexOf(tab);
+      if (target < 0) return;
+      document.querySelectorAll('.panel-section').forEach(section => {
+        const index = tabOrder.indexOf(section.id.replace('view-', ''));
+        section.classList.remove('active', 'inactive-left', 'inactive-right');
+        section.classList.add(index === target ? 'active' : index < target ? 'inactive-left' : 'inactive-right');
+      });
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn === button));
+      document.body.dataset.activeTab = tab;
+      try { localStorage.setItem('last-music-stats-tab', tab); } catch {}
+      if (themeColors[tab]) document.documentElement.style.setProperty('--status-bar-color', themeColors[tab]);
+    });
+    // The document already contains a usable snapshot; no data/module wait.
+    const splash = document.getElementById('pwa-splash-screen');
+    if (splash) { splash.style.transition = 'none'; splash.classList.add('hidden'); }
   </script>
 
   <DetailOverlay />
@@ -180,9 +204,24 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
     stageUpdate,
     backfillStoredFiles,
     getActiveManifest,
+    fetchAppJson,
   } from "../utils/dataStore";
   import { prefetchArtwork } from "../utils/artworkPrefetch";
   import { hideSplashScreen } from "../utils/dataRefresh";
+
+  let warmTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleArtworkWarm() {
+    if (warmTimer) clearTimeout(warmTimer);
+    warmTimer = setTimeout(() => {
+      const manifest = getActiveManifest();
+      if (!manifest) return;
+      void (async () => {
+        const artwork = manifest.artworkPath ? await fetchAppJson<string[]>(manifest.artworkPath) : manifest.artwork;
+        if (manifest === getActiveManifest()) await prefetchArtwork({ ...manifest, artwork });
+      })().catch(() => {});
+    }, 2000);
+  }
+  window.addEventListener('data-generation-swapped', scheduleArtworkWarm);
 
   document.addEventListener("DOMContentLoaded", () => {
     hideSplashScreen();
@@ -198,7 +237,7 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
         // repaintPendingGlows(), so rows that painted on the fallback glow are
         // corrected when it lands. Awaiting 1.4 MB of reassembly here just
         // delayed first paint for a second-pass effect.
-        void loadColorsCache();
+        void loadColorsCache().catch(() => {});
         await preloadAppData();
       } catch (err) {
         console.warn("Data hydration failed:", err);
@@ -209,8 +248,7 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
       try {
         await stageUpdate();
         await backfillStoredFiles();
-        const manifest = getActiveManifest();
-        if (manifest) void prefetchArtwork(manifest);
+        scheduleArtworkWarm();
       } catch (err) {
         console.warn("Background data update failed:", err);
       }

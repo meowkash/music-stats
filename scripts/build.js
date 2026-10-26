@@ -6,6 +6,7 @@ import { loadEnv } from './lastfm-client.js';
 loadEnv();
 
 const refresh = process.argv.includes('--refresh');
+const offline = process.argv.includes('--offline');
 
 function run(label, command, args = []) {
   console.log(`\n▶ ${label}`);
@@ -21,9 +22,10 @@ console.log(refresh ? 'Building with media refresh (artwork + colors)' : 'Buildi
 run('Bootstrap artist overrides', 'node', ['scripts/bootstrap-artist-overrides.js']);
 run('Process scrobbles → JSON', 'node', ['scripts/process-data.js']);
 
-const hasLastfm = process.env.LASTFM_API_KEY && process.env.LASTFM_USERNAME;
+const hasLastfm = !offline && process.env.LASTFM_API_KEY && process.env.LASTFM_USERNAME;
 if (hasLastfm) {
   run('Enrich recap meta (durations + genres)', 'node', ['scripts/enrich-recap-meta.js']);
+  run('Apply enriched durations to metadata', 'node', ['scripts/process-data.js']);
 }
 if (hasLastfm && refresh) {
   // --prune-dead first drops URLs that now 404, so entries the resolver can't
@@ -39,7 +41,7 @@ run('Generate yearly recaps', 'node', ['scripts/generate-recaps.js']);
 
 run('Generate PWA icons', 'node', ['scripts/generate-pwa-icons.js']);
 run('Generate service worker', 'node', ['scripts/generate-sw.js']);
-run(
+if (!offline) run(
   refresh ? 'Re-extract all colors' : 'Extract new colors',
   'npx',
   ['tsx', 'scripts/extract-colors.js', ...(refresh ? ['--refresh'] : [])],

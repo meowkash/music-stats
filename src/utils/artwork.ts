@@ -148,7 +148,7 @@ export function resolveArtistArtworkFromCandidates(
 
 // Built once per cache object: without them a miss scanned all ~10k entries
 // twice via Object.entries, and a row missing on all three fields did it 4x.
-interface ArtworkFallbackIndex {
+export interface ArtworkFallbackIndex {
   byArtist: Map<string, string>;
   /** Keyed by normalized `album|artist` — never album alone (see resolveAlbumArtwork). */
   byAlbumName: Map<string, string>;
@@ -156,10 +156,17 @@ interface ArtworkFallbackIndex {
 
 /** Case/punctuation-insensitive form, so "Short n' Sweet" matches "Short N Sweet". */
 function looseKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return value.normalize('NFKD').toLocaleLowerCase().replace(/[\p{M}]/gu, '').replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
 const fallbackIndexes = new WeakMap<Record<string, string>, ArtworkFallbackIndex>();
+
+export function primeArtworkIndex(cache: Record<string, string>, index: ArtworkFallbackIndex): void {
+  fallbackIndexes.set(cache, index);
+}
+export function buildArtworkIndex(cache: Record<string, string>): ArtworkFallbackIndex {
+  return getFallbackIndex(cache);
+}
 
 function getFallbackIndex(cache: Record<string, string>): ArtworkFallbackIndex {
   const existing = fallbackIndexes.get(cache);

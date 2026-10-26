@@ -1,7 +1,8 @@
-const SHELL_CACHE = 'music-stats-shell-1791510286';
-const DATA_CACHE = 'music-stats-data-1791510286';
+// @ts-nocheck -- runs in ServiceWorkerGlobalScope, separately from DOM scripts.
+const SHELL_CACHE = 'music-stats-shell-1792959701';
+const DATA_CACHE = 'music-stats-data-1792959701';
 const IMAGE_CACHE = 'music-stats-images-v1';
-const CACHE_VERSION = '1791510286';
+const CACHE_VERSION = '1792959701';
 
 /** Cache wins after this long so a captive or crawling network can't hang the app. */
 const DATA_NETWORK_TIMEOUT_MS = 3000;
@@ -17,8 +18,7 @@ const STATIC_ASSETS = [
   '/icons/icon-32.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/icons/apple-touch-icon.png',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap'
+  '/icons/apple-touch-icon.png'
 ];
 
 // Network-first. /manifest.json is here because without its ?v= buster the
@@ -42,7 +42,7 @@ const SHELL_FALLBACK_URLS = ['/', '/index.html'];
 const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'cdn-images.dzcdn.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
 
 function isArtworkRequest(url) {
-  return ARTWORK_HOSTS.some(host => url.host.includes(host));
+  return ARTWORK_HOSTS.some(host => url.hostname === host);
 }
 
 function dataPathname(url) {
@@ -71,19 +71,19 @@ function respondWithDataJson(event, dataPath) {
   // off 'v' matched every request and made the deadline below unreachable.
   const mustBeFresh = new URL(event.request.url).searchParams.has('fresh');
 
-  const network = fetch(event.request).then(async (response) => {
+  const network = fetch(event.request);
+  // Cache I/O is opportunistic and never holds a usable network body hostage.
+  event.waitUntil(network.then(async response => {
     if (response.ok) {
       const cache = await caches.open(DATA_CACHE);
       await cache.put(cacheKey, response.clone());
     }
-    return response;
-  });
-
-  event.waitUntil(network.catch(() => {}));
+  }).catch(() => {}));
 
   // The manifest and generation downloads must not lose a race to stale JSON —
   // the client hashes every byte and aborts the whole update on mismatch.
-  if (dataPath === '/data/manifest.json' || mustBeFresh) {
+  if (dataPath === '/data/manifest.json') return network.catch(() => jsonUnavailable());
+  if (mustBeFresh) {
     return network.catch(async () => {
       const cache = await caches.open(DATA_CACHE);
       return (await cache.match(cacheKey)) || jsonUnavailable();
@@ -146,31 +146,10 @@ async function matchShellCache(cache, request) {
 async function respondWithShell(event) {
   const cache = await caches.open(SHELL_CACHE);
   const cached = await matchShellCache(cache, event.request);
-
-  const revalidate = fetch(event.request)
-    .then(async (response) => {
-      if (response.ok) {
-        await cache.put(event.request, response.clone());
-        if (event.request.url.endsWith('/')) {
-          await cache.put('/index.html', response.clone());
-        }
-      }
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) {
-    event.waitUntil(revalidate);
-    return cached;
-  }
-
-  const network = await revalidate;
-  if (network) return network;
-
-  const fallback = await matchShellCache(cache, event.request);
-  if (fallback) return fallback;
-
-  return Response.error();
+  if (cached) return cached;
+  // A shell belongs to its dependency graph. Updates arrive via installation
+  // of the next worker, never by replacing HTML under an old graph.
+  return fetch(event.request);
 }
 
 /** Network-first for install icons so a deploy can't leave Safari on a stale mark. */
@@ -200,16 +179,17 @@ const MAX_BUILD_ASSETS = 200;
 // splash could dismiss.
 async function precacheBuildAssets(cache) {
   const shell = await cache.match('/');
-  if (!shell) return;
+  if (!shell) throw new Error('Critical shell missing');
 
   const queue = [...new Set((await shell.text()).match(ASTRO_ASSET_RE) || [])];
   const seen = new Set(queue);
 
-  while (queue.length && seen.size <= MAX_BUILD_ASSETS) {
+  while (queue.length) {
+    if (seen.size > MAX_BUILD_ASSETS) throw new Error('Bundle graph exceeds precache budget');
     const batch = queue.splice(0);
-    await Promise.allSettled(batch.map(async url => {
-      const response = await fetch(url, { cache: 'reload' });
-      if (!response.ok) return;
+    await Promise.all(batch.map(async url => {
+      const response = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error('Critical bundle unavailable: ' + url);
       await cache.put(url, response.clone());
       if (!url.endsWith('.js')) return;
 
@@ -228,21 +208,19 @@ async function precacheBuildAssets(cache) {
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(SHELL_CACHE).then(async cache => {
-      console.log('[SW] Pre-caching static app shell');
-      await Promise.allSettled(
-        STATIC_ASSETS.map(url =>
-          fetch(url, { cache: 'reload' })
-            .then(response => {
-              if (response.ok) return cache.put(url, response);
-            })
-            .catch(err => console.warn('[SW] Could not pre-cache:', url, err))
-        )
-      );
-      await precacheBuildAssets(cache);
-    }).then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL_CACHE);
+    const response = await fetch('/', { cache: 'reload', signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('Critical shell download failed');
+    await cache.put('/', response);
+    await precacheBuildAssets(cache);
+    // Optional branding assets cannot invalidate the complete shell graph.
+    await Promise.allSettled(STATIC_ASSETS.filter(url => url !== '/').map(async url => {
+      const asset = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(10000) });
+      if (asset.ok) await cache.put(url, asset);
+    }));
+    // Keep the old controller alive until its clients close; no skipWaiting.
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -296,7 +274,7 @@ self.addEventListener('fetch', event => {
         if (
           event.request.method === 'GET' &&
           (response.status === 200 || response.status === 0) &&
-          (requestUrl.pathname.includes('/_astro/') || requestUrl.host.includes('fonts.gstatic.com'))
+          (requestUrl.pathname.includes('/_astro/') || requestUrl.hostname === 'fonts.gstatic.com')
         ) {
           const responseClone = response.clone();
           caches.open(SHELL_CACHE).then(cache => {

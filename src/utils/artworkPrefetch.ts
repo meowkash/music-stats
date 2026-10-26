@@ -1,3 +1,4 @@
+import { getThumbArtworkSources } from './artwork';
 import { encodeBitmap } from './encodeBitmap';
 import type { Manifest } from './persist/generations';
 import { readBootHint, writeBootHint } from './persist/generations';
@@ -10,7 +11,7 @@ import type { EncodeRequest, EncodeResult } from './artworkEncode.worker';
 const IMAGE_CACHE = 'music-stats-images-v1';
 
 const PRIORITY_CONCURRENCY = 6;
-const BACKGROUND_CONCURRENCY = 6;
+const BACKGROUND_CONCURRENCY = 2;
 /** Breathing room between background batches so the sweep never fights the UI. */
 const BACKGROUND_BATCH_PAUSE_MS = 120;
 
@@ -40,7 +41,7 @@ interface WarmGroup {
 // Both URL variants the UI asks for are derived from one download. The thumb
 // comes off the 500x500 source because /300x300/ 404s for some Last.fm images.
 function warmGroupFor(url: string): WarmGroup {
-  const thumbUrl = url.replace('/500x500/', '/300x300/');
+  const thumbUrl = getThumbArtworkSources(url)[0] || url;
   const targets: WarmTarget[] = [{ url, px: HERO_PX }];
   if (thumbUrl !== url) targets.unshift({ url: thumbUrl, px: THUMB_PX });
   return { source: url, targets };
@@ -70,6 +71,14 @@ export interface ArtworkPrefetchProgress {
 }
 
 let running = false;
+let sweepGeneration = '';
+let latestManifest: Manifest | null = null;
+let continuation: ReturnType<typeof setTimeout> | null = null;
+if (typeof window !== "undefined") {
+  const resume = () => { if (!document.hidden && latestManifest) void prefetchArtwork(latestManifest); };
+  window.addEventListener("online", resume);
+  document.addEventListener("visibilitychange", resume);
+}
 
 async function quotaHeadroomBytes(): Promise<number> {
   try {
@@ -139,8 +148,17 @@ function urlsOnScreen(): Set<string> {
 }
 
 async function cachedUrls(cache: Cache): Promise<Set<string>> {
-  const keys = await cache.keys();
-  return new Set(keys.map((request) => request.url));
+  const worker = getEncoderWorker();
+  if (worker) {
+    const id = nextJobId++;
+    const result = await new Promise<EncodeResult>(resolve => {
+      const timer = setTimeout(() => { pendingJobs.delete(id); resolve({ id, written: 0 }); }, 20000);
+      pendingJobs.set(id, value => { clearTimeout(timer); resolve(value); });
+      worker.postMessage({ id, operation: 'inventory', cacheName: IMAGE_CACHE, source: '', targets: [] } satisfies EncodeRequest);
+    });
+    if (result.urls) return new Set(result.urls);
+  }
+  return new Set((await cache.keys()).map(request => request.url));
 }
 
 class QuotaExhausted extends Error {}
@@ -192,7 +210,12 @@ function getEncoderWorker(): Worker | null {
 function warmInWorker(worker: Worker, group: WarmGroup): Promise<EncodeResult> {
   const id = nextJobId++;
   return new Promise<EncodeResult>((resolve) => {
-    pendingJobs.set(id, resolve);
+    const timer = setTimeout(() => {
+      pendingJobs.delete(id);
+      resolve({ id, written: 0 });
+      worker.terminate(); encoderWorker = undefined; failPendingJobs();
+    }, 20000);
+    pendingJobs.set(id, result => { clearTimeout(timer); resolve(result); });
     worker.postMessage({
       id,
       cacheName: IMAGE_CACHE,
@@ -219,7 +242,7 @@ async function warmBatchOnMainThread(cache: Cache, groups: WarmGroup[]): Promise
       try {
         // no-store keeps the full-size original out of the HTTP disk cache —
         // otherwise every image is retained twice, once at source size.
-        const response = await fetch(group.source, { mode: 'cors', cache: 'no-store' });
+        const response = await fetch(group.source, { mode: 'cors', cache: 'no-store', signal: AbortSignal.timeout(12000) });
         if (!response.ok) return 0;
 
         // Decode once, then write every size derived from it.
@@ -258,7 +281,9 @@ async function warmAll(
   progress: { cached: number; total: number },
 ): Promise<boolean> {
   for (let i = 0; i < groups.length; i += concurrency) {
-    if (!navigator.onLine) return false;
+    if (latestManifest?.generation !== sweepGeneration) return false;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (!navigator.onLine || document.hidden || (stage === 'background' && (connection?.saveData || ['slow-2g', '2g'].includes(connection?.effectiveType ?? '')))) return false;
 
     // Re-checked as we go: opaque padding means headroom drops far faster than
     // the bytes actually downloaded would suggest.
@@ -288,8 +313,11 @@ async function warmAll(
 // Warm every artwork URL in the manifest, on-screen first. Safe to call
 // repeatedly: already-cached URLs are skipped.
 export async function prefetchArtwork(manifest: Manifest): Promise<void> {
+  latestManifest = manifest;
+  if (continuation) { clearTimeout(continuation); continuation = null; }
   if (running || !('caches' in window) || !manifest.artwork?.length) return;
   running = true;
+  sweepGeneration = manifest.generation;
 
   try {
     const cache = await caches.open(IMAGE_CACHE);
@@ -326,14 +354,18 @@ export async function prefetchArtwork(manifest: Manifest): Promise<void> {
 
     const priorityDone = await warmAll(cache, priority, PRIORITY_CONCURRENCY, 'priority', progress);
     const restDone =
-      priorityDone && (await warmAll(cache, rest, BACKGROUND_CONCURRENCY, 'background', progress));
+      priorityDone && (await warmAll(cache, rest.slice(0, 128), BACKGROUND_CONCURRENCY, 'background', progress));
 
-    if (priorityDone && restDone) dispatchProgress({ ...progress, stage: 'done' });
+    if (priorityDone && restDone && rest.length <= 128) dispatchProgress({ ...progress, stage: 'done' });
+    else if (priorityDone && restDone && !document.hidden) continuation = setTimeout(() => { if (latestManifest) void prefetchArtwork(latestManifest); }, 30000);
     recordProgress(manifest, progress.cached);
   } catch (err) {
     console.warn('[ArtworkPrefetch] Prefetch pipeline encountered an error:', err);
   } finally {
     running = false;
+    if (latestManifest && latestManifest.generation !== manifest.generation) {
+      const next = latestManifest; queueMicrotask(() => { void prefetchArtwork(next); });
+    }
   }
 }
 
@@ -366,12 +398,13 @@ export async function upgradeHeroArtwork(url: string | null): Promise<void> {
   try {
     if ((await throttledQuotaHeadroom()) <= 0) return;
 
-    const response = await fetch(source, { mode: 'cors', cache: 'no-store' });
-    if (!response.ok) return;
+    const response = await fetch(source, { mode: 'cors', cache: 'no-store', signal: AbortSignal.timeout(12000) });
+    if (!response.ok) { upgraded.delete(url); return; }
 
     const cache = await caches.open(IMAGE_CACHE);
     await cache.put(url, await reencode(response, HERO_UPGRADE_PX));
   } catch (err) {
+    upgraded.delete(url);
     console.warn('[ArtworkPrefetch] Failed to upgrade hero artwork for', url, err);
   }
 }
