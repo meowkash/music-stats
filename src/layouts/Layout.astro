@@ -212,7 +212,7 @@ const washStyles = [
 				width: min(360px, calc(100vw - 32px));
 				max-width: min(360px, calc(100vw - 32px));
 				padding: 18px 20px;
-				border-radius: 28px;
+				border-radius: calc(28px * var(--corner-scale, 1));
 				background: rgba(14, 14, 20, 0.96);
 				border: 1px solid rgba(255, 255, 255, 0.1);
 				box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
@@ -538,6 +538,56 @@ const washStyles = [
 		--spacing-section: 16px;
 		--spacing-section-lg: 24px;
 		--duration-overlay: var(--duration-normal);
+		/* Multiplies fixed pixel radii in step with the tokens below. */
+		--corner-scale: 1;
+	}
+
+	/* iOS draws rounded shapes with continuous corners: the curve starts
+	   further from the corner and eases into the edge, where a circular arc
+	   meets it abruptly. Where corner-shape is supported:
+	   - rectangular surfaces take a superellipse(1.67) at 1.5x their radius,
+	     which cuts the corner exactly as deep as the original arc, so nothing
+	     reads rounder, only smoother;
+	   - capsules (pills, the tab bar, slider tracks, the lens) cannot grow
+	     their radius past half their height, so they take a gentler
+	     superellipse(1.15): ends stay round, sides flow into them;
+	   - true circles (glass buttons, avatars, dots) stay circles, as on iOS.
+	   liquidGlass.ts draws the lens's own clip paths with the same curve.
+	   Elsewhere the circular corners stand. */
+	@supports (corner-shape: superellipse(2)) {
+		:root {
+			--radius-sm: 15px;
+			--radius-md: 24px;
+			--radius-lg: 36px;
+			--radius-xl: 42px;
+			--radius-sheet: 48px;
+			--corner-scale: 1.5;
+		}
+		:is(
+			#pwa-install-banner, .glass-card, .no-data-message, .scrobble-row,
+			.scrobble-row-thumb, .dropdown-popover, .dropdown-item,
+			.custom-date-inputs, .years-filter-popover, .year-story-viewport,
+			.swipeable-list-page, .overlay-load-status button,
+			.overlay-album-card-artwork, .reports-rank, .app-sheet-panel,
+			.overlay-header, .overlay-artwork-wrapper, .bottom-nav-container,
+			.story-stage, .story-hero-art, .story-runners li, .story-runner-art,
+			.story-lead, .story-when-card, .story-stream, .story-season,
+			.story-fact, .story-finale-summary span, .artwork-shimmer
+		) {
+			corner-shape: superellipse(1.67);
+		}
+		:is(
+			.main-tab-bar, .tab-btn, .sliding-highlight, .sliding-highlight::before,
+			.sliding-highlight::after, .pill-face, .lens-refraction-stack,
+			.lens-optics, .lens-optics-band, .lens-optics-core, .glass-segmented,
+			.glass-segmented > button, .range-btn, .sub-tab-btn, .dropdown-trigger,
+			.years-filter-btn, .checkbox-label, .year-story-dots button.is-active,
+			.toggle-switch, .search-input, .glass-input, #data-update-toast,
+			.pwa-install-actions button, .story-segment, .story-segment-fill,
+			.story-genre-track, .story-genre-track i
+		) {
+			corner-shape: superellipse(1.15);
+		}
 	}
 
 	/* Only --nav-bar-gap differs by mode: the browser floats the bar higher to
@@ -1360,16 +1410,16 @@ const washStyles = [
 	   the glass edge. Its hue turns with the glint. */
 	.segmented-control .sliding-highlight::after {
 		z-index: 1;
-		padding: 1px;
-		background:
-			conic-gradient(
-				from var(--lens-glint-angle, 200deg),
-				rgba(255, 150, 195, 0.16),
-				rgba(255, 240, 190, 0.08),
-				rgba(130, 235, 200, 0.16),
-				rgba(150, 180, 255, 0.16),
-				rgba(255, 150, 195, 0.16)
-			);
+		/* Gathered along the top and bottom edges, as on iOS. */
+		padding: 1.25px 0.5px;
+		background: linear-gradient(
+			90deg,
+			rgba(255, 130, 200, 0.22),
+			rgba(255, 220, 150, 0.14) 25%,
+			rgba(120, 240, 190, 0.22) 50%,
+			rgba(110, 170, 255, 0.24) 75%,
+			rgba(210, 140, 255, 0.22)
+		);
 		-webkit-mask:
 			linear-gradient(#000 0 0) content-box,
 			linear-gradient(#000 0 0);

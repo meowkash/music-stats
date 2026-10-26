@@ -326,17 +326,18 @@ const lensStyles = TAB_ORDER.map((tab, i) =>
     opacity: 0;
   }
 
-  /* Chromatic rim: a conic spectrum masked down to a thin ring, softened so
-     it reads as light splitting at the glass edge. */
+  /* Chromatic rim: light splitting where the glass bends most. As on iOS
+     it gathers along the top and bottom edges (a ring thicker there than at
+     the ends) and runs through the spectrum across the lens. */
   .nav-slider-highlight::before {
-    padding: 1.25px;
-    background: conic-gradient(
-      from var(--lens-glint-angle, 200deg),
-      rgba(255, 150, 195, 0.38),
-      rgba(255, 235, 185, 0.22),
-      rgba(130, 235, 200, 0.4),
-      rgba(150, 180, 255, 0.38),
-      rgba(255, 150, 195, 0.38)
+    padding: 1.75px 0.5px;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 130, 200, 0.42),
+      rgba(255, 220, 150, 0.3) 25%,
+      rgba(120, 240, 190, 0.42) 50%,
+      rgba(110, 170, 255, 0.45) 75%,
+      rgba(210, 140, 255, 0.42)
     );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,

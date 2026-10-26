@@ -72,7 +72,7 @@
   @media (min-width: 768px) {
     .story-stage {
       max-height: min(100lvh - 48px, 940px);
-      border-radius: 22px;
+      border-radius: calc(22px * var(--corner-scale, 1));
       border: 1px solid var(--panel-border-hover);
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
     }
@@ -456,7 +456,7 @@
        does not leave a band of empty gradient under the cover. */
     width: min(74vw, 42vh, 340px);
     aspect-ratio: 1;
-    border-radius: 20px;
+    border-radius: calc(20px * var(--corner-scale, 1));
     overflow: hidden;
     box-shadow:
       0 24px 60px rgba(0, 0, 0, 0.5),
@@ -514,7 +514,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px 10px 10px;
-    border-radius: 15px;
+    border-radius: calc(15px * var(--corner-scale, 1));
     background:
       linear-gradient(90deg, color-mix(in srgb, var(--c1) 30%, transparent) 0, color-mix(in srgb, var(--c2) 22%, transparent) var(--fill), transparent var(--fill)),
       rgba(255, 255, 255, 0.07);
@@ -541,7 +541,7 @@
     position: relative;
     width: 44px;
     height: 44px;
-    border-radius: 11px;
+    border-radius: calc(11px * var(--corner-scale, 1));
     overflow: hidden;
     flex-shrink: 0;
     background: rgba(255, 255, 255, 0.06);
@@ -637,7 +637,7 @@
     align-items: center;
     gap: 14px;
     padding: 12px 16px 12px 12px;
-    border-radius: 20px;
+    border-radius: calc(20px * var(--corner-scale, 1));
     background:
       linear-gradient(120deg, color-mix(in srgb, var(--c1) 34%, transparent), color-mix(in srgb, var(--c2) 18%, transparent)),
       rgba(255, 255, 255, 0.06);
@@ -657,7 +657,7 @@
 
   .story-slide[data-step='1'] .story-hero-art {
     width: 76px;
-    border-radius: 14px;
+    border-radius: calc(14px * var(--corner-scale, 1));
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
   }
 
@@ -1027,7 +1027,7 @@
     flex-direction: column;
     gap: 6px;
     padding: 12px 14px;
-    border-radius: 18px;
+    border-radius: calc(18px * var(--corner-scale, 1));
     overflow: hidden;
     text-align: left;
     background: linear-gradient(150deg, color-mix(in srgb, var(--card-color) 24%, transparent) 0%, rgba(255, 255, 255, 0.04) 75%);
@@ -1164,7 +1164,7 @@
     flex: 1 1 auto;
     width: 100%;
     min-height: 150px;
-    border-radius: 12px;
+    border-radius: calc(12px * var(--corner-scale, 1));
     overflow: hidden;
     background: rgba(255, 255, 255, 0.04);
   }
@@ -1253,7 +1253,7 @@
     justify-content: center;
     gap: 8px;
     padding: 14px 10px;
-    border-radius: 16px;
+    border-radius: calc(16px * var(--corner-scale, 1));
     overflow: hidden;
     background:
       linear-gradient(155deg, color-mix(in srgb, var(--ring-color) 22%, transparent) 0%, rgba(255, 255, 255, 0.04) 70%);
@@ -1363,7 +1363,7 @@
     align-items: center;
     gap: 14px;
     padding: 14px 16px;
-    border-radius: 18px;
+    border-radius: calc(18px * var(--corner-scale, 1));
     background: linear-gradient(120deg, color-mix(in srgb, var(--fact-color) 22%, transparent) 0%, rgba(255, 255, 255, 0.04) 80%);
     border: 1px solid color-mix(in srgb, var(--fact-color) 30%, rgba(255, 255, 255, 0.08));
     text-align: left;
@@ -1433,7 +1433,7 @@
     flex-direction: column;
     gap: 4px;
     padding: 14px 9px;
-    border-radius: 14px;
+    border-radius: calc(14px * var(--corner-scale, 1));
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.1);
     font-size: 11px;

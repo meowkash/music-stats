@@ -116,17 +116,31 @@ function snapshot(button: HTMLElement, rect: PillPose['rect']): HTMLElement {
   return copy;
 }
 
+// Corner curvature of the lens's own clip paths, matched to the CSS outline
+// (Layout.astro): capsules there take corner-shape: superellipse(1.15), and
+// each corner here is the cubic whose midpoint lands on that superellipse.
+// A circular arc (0.5523) where the browser still draws round corners.
+const CAPSULE_EXPONENT = 2 ** 1.15;
+const CORNER_HANDLE =
+  typeof CSS !== 'undefined' && CSS.supports?.('corner-shape', 'superellipse(2)')
+    ? (2 ** (-1 / CAPSULE_EXPONENT) - 0.5) / 0.375
+    : 0.5523;
+
 /** A stadium (or rounded rect) as path data, with independent x/y radii so a
- *  jelly-stretched lens keeps its exact outline. */
+ *  jelly-stretched lens keeps its exact outline; corners curve continuously,
+ *  as iOS draws them. */
 function roundedRect(l: number, t: number, w: number, h: number, rx: number, ry: number): string {
   const r = l + w;
   const b = t + h;
   const f = (n: number) => n.toFixed(1);
+  // Control points sit this far in from each corner's tangent points.
+  const hx = rx * CORNER_HANDLE;
+  const hy = ry * CORNER_HANDLE;
   return (
-    `M${f(l + rx)} ${f(t)}H${f(r - rx)}A${f(rx)} ${f(ry)} 0 0 1 ${f(r)} ${f(t + ry)}` +
-    `V${f(b - ry)}A${f(rx)} ${f(ry)} 0 0 1 ${f(r - rx)} ${f(b)}` +
-    `H${f(l + rx)}A${f(rx)} ${f(ry)} 0 0 1 ${f(l)} ${f(b - ry)}` +
-    `V${f(t + ry)}A${f(rx)} ${f(ry)} 0 0 1 ${f(l + rx)} ${f(t)}Z`
+    `M${f(l + rx)} ${f(t)}H${f(r - rx)}C${f(r - rx + hx)} ${f(t)} ${f(r)} ${f(t + ry - hy)} ${f(r)} ${f(t + ry)}` +
+    `V${f(b - ry)}C${f(r)} ${f(b - ry + hy)} ${f(r - rx + hx)} ${f(b)} ${f(r - rx)} ${f(b)}` +
+    `H${f(l + rx)}C${f(l + rx - hx)} ${f(b)} ${f(l)} ${f(b - ry + hy)} ${f(l)} ${f(b - ry)}` +
+    `V${f(t + ry)}C${f(l)} ${f(t + ry - hy)} ${f(l + rx - hx)} ${f(t)} ${f(l + rx)} ${f(t)}Z`
   );
 }
 
@@ -225,7 +239,6 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
     if (next === glint) return;
     glint = next;
     host.style.setProperty('--lens-glint-x', next);
-    host.style.setProperty('--lens-glint-angle', `${(200 + offset * 2).toFixed(1)}deg`);
   }
 
   function paintShape(w: number, h: number) {
@@ -333,7 +346,6 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
     if (glint) {
       glint = '';
       host.style.removeProperty('--lens-glint-x');
-      host.style.removeProperty('--lens-glint-angle');
     }
   }
 
