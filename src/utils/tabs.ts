@@ -5,10 +5,8 @@ import { colorToCss, parseColor, type Rgba } from './motion';
 export const TAB_ORDER = ['dashboard', 'rankings', 'recents', 'statistics'] as const;
 export type TabId = (typeof TAB_ORDER)[number];
 const topColors = TAB_ORDER.map(tab => parseColor(themeColorForTab(tab))!);
-const bottomColors = TAB_ORDER.map(tab => parseColor(themeBottomColorForTab(tab))!);
 const topMix: Rgba = { r: 0, g: 0, b: 0, a: 0 };
-const bottomMix: Rgba = { r: 0, g: 0, b: 0, a: 0 };
-let lastTop = '', lastBottom = '';
+let lastTop = '';
 
 function mixInto(colors: Rgba[], weights: readonly number[], total: number, out: Rgba): Rgba {
   out.r = out.g = out.b = out.a = 0;
@@ -22,22 +20,31 @@ function mixInto(colors: Rgba[], weights: readonly number[], total: number, out:
   return out;
 }
 
-/** Browser chrome, safe-area shield and page base follow the same per-tab
- *  weights as the wash, so a direct A→B glide never passes through the tabs
- *  in between. */
+/** The variable lives on the shield itself: written on <html> it is
+ *  inherited by every element, so each frame of a glide restyled the page. */
+function setStatusBarColor(color: string): void {
+  if (color === lastTop) return;
+  lastTop = color;
+  document.querySelector<HTMLElement>('.status-bar-shield')?.style.setProperty('--status-bar-color', color);
+}
+
+/** The safe-area shield follows the same per-tab weights as the wash, so a
+ *  direct A→B glide never passes through the tabs in between. Called every
+ *  frame, so it touches nothing but that one strip. */
 export function applyThemeWeights(weights: readonly number[]): void {
   const total = weights.reduce((sum, w) => sum + w, 0) || 1;
-  const top = colorToCss(mixInto(topColors, weights, total, topMix));
-  const bottom = colorToCss(mixInto(bottomColors, weights, total, bottomMix));
-  if (top !== lastTop) {
-    lastTop = top;
-    document.documentElement.style.setProperty('--status-bar-color', top);
-    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = top;
+  setStatusBarColor(colorToCss(mixInto(topColors, weights, total, topMix)));
+}
+
+/** Browser chrome and the page base move once per decision, not per frame:
+ *  theme-color repaints the browser UI and the root background repaints the
+ *  whole viewport. The root background's own CSS transition carries the fade. */
+export function applyChromeColors(tab: string): void {
+  const topColor = themeColorForTab(tab);
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    if (meta.content !== topColor) meta.content = topColor;
   }
-  if (bottom !== lastBottom) {
-    lastBottom = bottom;
-    document.documentElement.style.backgroundColor = bottom;
-  }
+  document.documentElement.style.backgroundColor = themeBottomColorForTab(tab);
 }
 
 export function applyPanelStates(tab: string): void {
@@ -73,14 +80,8 @@ export function getActiveTab(): TabId {
 // Points theme-color at the top of the active tab's wash so the PWA title bar
 // and mobile status bar blend into the page instead of framing it.
 export function applyThemeColor(tab: string): void {
-  const topColor = themeColorForTab(tab);
-  const bottomColor = themeBottomColorForTab(tab);
-  
-  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-    if (meta.content !== topColor) meta.content = topColor;
-  }
-  document.documentElement.style.backgroundColor = bottomColor;
-  document.documentElement.style.setProperty('--status-bar-color', topColor);
+  applyChromeColors(tab);
+  setStatusBarColor(themeColorForTab(tab));
 }
 
 /** Drives the ambient background gradient crossfade. */

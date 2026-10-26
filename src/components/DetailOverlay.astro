@@ -91,7 +91,9 @@
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
-    overscroll-behavior-y: none;
+    /* Native bounce at the ends without chaining to the page; a pull down
+       from the top is claimed by the dismiss drag (overlayGestures.ts). */
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     background: var(--overlay-bg-bottom, var(--surface-elevated));
   }
@@ -182,8 +184,8 @@
 
   /* .nav-circle-btn is the shared sheet control defined in Layout.astro. */
   .nav-circle-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
   }
 
   .overlay-header {

@@ -4,36 +4,63 @@ import { ENGAGE_DISTANCE, isAxisClaimed } from './gesture';
 import {
   colorToCss,
   createCssPaintCache,
+  createSpringValue,
   parseColor,
-  rafTween,
+  SPRING_PRESS,
+  SPRING_FILL,
+  SPRING_LEAD,
+  SPRING_RELEASE,
+  SPRING_SNAP,
+  SPRING_TRAIL,
+  springTween,
   withAlpha,
   type Rgba,
+  type SpringParams,
+  type SpringStop,
 } from './motion';
 import { createLiquidLens, NAV_LENS } from './liquidGlass';
 import { createPillTrack } from './slidingHighlight';
 import { TAB_ACCENTS, TAB_IDLE_COLOR } from './tabTheme';
-import { TAB_ORDER, applyThemeWeights, getActiveTab, navigateToTab, type TabId } from './tabs';
+import { TAB_ORDER, applyChromeColors, applyThemeWeights, getActiveTab, navigateToTab, type TabId } from './tabs';
 
-/** While held, the pill lifts into a lens that spills past the bar's edges. */
-const DRAG_SCALE = 1.8;
-/** Time for the pill to lift into the lens once a drag engages. Matches
- *  --duration-normal, the fade the lens layers use on the way in. */
-const LIFT_MS = 240;
-/** Extra lens swell at the midpoint of a tap-driven glide. */
-const TAP_LENS_SWELL = 0.4;
-/** Glide progress at which the lens starts crossfading back into the pill. */
-const LENS_HANDBACK = 0.45;
-/** Page glide once a tab is chosen; independent of the lens settle. */
-const PAGE_MS = 260;
+// Proportions and timing follow iOS 26's Liquid Glass tab bars, measured from
+// 60fps recordings. A tap sends the pill across as glass at its own height:
+// it stretches, bends what is under its edges, clears its fill mid-hop and
+// fills back in on landing. Only a press held ~150ms (or a drag) lifts it into
+// a magnifying lens ~1.26x the pill along the bar that just clears the bar
+// across it, and swells the whole bar 4.3%.
+const LIFT_ALONG = 1.26;
+const LIFT_ACROSS = 1.42;
+const BAR_SWELL = 0.043;
+/** How close (in tabs) the back edge must be before the pill fills in again. */
+const GATHERED = 0.35;
+/** A quick hop bends what is under its edges more gently than a held lens
+ *  (iOS): this share of the lens's refraction and rim shows while it glides. */
+const TAP_REFRACTION = 0.45;
+/** A press held this long without lifting off becomes a lens. */
+const HOLD_MS = 150;
+/** How far a travelling pill's fill clears: iOS keeps most of it, so a
+ *  hop reads as the dark pill bending at its edges rather than as glass. */
+const GLASS_CLEAR = 0.5;
+/** Most a drag can pull the lens past the first or last tab, in tabs. */
+const RUBBER_LIMIT = 0.35;
+/** The lens starts settling back into the pill this close to its tab. */
+const DEFLATE_WITHIN = 0.12;
+/** 0..1: how strongly a dragged lens dwells on tab centres. */
+const MAGNET = 0.5;
+/** The page follows the decision on a heavier, bounce-free spring. */
+const SPRING_PAGE: SpringParams = { response: 0.36, dampingRatio: 0.94 };
 /** Distance over which an off-centre grab is pulled onto the finger. */
 const GRAB_DECAY_DISTANCE = 140;
 const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
 
-// Owns every nav interaction (taps, pill drag, panel deck). Two motions run
-// independently: the control (pill/lens, tab colours) follows the finger, and
-// the page (deck, wash, browser chrome) moves only once a tab is chosen — on
-// release, tap or wheel — straight from what is on screen to that tab. Scrubbing
-// the lens across the bar therefore never reveals, paints or loads a panel.
+// Owns every nav interaction (taps, pill drag, panel deck). The control is
+// three springs on one frame loop — where the pill is, how far it has lifted
+// into a lens, and how much the bar has swelled — so touch-down answers at
+// once, the selection snaps across with a little bounce, and the lens settles
+// back into the pill as it arrives. The page (deck, wash, browser chrome)
+// moves only once a tab is chosen, so scrubbing the lens across the bar never
+// reveals, paints or loads a panel.
 export function initNavBar(): void {
   const bar = document.querySelector('.main-tab-bar') as HTMLElement | null;
   const navZone = document.querySelector('.bottom-nav-container') as HTMLElement | null;
@@ -42,6 +69,7 @@ export function initNavBar(): void {
   if (!bar || !navZone || !highlight || buttons.length === 0) return;
   const barEl = bar;
   const navZoneEl = navZone;
+  const pillEl = highlight;
 
   const deck = createDeckSlider();
   const paint = createCssPaintCache();
@@ -111,7 +139,11 @@ export function initNavBar(): void {
     accentFor: (btn) => accentByBtn.get(btn) ?? null,
   });
 
-  const lens = createLiquidLens({ host: highlight, buttons, rectAt: track.rectAt, profile: NAV_LENS });
+  // Under the lens every tab shows its selected look; outside it, none do.
+  const lens = createLiquidLens({
+    host: highlight, buttons, rectAt: track.rectAt, profile: NAV_LENS,
+    copyColor: (i) => accentCss[i],
+  });
 
   const oneHot = (index: number): number[] => TAB_ORDER.map((_, i) => (i === index ? 1 : 0));
 
@@ -121,26 +153,32 @@ export function initNavBar(): void {
   let pageTarget = activeIndex;
   /** Wash and chrome weights currently on screen, one per tab. */
   let pageWeights = oneHot(activeIndex);
-  let fraction = activeIndex;
-  /** Scale last painted, so a re-grab mid-settle lifts from where it is. */
-  let currentScale = 1;
-  let cancelControl: (() => void) | null = null;
-  let cancelPage: (() => void) | null = null;
-  /** Finger down on the nav, and whether it has claimed the gesture. */
-  let dragging = false;
+  /** The pill's leading and trailing edges (tab index; the trail chases the
+   *  lead, so a hop stretches the pill), glass (0..1: edge refraction and
+   *  the selected look under the pill, on for any glide), lens lift (0..1:
+   *  size and magnification, only when held) and bar swell (0..1). */
+  const pos = createSpringValue(activeIndex, SPRING_SNAP, 0.002);
+  const trail = createSpringValue(activeIndex, SPRING_TRAIL, 0.002);
+  const glass = createSpringValue(0, SPRING_PRESS, 0.002);
+  const lift = createSpringValue(0, SPRING_PRESS, 0.002);
+  const swell = createSpringValue(0, SPRING_PRESS, 0.002);
+  let controlRaf = 0;
+  let cancelPage: SpringStop | null = null;
+  /** Pages the deck's running glide travels, to express its speed in pages. */
+  let pageTravel = 1;
+  /** Finger down on the nav, and whether a drag has claimed it. */
+  let pressed = false;
   let engaged = false;
 
   const paintedButtons = buttons.map(() => -1);
   const lastButtonColor = buttons.map(() => '');
 
-  function paintButtons(value: number) {
-    // Only the two nearest tabs can be partially active; skip the rest.
-    const lo = Math.max(0, Math.floor(value) - 1);
-    const hi = Math.min(buttons.length - 1, Math.ceil(value) + 1);
-
+  /** Tab colours follow the pill, and drain away while the lens is lifted:
+   *  then the selected look shows only through the glass. */
+  function paintButtons(value: number, strength: number) {
     for (let i = 0; i < buttons.length; i++) {
-      const activeness =
-        i < lo || i > hi ? 0 : Math.round(Math.max(0, 1 - Math.abs(value - i)) * 24) / 24;
+      const near = Math.max(0, 1 - Math.abs(value - i)) * (1 - strength);
+      const activeness = Math.round(near * 24) / 24;
       if (activeness === paintedButtons[i]) continue;
       paintedButtons[i] = activeness;
 
@@ -154,7 +192,6 @@ export function initNavBar(): void {
       if (css === lastButtonColor[i]) continue;
       lastButtonColor[i] = css;
       buttons[i].style.color = css;
-      lens.setColor(i, css);
     }
   }
 
@@ -166,18 +203,45 @@ export function initNavBar(): void {
     }
   }
 
-  /** Lens strength 0..1 from the painted scale: a resting pill refracts nothing. */
-  function lensStrength(scale: number) {
-    return Math.min(Math.max((scale - 1) / (DRAG_SCALE - 1), 0), 1);
+  let paintedSwell = 0;
+  function paintSwell(value: number) {
+    const scale = Math.round((1 + BAR_SWELL * value) * 10000) / 10000;
+    if (scale === paintedSwell) return;
+    paintedSwell = scale;
+    barEl.style.transform = scale === 1 ? '' : `scale(${scale})`;
   }
 
-  // The control alone: cheap enough to run on every touchmove.
-  function renderControl(value: number, scale = 1) {
-    fraction = value;
-    currentScale = scale;
-    const pose = track.render(value, { scale, stretch: lens.stretchFor(track.centerAt(value)) });
-    paintButtons(value);
-    if (pose) lens.paint(pose, lensStrength(scale));
+  let paintedFace = '';
+  // The control alone: cheap enough to run every frame of a drag.
+  function renderControl() {
+    const value = (pos.value + trail.value) / 2;
+    // A lift that overshoots reads as a bubble; one that dips below zero on
+    // release briefly tucks the pill in, as the bar does.
+    const l = Math.max(lift.value, -0.08);
+    const lifted = Math.min(Math.max(l, 0), 1);
+    const strength = Math.min(Math.max(Math.max(glass.value, lifted), 0), 1);
+    // A dragged lens stretches with its speed; a hop stretches by its edges.
+    const speedStretch = lens.stretchFor(track.centerAt(value));
+    // A lifted lens stays inside the bar at the first and last tab (the swell
+    // scales the bar and the lens together, so the bar's own box is enough).
+    const extent = isVerticalNav() ? barEl.clientHeight : barEl.clientWidth;
+    const pose = track.renderSpan(trail.value, pos.value, {
+      scale: 1 + (LIFT_ALONG - 1) * l,
+      scaleAcross: 1 + (LIFT_ACROSS - 1) * l,
+      stretch: engaged ? speedStretch * strength : 0,
+      bounds: lifted > 0 ? { min: 0, max: extent } : undefined,
+    });
+    paintButtons(value, strength);
+    const travelling = Math.min(Math.max(glass.value, 0), 1);
+    if (pose) lens.paint(pose, Math.max(lifted, travelling * TAP_REFRACTION), lifted);
+    // The dark fill clears as the pill turns to glass, entirely once lifted.
+    const face = (1 - Math.max(lifted, Math.min(Math.max(glass.value, 0), 1) * GLASS_CLEAR)).toFixed(2);
+    if (face !== paintedFace) {
+      paintedFace = face;
+      if (face === '1.00') pillEl.style.removeProperty('--face');
+      else pillEl.style.setProperty('--face', face);
+    }
+    paintSwell(swell.value);
   }
 
   function paintPage(weights: readonly number[]) {
@@ -189,60 +253,71 @@ export function initNavBar(): void {
   // Tab colours stay painted until both motions rest, so they never flash
   // back to the old tab's accent while the page is still on its way.
   function settleIfIdle() {
-    if (cancelControl || cancelPage || engaged) return;
+    if (controlRaf || cancelPage || pressed) return;
     barEl.classList.remove('nav-animating');
     clearButtonPaint();
     paint.reset();
   }
 
-  function finishControl(index: number) {
-    fraction = index;
-    currentScale = 1;
-    barEl.classList.remove('nav-lens');
+  function finishControl() {
+    controlRaf = 0;
+    lastTick = 0;
     lens.clear();
-    track.render(index);
+    track.render(Math.round(pos.value));
+    trail.jump(pos.value);
+    paintSwell(0);
     settleIfIdle();
   }
 
-  function controlTo(index: number, flingVelocity = 0) {
-    cancelControl?.();
-    cancelControl = null;
-    if (reducedMotion.matches) { renderControl(index); finishControl(index); return; }
+  let lastTick = 0;
+  function tick(now: number) {
+    const prev = lastTick && now - lastTick < 100 ? lastTick : now - 1000 / 60;
+    lastTick = now;
+    if (pendingPos !== null) flushDrag();
+    // The trailing edge is pulled after the leading one.
+    const leadMoving = pos.step(now);
+    if (engaged) trail.jump(pos.value);
+    else if (Math.abs(trail.target - pos.value) > 1e-4 || leadMoving) trail.to(pos.value, { params: SPRING_TRAIL, at: prev });
+    // Glass and lens hold while the pill travels and settle back into it as
+    // it gathers in on arrival: the front has landed and the back is close.
+    if (!pressed && Math.abs(pos.value - pos.target) < DEFLATE_WITHIN && Math.abs(trail.value - pos.target) < GATHERED) {
+      if (lift.target > 0) lift.to(0, { params: SPRING_RELEASE });
+      if (glass.target > 0) glass.to(0, { params: SPRING_FILL });
+    }
+    const moving = [leadMoving, trail.step(now), glass.step(now), lift.step(now), swell.step(now)].some(Boolean);
+    renderControl();
+    if (moving || pressed) controlRaf = requestAnimationFrame(tick);
+    else finishControl();
+  }
 
-    const from = fraction;
-    const startScale = currentScale;
-    const span = index - from;
-    const distance = Math.max(Math.abs(span), 0.35);
-    if (Math.abs(span) < 0.001 && Math.abs(startScale - 1) < 0.001) { finishControl(index); return; }
+  function runControl() {
     barEl.classList.add('nav-animating');
-    // A tap glides as a lens too: it swells mid-flight and settles back into
-    // the pill on arrival. A released drag is already a lens and just shrinks.
-    const tapSwell = startScale === 1 && span !== 0 ? TAP_LENS_SWELL : 0;
-    let lensUp = startScale > 1 || tapSwell > 0;
-    if (lensUp) barEl.classList.add('nav-lens');
+    if (!controlRaf) controlRaf = requestAnimationFrame(tick);
+  }
 
-    // A bounded settle has no long spring tail. Every interruption starts at
-    // the actual painted pose, including a tap back to the current tab.
-    const duration = Math.min(280, Math.max(160, (190 + distance * 30) / (1 + Math.abs(flingVelocity) * 0.025)));
-    cancelControl = rafTween(
-      0,
-      1,
-      duration,
-      (progress) => {
-        const swell = tapSwell * Math.sin(Math.PI * progress);
-        renderControl(from + span * progress, startScale + (1 - startScale) * progress + swell);
-        // Hand back to the pill partway in, so its face eases in over the
-        // tail of the glide instead of snapping on once the spring rests.
-        if (lensUp && progress >= LENS_HANDBACK) {
-          lensUp = false;
-          barEl.classList.remove('nav-lens');
-        }
-      },
-      () => {
-        cancelControl = null;
-        finishControl(index);
-      },
-    );
+  /** A held press or a drag: the bar swells and the pill lifts into a lens
+   *  wherever it is right now. */
+  function press() {
+    clearTimeout(holdTimer);
+    if (reducedMotion.matches || lift.target > 0) return;
+    track.measure();
+    lift.to(1, { params: SPRING_PRESS });
+    swell.to(1, { params: SPRING_PRESS });
+    runControl();
+  }
+
+  /** Snaps the selection to `index`; `velocity` is in tabs per second. */
+  function controlTo(index: number, velocity?: number) {
+    if (reducedMotion.matches) {
+      pos.jump(index); trail.jump(index); glass.jump(0); lift.jump(0); swell.jump(0);
+      renderControl(); finishControl();
+      return;
+    }
+    // Any glide crosses as glass; a lifted lens just carries on as one.
+    if (Math.abs(index - pos.value) > DEFLATE_WITHIN) glass.to(1, { params: SPRING_PRESS });
+    pos.to(index, { velocity, params: SPRING_LEAD });
+    swell.to(0, { params: SPRING_RELEASE });
+    runControl();
   }
 
   function commitPage(index: number) {
@@ -259,6 +334,8 @@ export function initNavBar(): void {
   // The page moves once per decision, straight from what is on screen.
   function pageTo(index: number) {
     if (index === pageTarget && (cancelPage || index === activeIndex)) return;
+    // Speed in pages per second, so a glide retargeted mid-flight keeps it.
+    const carried = cancelPage ? cancelPage.velocity() * pageTravel : 0;
     cancelPage?.();
     cancelPage = null;
     pageTarget = index;
@@ -266,16 +343,18 @@ export function initNavBar(): void {
 
     barEl.classList.add('nav-animating', 'nav-paging');
     beginBackgroundPaint();
-    deck?.glide(index);
+    applyChromeColors(TAB_ORDER[index]);
+    pageTravel = Math.abs(deck?.glide(index) ?? 1) || 1;
     const from = pageWeights.slice();
     const to = oneHot(index);
     const weights = from.slice();
-    cancelPage = rafTween(
+    cancelPage = springTween(
       0,
       1,
-      PAGE_MS,
       (progress) => {
-        for (let i = 0; i < weights.length; i++) weights[i] = from[i] + (to[i] - from[i]) * progress;
+        // The wash and chrome are weights: they must not overshoot.
+        const p = Math.min(Math.max(progress, 0), 1);
+        for (let i = 0; i < weights.length; i++) weights[i] = from[i] + (to[i] - from[i]) * p;
         paintPage(weights);
         deck?.setGlide(progress);
       },
@@ -283,18 +362,20 @@ export function initNavBar(): void {
         cancelPage = null;
         commitPage(index);
       },
+      // Within half a pixel of a phone-width page.
+      {
+        stiffness: (2 * Math.PI / SPRING_PAGE.response) ** 2,
+        damping: (4 * Math.PI * SPRING_PAGE.dampingRatio) / SPRING_PAGE.response,
+        velocity: carried / pageTravel,
+        restDelta: 0.0015 / pageTravel,
+      },
     );
   }
 
   function selectTab(index: number) {
     if (index < 0 || index >= buttons.length) return;
-    if (index === pageTarget && (cancelPage || cancelControl)) return;
-    if (index === activeIndex && !cancelPage && !cancelControl) {
-      track.render(index);
-      return;
-    }
     controlTo(index);
-    pageTo(index);
+    if (index !== pageTarget || (!cancelPage && index !== activeIndex)) pageTo(index);
   }
 
   track.measure();
@@ -307,19 +388,30 @@ export function initNavBar(): void {
       resizeRaf = null;
       track.measure();
       deck?.measure();
-      if (!cancelControl && !engaged) track.render(fraction);
+      if (!controlRaf) track.render(pos.value);
     });
   });
   buttons.forEach((btn) => resizeObserver.observe(btn));
 
   // ── Taps ────────────────────────────────────────────────────────────────
-  let suppressClick = false;
+  // Touch selects on touchend (below); the click that follows it is ignored,
+  // so mouse and keyboard are the only clicks that select.
+  let suppressClickUntil = 0;
+  const isTouchClick = (e: MouseEvent) => e.isTrusted && e.detail > 0 && performance.now() < suppressClickUntil;
 
   buttons.forEach((btn, index) => {
-    btn.addEventListener('click', () => {
-      if (suppressClick) return;
+    btn.addEventListener('click', (e) => {
+      if (isTouchClick(e)) return;
       selectTab(index);
     });
+  });
+
+  // While the lens glides it cuts a hole in each tab it covers, and a clipped
+  // region is not hit-testable, so a click there lands on the bar. It still
+  // means the tab under the pointer.
+  barEl.addEventListener('click', (e) => {
+    if (isTouchClick(e) || (e.target as Element).closest('.tab-btn')) return;
+    selectTab(Math.round(track.fractionAt(localPos(isVerticalNav() ? e.clientY : e.clientX))));
   });
 
   window.addEventListener('tab-navigated', (e) => {
@@ -327,16 +419,18 @@ export function initNavBar(): void {
     const index = TAB_ORDER.indexOf(tab as TabId);
     if (index === -1 || index === activeIndex) return;
 
-    cancelControl?.();
-    cancelControl = null;
+    cancelAnimationFrame(controlRaf);
+    controlRaf = 0;
     cancelPage?.();
     cancelPage = null;
     activeIndex = index;
     pageTarget = index;
     pageWeights = oneHot(index);
-    fraction = index;
-    currentScale = 1;
-    barEl.classList.remove('nav-lens', 'nav-animating', 'nav-paging');
+    pos.jump(index); trail.jump(index); glass.jump(0); lift.jump(0); swell.jump(0);
+    paintSwell(0);
+    pillEl.style.removeProperty('--face');
+    paintedFace = '';
+    barEl.classList.remove('nav-animating', 'nav-paging');
     clearBackgroundPaint();
     clearButtonPaint();
     lens.clear();
@@ -344,48 +438,18 @@ export function initNavBar(): void {
     deck?.settle(index);
   });
 
-  // ── Free-form pill drag + desktop wheel ─────────────────────────────────
+  // ── Touch: press, drag, release ─────────────────────────────────────────
   let startX = 0;
   let startY = 0;
   let lastPos = 0;
   let lastTime = 0;
   let velocity = 0;
   let grabOffset = 0;
-  let barOrigin = 0;
   let pendingPos: number | null = null;
-  let dragRafId: number | null = null;
-  let liftScale = 1;
-  let liftRafId: number | null = null;
+  /** Bar geometry from touch-down, before the swell changes its box. */
+  let barCenter = 0;
+  let barHalf = 0;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Whether the finger left the tap slop; a hold that never moves is a slow tap. */
-  let travelled = false;
-
-  // Grows the pill into the lens over LIFT_MS with a slight overshoot. Runs
-  // on its own rAF so the lift finishes even if the finger holds still.
-  function startLift() {
-    const t0 = performance.now();
-    const fromScale = currentScale;
-    const step = (now: number) => {
-      if (!engaged) {
-        liftRafId = null;
-        return;
-      }
-      const p = Math.min((now - t0) / LIFT_MS, 1);
-      // A gentle easeOutBack: decelerates into a barely-there overshoot, so
-      // the swell reads as one smooth motion rather than a pop.
-      const q = p - 1;
-      const eased = 1 + 1.6 * q * q * q + 0.6 * q * q;
-      liftScale = reducedMotion.matches ? 1 : fromScale + (DRAG_SCALE - fromScale) * eased;
-      if (pendingPos === null) renderControl(fraction, liftScale);
-      liftRafId = p < 1 ? requestAnimationFrame(step) : null;
-    };
-    liftRafId = requestAnimationFrame(step);
-  }
-
-  function stopLift() {
-    if (liftRafId !== null) cancelAnimationFrame(liftRafId);
-    liftRafId = null;
-  }
 
   const desktopLayoutQuery = window.matchMedia('(min-width: 768px)');
 
@@ -393,76 +457,85 @@ export function initNavBar(): void {
     return desktopLayoutQuery.matches;
   }
 
-  function flushDrag() {
-    dragRafId = null;
-    if (pendingPos === null) return;
-
-    const delta = pendingPos - (isVerticalNav() ? startY : startX);
-    const decay = Math.max(0, 1 - Math.abs(delta) / GRAB_DECAY_DISTANCE);
-    renderControl(track.fractionAt(pendingPos - barOrigin + grabOffset * decay), liftScale);
-    pendingPos = null;
+  function measureBar() {
+    const rect = barEl.getBoundingClientRect();
+    const vertical = isVerticalNav();
+    const scale = 1 + BAR_SWELL * swell.value;
+    barCenter = vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
+    barHalf = (vertical ? rect.height : rect.width) / scale / 2;
   }
 
-  function cancelPendingDrag(flush = false) {
-    if (dragRafId !== null) {
-      cancelAnimationFrame(dragRafId);
-      dragRafId = null;
-    }
-    if (flush && pendingPos !== null) flushDrag();
-    else pendingPos = null;
+  /** A client coordinate along the bar, in the track's (unswollen) space. */
+  function localPos(client: number): number {
+    if (!controlRaf || !barHalf) measureBar();
+    const scale = 1 + BAR_SWELL * swell.value;
+    const border = isVerticalNav() ? barEl.clientTop : barEl.clientLeft;
+    return (client - barCenter) / scale + barHalf - border;
+  }
+
+  /** Dwells on tab centres and moves quickly between them, so a drag
+   *  settles into each tab it passes rather than sliding through. */
+  function magnetise(value: number): number {
+    return value - (MAGNET / (2 * Math.PI)) * Math.sin(2 * Math.PI * value);
+  }
+
+  /** Past the first or last tab the lens follows with growing resistance. */
+  function rubberBand(over: number): number {
+    return (RUBBER_LIMIT * over) / (over + RUBBER_LIMIT * 2);
+  }
+
+  function flushDrag() {
+    if (pendingPos === null) return;
+    const delta = pendingPos - (isVerticalNav() ? startY : startX);
+    const decay = Math.max(0, 1 - Math.abs(delta) / GRAB_DECAY_DISTANCE);
+    const at = localPos(pendingPos) + grabOffset * decay;
+    const centers = track.centers();
+    const last = buttons.length - 1;
+    const spacing = centers.length > 1 ? Math.abs(centers[1] - centers[0]) || 1 : 1;
+    let value = magnetise(track.fractionAt(at));
+    if (at < centers[0]) value = -rubberBand((centers[0] - at) / spacing);
+    else if (at > centers[last]) value = last + rubberBand((at - centers[last]) / spacing);
+    pos.jump(value);
+    trail.jump(value);
+    pendingPos = null;
   }
 
   function onTouchStart(e: TouchEvent) {
     if (isOverlayOpen() || e.touches.length !== 1) return;
-
-    dragging = true;
+    pressed = true;
     engaged = false;
-    travelled = false;
     velocity = 0;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastPos = isVerticalNav() ? startY : startX;
     lastTime = performance.now();
+    measureBar();
+    // A tap never lifts; a press held past HOLD_MS becomes a lens.
     clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => { if (dragging && !engaged) engageDrag(); }, 140);
-  }
-
-  function engageDrag() {
-    clearTimeout(holdTimer);
-    engaged = true;
-    suppressClick = true;
-    // Only the control is caught; a page already gliding to an earlier
-    // choice keeps going and lands on its own.
-    cancelControl?.(); cancelControl = null;
-    track.measure();
-    barEl.classList.add('nav-animating', 'nav-dragging', 'nav-lens');
-    liftScale = currentScale;
-    startLift();
-    const rect = barEl.getBoundingClientRect();
-    barOrigin = (isVerticalNav() ? rect.top : rect.left) + (isVerticalNav() ? barEl.clientTop : barEl.clientLeft);
-    grabOffset = track.centerAt(fraction) - ((isVerticalNav() ? startY : startX) - barOrigin);
+    holdTimer = setTimeout(() => { if (pressed) press(); }, HOLD_MS);
   }
 
   function onTouchMove(e: TouchEvent) {
-    if (!dragging) return;
+    if (!pressed) return;
 
     const clientX = e.touches[0].clientX;
     const clientY = e.touches[0].clientY;
     const dx = clientX - startX;
     const dy = clientY - startY;
     const vertical = isVerticalNav();
-    if (Math.abs(dx) >= ENGAGE_DISTANCE || Math.abs(dy) >= ENGAGE_DISTANCE) travelled = true;
 
     if (!engaged) {
       if (Math.abs(dx) < ENGAGE_DISTANCE && Math.abs(dy) < ENGAGE_DISTANCE) return;
       // Claim only when the gesture runs along the bar's own axis.
       if (!(vertical ? isAxisClaimed(dy, dx) : isAxisClaimed(dx, dy))) {
-        dragging = false;
-        clearTimeout(holdTimer);
+        release(pageTarget);
         return;
       }
-
-      engageDrag();
+      engaged = true;
+      barEl.classList.add('nav-dragging');
+      press();
+      // The lens is picked up where it is, then drawn onto the finger.
+      grabOffset = track.centerAt(pos.value) - localPos(vertical ? startY : startX);
     }
 
     e.preventDefault();
@@ -475,49 +548,48 @@ export function initNavBar(): void {
       lastPos = clientPos;
       lastTime = now;
     }
-
     pendingPos = clientPos;
-    if (dragRafId === null) dragRafId = requestAnimationFrame(flushDrag);
+  }
+
+  /** Lets go: the selection snaps to `target`, the bar deflates, and the
+   *  lens settles into the pill as it arrives. */
+  function release(target: number, tabsPerSecond?: number) {
+    clearTimeout(holdTimer);
+    pressed = false;
+    engaged = false;
+    barEl.classList.remove('nav-dragging');
+    controlTo(target, tabsPerSecond);
   }
 
   function onTouchEnd() {
-    clearTimeout(holdTimer);
-    if (!dragging) return;
-    dragging = false;
-    cancelPendingDrag(true);
-    if (!engaged) return;
-    engaged = false;
-
-    stopLift();
-    barEl.classList.remove('nav-dragging');
-    setTimeout(() => {
-      suppressClick = false;
-    }, 0);
-
+    if (!pressed) return;
+    suppressClickUntil = performance.now() + 600;
+    if (pendingPos !== null) flushDrag();
+    const vertical = isVerticalNav();
     const centers = track.centers();
     const spacing = centers.length > 1 ? Math.abs(centers[1] - centers[0]) || 1 : 1;
-    // A hold released in place picks the tab under the finger, like a tap
-    // whose click the lift suppressed.
-    const landing = travelled
-      ? fraction + (velocity * 90) / spacing
-      : track.fractionAt((isVerticalNav() ? startY : startX) - barOrigin);
-    const target = Math.min(Math.max(Math.round(landing), 0), buttons.length - 1);
-
-    // velocity is px/ms along the bar; convert to tab-index units per second.
-    // The loupe has settled on a choice: only now does the page move.
-    controlTo(target, (velocity * 1000) / spacing);
-    pageTo(target);
+    let target: number;
+    let flick: number | undefined;
+    if (engaged) {
+      // A pause before lifting leaves the last move's speed behind.
+      if (performance.now() - lastTime > 50) velocity = 0;
+      // velocity is px/ms along the bar; carry it on in tabs per second.
+      flick = (velocity * 1000) / spacing;
+      target = Math.round(pos.value + (velocity * 90) / spacing);
+    } else {
+      // A tap, quick or held, picks the tab under the finger.
+      target = Math.round(track.fractionAt(localPos(vertical ? startY : startX)));
+    }
+    target = Math.min(Math.max(target, 0), buttons.length - 1);
+    release(target, flick);
+    // The choice is made: only now does the page move.
+    if (target !== pageTarget || (!cancelPage && target !== activeIndex)) pageTo(target);
   }
 
   function onTouchCancel() {
-    clearTimeout(holdTimer);
-    const wasEngaged = engaged;
-    dragging = false; engaged = false;
-    if (!wasEngaged) return;
-    stopLift(); cancelPendingDrag();
-    barEl.classList.remove('nav-dragging');
-    suppressClick = false;
-    controlTo(pageTarget);
+    if (!pressed) return;
+    pendingPos = null;
+    release(pageTarget);
   }
 
   // Touchpad / mouse wheel over the nav — steps through tabs along whichever

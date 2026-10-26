@@ -307,6 +307,8 @@ const boot = getBootSnapshot();
   import { bindEntityClicks } from "../utils/events";
   import type { YearlyTotals } from "../types/music";
   import { getActiveTab } from "../utils/tabs";
+  import { whenIdle } from "../utils/dom";
+  import { isDisplayYear } from "../utils/displayYears";
   import { bindPagerSwipe } from "../utils/pagerSwipe";
   import { buildYearStory } from "../utils/yearBlurb";
   import { rawArtistNamesForCanonical } from "../utils/scrobbles";
@@ -684,11 +686,9 @@ const boot = getBootSnapshot();
     }
 
     function initializeCheckboxes(totals: YearlyTotals) {
+      // The chart and the year stories both draw from these years.
       const years = Object.keys(totals)
-        .filter((y) => {
-          const parsed = parseInt(y, 10);
-          return !isNaN(parsed);
-        })
+        .filter((y) => !isNaN(parseInt(y, 10)) && isDisplayYear(y))
         .sort()
         .reverse();
       const initial = Object.keys(yearColorMap).length === 0;
@@ -771,8 +771,10 @@ const boot = getBootSnapshot();
     if (getActiveTab() === "statistics") void ensureChart();
     document.getElementById('chartReloadBtn')!.addEventListener('click', () => window.location.reload());
     window.addEventListener('online', () => { if (getActiveTab() === 'statistics') void ensureChart(); });
+    // Building the chart is a long task; idle keeps it out of the frames
+    // where the nav pill and page are still settling onto Stats.
     window.addEventListener("tab-navigated", (e: Event) => {
-      if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") void ensureChart();
+      if ((e as CustomEvent<{ tab: string }>).detail.tab === "statistics") whenIdle(() => void ensureChart());
     });
 
     loadData();

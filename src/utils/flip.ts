@@ -1,9 +1,9 @@
-import { IOS_SPRING_POINTS } from './motion';
+import { SMOOTH_EASE_CSS, SMOOTH_MS } from './motion';
 
 // Lists are rebuilt via innerHTML, so rows are matched by data attribute, not node.
 // offsetTop (not getBoundingClientRect) so captures survive a scroll-height change.
 
-const EASING = `cubic-bezier(${IOS_SPRING_POINTS.join(', ')})`;
+const EASING = SMOOTH_EASE_CSS;
 
 /** Rows further than this outside the viewport are not worth animating. */
 const OFFSCREEN_SLACK_PX = 200;
@@ -45,7 +45,7 @@ export function playFlip(
   if (typeof container.animate !== 'function') return;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const { durationMs = 280, staggerMs = 10, maxStaggerMs = 140, viewport } = options;
+  const { durationMs = SMOOTH_MS, staggerMs = 10, maxStaggerMs = 140, viewport } = options;
 
   const scrollTop = viewport?.scrollTop ?? 0;
   const viewHeight = viewport?.clientHeight ?? window.innerHeight;

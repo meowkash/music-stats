@@ -59,7 +59,7 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
         document.body.dataset.activeTab = lastTab;
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta && themeColors[lastTab]) meta.content = themeColors[lastTab];
-        if (themeColors[lastTab]) document.documentElement.style.setProperty('--status-bar-color', themeColors[lastTab]);
+        if (themeColors[lastTab]) document.querySelector('.status-bar-shield')?.style.setProperty('--status-bar-color', themeColors[lastTab]);
         if (bottomColors[lastTab]) document.documentElement.style.backgroundColor = bottomColors[lastTab];
       }
     } catch (e) {
@@ -80,11 +80,8 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn === button));
       document.body.dataset.activeTab = tab;
       try { localStorage.setItem('last-music-stats-tab', tab); } catch {}
-      if (themeColors[tab]) document.documentElement.style.setProperty('--status-bar-color', themeColors[tab]);
+      if (themeColors[tab]) document.querySelector('.status-bar-shield')?.style.setProperty('--status-bar-color', themeColors[tab]);
     });
-    // The document already contains a usable snapshot; no data/module wait.
-    const splash = document.getElementById('pwa-splash-screen');
-    if (splash) { splash.style.transition = 'none'; splash.classList.add('hidden'); }
   </script>
 
   <DetailOverlay />
@@ -207,7 +204,6 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
     fetchAppJson,
   } from "../utils/dataStore";
   import { prefetchArtwork } from "../utils/artworkPrefetch";
-  import { hideSplashScreen } from "../utils/dataRefresh";
 
   let warmTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleArtworkWarm() {
@@ -224,8 +220,6 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
   window.addEventListener('data-generation-swapped', scheduleArtworkWarm);
 
   document.addEventListener("DOMContentLoaded", () => {
-    hideSplashScreen();
-
     void (async () => {
       try {
         // Phase 1 — render from whatever is already on disk. No network on

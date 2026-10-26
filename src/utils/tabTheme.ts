@@ -100,7 +100,7 @@ export function lensRefractionCss(tab: TabId): string {
   const lo = rgb(bottom);
   const hi = rgb(top);
   return [
-    `radial-gradient(ellipse closest-side at 50% 50%, rgba(${lo}, 0) 70%, rgba(${lo}, 0.03) 82%, rgba(${lo}, 0.08) 95%, rgba(${lo}, 0.05) 100%)`,
-    `linear-gradient(to bottom, rgba(${lo}, 0.06) 0%, rgba(${lo}, 0) 24%, rgba(${hi}, 0) 76%, rgba(${hi}, 0.05) 100%)`,
+    `radial-gradient(ellipse closest-side at 50% 50%, rgba(${lo}, 0) 70%, rgba(${lo}, 0.015) 82%, rgba(${lo}, 0.04) 95%, rgba(${lo}, 0.025) 100%)`,
+    `linear-gradient(to bottom, rgba(${lo}, 0.03) 0%, rgba(${lo}, 0) 24%, rgba(${hi}, 0) 76%, rgba(${hi}, 0.025) 100%)`,
   ].join(', ');
 }

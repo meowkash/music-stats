@@ -4,10 +4,12 @@ import { lensRefractionCss } from "../utils/tabTheme";
 
 // Same pattern as the wash in Layout.astro: the resting layer is chosen by
 // CSS from body[data-active-tab], and navBar.ts only writes opacity mid-drag.
-const lensStyles = TAB_ORDER.map(
-  (tab) =>
-    `.lens-refraction[data-tab="${tab}"]{background:${lensRefractionCss(tab)}}` +
-    `body[data-active-tab="${tab}"] .lens-refraction[data-tab="${tab}"]{opacity:1}`,
+// The pill's slot comes from the same attribute, so it is in place on first
+// paint rather than appearing when navBar.ts hydrates.
+const lensStyles = TAB_ORDER.map((tab, i) =>
+  `.lens-refraction[data-tab="${tab}"]{background:${lensRefractionCss(tab)}}` +
+  `body[data-active-tab="${tab}"] .lens-refraction[data-tab="${tab}"]{opacity:1}` +
+  `body[data-active-tab="${tab}"] .nav-slider-highlight{--nav-i:${i}}`,
 ).join("");
 ---
 
@@ -91,8 +93,13 @@ const lensStyles = TAB_ORDER.map(
 
 <style>
   .bottom-nav-container {
-    --nav-glass-tint: rgba(10, 10, 14, 0.34);
-    --nav-glass-blur: blur(18px) saturate(190%) brightness(0.72);
+    /* Clear glass, as iOS 26 draws it: a faint neutral lift over whatever is
+       behind (iOS lifts ~15 levels over black; this sits a touch darker) and
+       a modest blur. What shows
+       through is slightly desaturated, so the tab's wash reads as glass
+       rather than tinting the bar; the dark selected capsule reads against it. */
+    --nav-glass-tint: rgba(255, 255, 255, 0.05);
+    --nav-glass-blur: blur(12px) saturate(75%) brightness(0.85);
     position: fixed;
     bottom: calc(-1 * var(--standalone-bottom-offset, 0px));
     left: 0;
@@ -132,27 +139,30 @@ const lensStyles = TAB_ORDER.map(
     /* Capsule: the radius follows the bar height, and the 8px inset keeps the
        highlight pill concentric with it. */
     border-radius: var(--radius-pill);
-    /* Smoked glass: a low-alpha dark tint, with the backdrop itself dimmed
-       and saturated, so what is behind reads through as colour rather
-       than as a milky white sheet. */
     background: var(--nav-glass-tint);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* iOS keeps the bar's edge faint: a hairline that catches a little
+       light along the top and less along the bottom. */
+    border: 1px solid rgba(255, 255, 255, 0.07);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-      0 14px 40px rgba(0, 0, 0, 0.42),
-      0 2px 6px rgba(0, 0, 0, 0.2);
-    padding: 8px;
+      inset 0 1px 0 rgba(255, 255, 255, 0.11),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.035),
+      inset 0 0 12px rgba(255, 255, 255, 0.02),
+      0 10px 28px rgba(0, 0, 0, 0.36),
+      0 2px 6px rgba(0, 0, 0, 0.18);
+    /* A 5px inset makes the pill ~84% of the bar's height, as on iOS. */
+    padding: 5px;
     pointer-events: auto;
     position: relative;
     z-index: 1;
+    /* navBar.ts swells the whole bar about its centre while it is touched. */
+    transform-origin: 50% 50%;
     backdrop-filter: var(--nav-glass-blur);
     -webkit-backdrop-filter: var(--nav-glass-blur);
   }
 
   @supports not (backdrop-filter: blur(1px)) {
     .main-tab-bar {
-      background: rgba(14, 14, 18, 0.92);
+      background: rgba(40, 40, 44, 0.94);
     }
   }
 
@@ -160,12 +170,10 @@ const lensStyles = TAB_ORDER.map(
      glow can be interpolated together by navBar.ts during a drag. */
   .tab-btn {
     --btn-accent: var(--text-primary);
-    --btn-glow: transparent;
     background: none;
     border: none;
     outline: none;
     color: var(--text-secondary);
-    text-shadow: 0 0 10px var(--btn-glow);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -173,12 +181,10 @@ const lensStyles = TAB_ORDER.map(
     gap: 4px;
     flex: 1 1 0;
     min-width: 0;
-    height: 48px;
+    height: 52px;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    transition:
-      color var(--duration-nav) var(--ios-spring),
-      text-shadow var(--duration-nav) var(--ios-spring);
+    transition: color var(--duration-nav) var(--ios-spring);
     position: relative;
     z-index: 2;
     -webkit-tap-highlight-color: transparent;
@@ -227,7 +233,6 @@ const lensStyles = TAB_ORDER.map(
 
   .tab-btn.active {
     color: var(--btn-accent);
-    --btn-glow: var(--btn-accent-glow);
   }
 
   /* The host only carries geometry: slidingHighlight.ts pins its transition
@@ -236,28 +241,30 @@ const lensStyles = TAB_ORDER.map(
     border-radius: var(--radius-pill);
   }
 
-  /* Resting pill: a lighter glass droplet sitting inside the bar. It fades
-     out as the lens lifts and eases back in as the lens settles. */
+  /* Pre-hydration pose of the pill over tab --nav-i. Only properties that
+     track.render() writes inline, so navBar.ts takes over without a jump:
+     a 1px border and 5px padding around four equal tabs with 4px gaps. */
+  .nav-slider-highlight {
+    width: calc((100% - 22px) / 4);
+    height: 52px;
+    transform: translate3d(
+      calc(5px + var(--nav-i, 0) * (100% + 4px)),
+      calc((var(--nav-bar-height) - 54px) / 2),
+      0
+    );
+  }
+
+  /* Resting pill: a dark capsule pressed into the glass, as iOS draws the
+     selected tab; colour stays on the icon and label. Its fill clears while
+     the pill travels as glass and when it lifts (--face, written every
+     frame by navBar.ts). */
   .pill-face {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    transition: opacity var(--duration-slow) var(--ios-spring);
-    background: color-mix(
-      in srgb,
-      var(--hl-color, rgba(255, 255, 255, 0.25)) 16%,
-      rgba(255, 255, 255, 0.07)
-    );
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--hl-color, rgba(255, 255, 255, 0.35)) 28%,
-        rgba(255, 255, 255, 0.12)
-      );
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-      0 2px 12px var(--hl-glow, rgba(0, 0, 0, 0.45));
+    background: rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.22);
+    opacity: var(--face, 1);
   }
 
   .main-tab-bar.nav-dragging {
@@ -278,10 +285,10 @@ const lensStyles = TAB_ORDER.map(
     inset: -1px;
     border-radius: inherit;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--duration-normal) var(--ios-spring);
+    /* Follows the lift spring frame by frame, so glass and pill never part. */
+    opacity: var(--lens, 0);
     /* Keeps these layers rasterised while invisible, so the first frame of a
-       drag only changes opacity instead of painting gradients and masks. */
+       press only changes opacity instead of painting gradients and masks. */
     will-change: opacity;
   }
 
@@ -293,11 +300,15 @@ const lensStyles = TAB_ORDER.map(
     z-index: 0;
     overflow: hidden;
     background: rgba(255, 255, 255, 0.02);
+    /* As iOS draws a lifted lens: clear, edged by a thin dark line and dark
+       bands where it bends what lies past the bar, with only a hairline of
+       light. */
     box-shadow:
-      0 12px 30px rgba(0, 0, 0, 0.32),
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.22),
-      inset 0 2px 1.5px -1px rgba(255, 255, 255, 0.5),
-      inset 0 -2px 1.5px -1px rgba(255, 255, 255, 0.22);
+      0 4px 14px rgba(0, 0, 0, 0.2),
+      0 0 0 0.75px rgba(0, 0, 0, 0.6),
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.14),
+      inset 0 6px 6px -4px rgba(0, 0, 0, 0.45),
+      inset 0 -6px 6px -4px rgba(0, 0, 0, 0.45);
   }
 
   .nav-slider-highlight::before {
@@ -321,11 +332,11 @@ const lensStyles = TAB_ORDER.map(
     padding: 1.25px;
     background: conic-gradient(
       from var(--lens-glint-angle, 200deg),
-      rgba(255, 150, 195, 0.6),
-      rgba(255, 235, 185, 0.4),
-      rgba(160, 230, 255, 0.6),
-      rgba(195, 175, 255, 0.5),
-      rgba(255, 150, 195, 0.6)
+      rgba(255, 150, 195, 0.38),
+      rgba(255, 235, 185, 0.22),
+      rgba(130, 235, 200, 0.4),
+      rgba(150, 180, 255, 0.38),
+      rgba(255, 150, 195, 0.38)
     );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
@@ -341,32 +352,11 @@ const lensStyles = TAB_ORDER.map(
      the rim's hue slide with the lens's speed (liquidGlass.ts). */
   .nav-slider-highlight::after {
     background:
-      radial-gradient(55% 38% at var(--lens-glint-x, 50%) 0%, rgba(255, 255, 255, 0.3), transparent 72%),
-      radial-gradient(45% 30% at calc(100% - var(--lens-glint-x, 50%)) 100%, rgba(255, 255, 255, 0.14), transparent 72%);
+      radial-gradient(55% 34% at var(--lens-glint-x, 50%) 0%, rgba(255, 255, 255, 0.16), transparent 72%),
+      radial-gradient(45% 28% at calc(100% - var(--lens-glint-x, 50%)) 100%, rgba(255, 255, 255, 0.08), transparent 72%);
     box-shadow:
-      inset 7px 0 12px -8px rgba(255, 130, 175, 0.38),
-      inset -7px 0 12px -8px rgba(120, 215, 255, 0.38);
-  }
-
-  /* The face drops away quickly so the lift feels immediate; its slow
-     return is the default transition above. */
-  .main-tab-bar.nav-lens .pill-face {
-    opacity: 0;
-    transition-duration: var(--duration-normal);
-  }
-
-  .main-tab-bar.nav-lens .nav-slider-highlight::before,
-  .main-tab-bar.nav-lens .nav-slider-highlight::after,
-  .main-tab-bar.nav-lens .lens-refraction-stack {
-    opacity: 1;
-    transition-duration: var(--duration-normal);
-  }
-
-  /* Leaving lens mode crossfades on the same slow curve as the face. */
-  .nav-slider-highlight::before,
-  .nav-slider-highlight::after,
-  .lens-refraction-stack {
-    transition-duration: var(--duration-slow);
+      inset 6px 0 10px -8px rgba(255, 130, 175, 0.24),
+      inset -6px 0 10px -8px rgba(120, 215, 255, 0.24);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -445,6 +435,12 @@ const lensStyles = TAB_ORDER.map(
       font-size: 15px;
       font-weight: 500;
       display: block;
+    }
+
+    /* Sidebar: full-width 48px tabs, 8px apart, no padding. */
+    .nav-slider-highlight {
+      width: 100%;
+      transform: translate3d(0, calc(var(--nav-i, 0) * 56px), 0);
     }
   }
 </style>

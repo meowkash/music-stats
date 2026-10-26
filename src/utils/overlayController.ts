@@ -1,5 +1,6 @@
 import { onPathsUpdated, fetchEntityCatalog, getActiveManifest } from './dataStore';
 import { setOverlayOpen } from './overlayState';
+import { SMOOTH_EASE_CSS, SMOOTH_MS } from './motion';
 import type { MetaData } from '../types/music';
 import {
   getArtworkCacheSync,
@@ -308,8 +309,10 @@ export function initDetailOverlay(): void {
     resetOverlayArtworkLayers(artworkElements);
     overlayScrollContainer.scrollTop = 0;
     applyOverlayContent(payload, elements, artworkCache, overlayScrollContainer, panel);
-    const duration = reduceMotion.matches ? 0 : fromEdgeSwipe ? 220 : 270;
-    const timing: KeyframeAnimationOptions = { duration, easing: 'cubic-bezier(0.22, 0.8, 0.25, 1)', fill: 'both' };
+    // The app's spring; an edge swipe has already carried the page part of
+    // the way, so it finishes a little sooner.
+    const duration = reduceMotion.matches ? 0 : fromEdgeSwipe ? 320 : SMOOTH_MS;
+    const timing: KeyframeAnimationOptions = { duration, easing: SMOOTH_EASE_CSS, fill: 'both' };
     overlayScrollContainer.classList.add('is-sliding');
     const incoming = overlayScrollContainer.animate([
       { transform: slideTransform(direction, 'in-start'), opacity: 0 },

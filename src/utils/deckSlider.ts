@@ -16,8 +16,9 @@ export interface DeckSlider {
   begin: () => void;
   /** Starts a direct glide to `target` from whatever is on screen now. Only
    *  the panels in view and the destination move; tabs in between are never
-   *  revealed, so a long jump costs the same as a neighbouring one. */
-  glide: (target: number) => void;
+   *  revealed, so a long jump costs the same as a neighbouring one. Returns
+   *  the glide's travel in pages (every moving panel shifts by it). */
+  glide: (target: number) => number;
   /** Positions the current glide at progress 0..1. */
   setGlide: (progress: number) => void;
   /** Hands pointer-events back without dropping compositor layers. */
@@ -106,7 +107,7 @@ export function createDeckSlider(): DeckSlider | null {
       null,
     );
     const goal = panels.find((p) => p.index === target);
-    if (!goal) return;
+    if (!goal) return 0;
 
     // The destination enters from its own side, butted against whatever is
     // on screen there, unless it is already in view. Everything moves by the
@@ -129,6 +130,7 @@ export function createDeckSlider(): DeckSlider | null {
       gliding.push({ panel, from, to });
     }
     show(goal);
+    return enter;
   }
 
   function setGlide(progress: number) {

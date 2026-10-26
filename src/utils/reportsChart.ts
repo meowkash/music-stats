@@ -1,4 +1,7 @@
-import { SPRING_PAGE } from './motion';
+import { SPRING_SMOOTH } from './motion';
+
+/** Delay between neighbouring bars when a new set rises from the baseline. */
+const RISE_STAGGER_MS = 16;
 
 export interface ChartSeries {
   labels: string[];
@@ -141,6 +144,8 @@ export function createReportsChart(
   let velPrevious: number[] = [];
   let rafId = 0;
   let last = 0;
+  /** When the current rise began; 0 while bars morph in place together. */
+  let riseStart = 0;
 
   function cssSize() {
     const rect = canvas.getBoundingClientRect();
@@ -172,9 +177,15 @@ export function createReportsChart(
     rafId = 0;
     const dt = Math.min((now - last) / 1000, 1 / 30);
     last = now;
-    const { stiffness, damping } = SPRING_PAGE;
+    const { stiffness, damping } = SPRING_SMOOTH;
     let moving = false;
     for (let i = 0; i < currentH.length; i++) {
+      // A rise cascades left to right; each bar holds at the baseline until
+      // its turn, which reads as one motion travelling across the chart.
+      if (riseStart && now - riseStart < i * RISE_STAGGER_MS) {
+        moving = true;
+        continue;
+      }
       const ac = -stiffness * (currentH[i] - targetCurrent[i]) - damping * velCurrent[i];
       velCurrent[i] += ac * dt;
       currentH[i] += velCurrent[i] * dt;
@@ -187,6 +198,7 @@ export function createReportsChart(
     paint();
     if (moving) rafId = requestAnimationFrame(tick);
     else {
+      riseStart = 0;
       currentH = targetCurrent.slice();
       previousH = targetPrevious.slice();
       paint();
@@ -197,7 +209,8 @@ export function createReportsChart(
     series = next;
     size = cssSize();
     const n = next.labels.length;
-    if (!animate || currentH.length !== n) {
+    if (!animate) {
+      riseStart = 0;
       currentH = next.current.slice();
       previousH = next.previous.slice();
       targetCurrent = next.current.slice();
@@ -206,6 +219,15 @@ export function createReportsChart(
       velPrevious = Array(n).fill(0);
       paint();
       return;
+    }
+    // A different bucket count (week → month → year) has no bars to morph
+    // from, so the new ones rise from the baseline rather than snapping in.
+    if (currentH.length !== n) {
+      currentH = Array(n).fill(0);
+      previousH = Array(n).fill(0);
+      velCurrent = Array(n).fill(0);
+      velPrevious = Array(n).fill(0);
+      riseStart = performance.now();
     }
     targetCurrent = next.current.slice();
     targetPrevious = next.previous.slice();

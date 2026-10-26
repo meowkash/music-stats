@@ -165,6 +165,12 @@ export async function checkMobileMotion(browser, origin) {
     evidence.push({ shortPhone: short });
     evidence.push({ landscapePhone: landscape });
 
+    // The pill settles on a spring, so wait for it to land rather than a fixed time.
+    const settle = group => group.evaluate(el => new Promise((resolve, reject) => {
+      const give = setTimeout(() => reject(new Error(`${el.className} never settled`)), 2000);
+      const check = () => el.classList.contains('segmented-lens') || el.classList.contains('segmented-animating') ? requestAnimationFrame(check) : (clearTimeout(give), resolve());
+      check();
+    }));
     // Driven by the page's own mouse: touch sent through a second CDP session
     // left CI's headless shell dropping the click of the navbar tap after it.
     async function dragControl(selector, attr, expected) {
@@ -176,12 +182,19 @@ export async function checkMobileMotion(browser, origin) {
       assert.ok(scale > 1.1, `${selector} must lift on hold`);
       await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 }); await page.mouse.up();
       await page.waitForFunction(({ selector, attr, expected }) => document.querySelector(`${selector} > button.active, ${selector} > button.is-active`)?.getAttribute(attr) === expected, { selector, attr, expected });
-      await page.waitForTimeout(230);
-      assert.equal(await group.evaluate(el => el.classList.contains('segmented-lens')), false);
+      await settle(group);
     }
     await tab('dashboard'); await dragControl('.reports-range', 'data-range', 'year');
     await tab('recents'); await dragControl('.monthly-range', 'data-cat', 'artists');
     await tab('rankings'); await dragControl('.leaderboard-tab-group', 'data-tab', 'artists');
+    // Rankings' range chips wrap; a drag that pauses before lifting picks the
+    // chip under the finger, not one projected from the last move's speed.
+    const ranges = page.locator('.quick-ranges'), chips = ranges.locator(':scope > button');
+    const firstChip = await chips.nth(0).boundingBox(), thirdChip = await chips.nth(2).boundingBox();
+    await page.mouse.move(firstChip.x + firstChip.width / 2, firstChip.y + firstChip.height / 2); await page.mouse.down();
+    await page.mouse.move(thirdChip.x + thirdChip.width / 2, thirdChip.y + thirdChip.height / 2, { steps: 6 });
+    await page.waitForTimeout(150); await page.mouse.up(); await settle(ranges);
+    assert.equal(await ranges.locator('button.active').getAttribute('data-range'), await chips.nth(2).getAttribute('data-range'), 'A paused range drag selects the chip under the finger');
     evidence.push('Home, Recents, and Rankings selectors lift, drag, select once, and settle');
     const group = page.locator('.leaderboard-tab-group');
     await group.evaluate(el => el.addEventListener('pointerdown', event => { el.dataset.testPointer = String(event.pointerId); }, { once: true }));
@@ -189,15 +202,14 @@ export async function checkMobileMotion(browser, origin) {
     await page.mouse.move(selected.x + selected.width / 2, selected.y + selected.height / 2); await page.mouse.down();
     await page.waitForTimeout(180); await page.mouse.move(other.x + other.width / 2, other.y + other.height / 2, { steps: 6 });
     await group.dispatchEvent('pointercancel', { pointerId: Number(await group.getAttribute('data-test-pointer')), pointerType: 'mouse', isPrimary: true });
-    await page.mouse.up(); await page.waitForTimeout(230);
+    await page.mouse.up(); await settle(group);
     assert.equal(await group.locator('button.active').getAttribute('data-tab'), 'artists');
-    assert.equal(await group.evaluate(el => el.classList.contains('segmented-lens')), false);
     evidence.push('Cancelling a selector drag restores its selection and removes the lifted state');
 
     // A press held past the lift delay without moving is still a tap on what is under the finger.
     const songs = await group.locator('button').first().boundingBox();
     await page.mouse.move(songs.x + songs.width / 2, songs.y + songs.height / 2); await page.mouse.down();
-    await page.waitForTimeout(240); await page.mouse.up(); await page.waitForTimeout(230);
+    await page.waitForTimeout(240); await page.mouse.up(); await settle(group);
     assert.equal(await group.locator('button.active').getAttribute('data-tab'), await group.locator('button').first().getAttribute('data-tab'), 'A held selector tap must select its segment');
     const stats = await page.locator('.tab-btn[data-tab="statistics"]').boundingBox();
     await touch('touchstart', '.bottom-nav-container', stats.x + stats.width / 2, stats.y + stats.height / 2);
@@ -218,7 +230,7 @@ export async function checkMobileMotion(browser, origin) {
     assert.ok(settleMs < 600, `Retargeted navbar took ${settleMs}ms`);
     const from = positions.recents, to = positions.statistics;
     const pagePose = () => page.evaluate(() => ({
-      color: document.documentElement.style.getPropertyValue('--status-bar-color'),
+      color: document.querySelector('.status-bar-shield').style.getPropertyValue('--status-bar-color'),
       meta: document.querySelector('meta[name="theme-color"]').content,
       active: document.body.dataset.activeTab,
       paging: !!document.querySelector('.nav-paging'),
@@ -238,7 +250,7 @@ export async function checkMobileMotion(browser, origin) {
     for (let i = 7; i <= 8; i++) await touch('touchmove', '.bottom-nav-container', from.x + (to.x - from.x) * i / 8, from.y);
     await touch('touchend', '.bottom-nav-container', to.x, to.y);
     await page.waitForFunction(() => document.body.dataset.activeTab === 'statistics' && !document.querySelector('.nav-animating'));
-    const landed = await page.evaluate(() => ({ color: document.documentElement.style.getPropertyValue('--status-bar-color'), meta: document.querySelector('meta[name="theme-color"]').content, optics: document.querySelectorAll('.lens-optics').length, holes: [...document.querySelectorAll('.tab-btn')].filter(el => el.style.clipPath).length }));
+    const landed = await page.evaluate(() => ({ color: document.querySelector('.status-bar-shield').style.getPropertyValue('--status-bar-color'), meta: document.querySelector('meta[name="theme-color"]').content, optics: document.querySelectorAll('.lens-optics').length, holes: [...document.querySelectorAll('.tab-btn')].filter(el => el.style.clipPath).length }));
     assert.notEqual(landed.color, before.color); assert.equal(landed.meta, landed.color);
     assert.equal(landed.optics, 0); assert.equal(landed.holes, 0);
     const settledColor = await page.evaluate(() => getComputedStyle(document.querySelector('.status-bar-shield')).backgroundColor);

@@ -1,5 +1,6 @@
 import { bindWheelPan } from './wheelPan';
 import { ENGAGE_DISTANCE, FLICK_VELOCITY } from './gesture';
+import { SMOOTH_EASE_CSS } from './motion';
 
 export interface SwipeDismissOptions {
   panel: HTMLElement;
@@ -143,6 +144,9 @@ export function bindSwipeDismiss(options: SwipeDismissOptions): void {
         tracking = false;
         return;
       }
+      // A pull down from the top belongs to the sheet from its first move:
+      // let it start, and the scroller rubber-bands under the drag.
+      if (dy > 0 && e.cancelable) e.preventDefault();
       if (dy < ENGAGE_DISTANCE) return;
 
       engaged = true;
@@ -346,11 +350,11 @@ export function bindEdgeSwipeNav(options: EdgeSwipeNavOptions): void {
 
   function springCancel() {
     for (const el of contentEls) {
-      el.style.transition = `opacity 220ms cubic-bezier(0.32, 0.72, 0, 1), transform 220ms cubic-bezier(0.32, 0.72, 0, 1)`;
+      el.style.transition = `opacity 320ms ${SMOOTH_EASE_CSS}, transform 320ms ${SMOOTH_EASE_CSS}`;
       el.style.transform = 'translate3d(0, 0, 0)';
       el.style.opacity = '1';
     }
-    window.setTimeout(clearInteractive, 240);
+    window.setTimeout(clearInteractive, 340);
   }
 
   function onStart(e: TouchEvent) {

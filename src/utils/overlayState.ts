@@ -1,8 +1,8 @@
 // Body classes get this wrong twice: the recap story sets none, and classes drop
 // at the *start* of a close. So closing stays "active" for a settle window.
 
-/** Covers --duration-sheet-out (0.26s) plus a frame of slack. */
-const CLOSE_SETTLE_MS = 280;
+/** Covers --duration-sheet-out (0.34s) plus a few frames of slack. */
+const CLOSE_SETTLE_MS = 380;
 
 // Keyed, not counted: the detail overlay re-opens on every entity switch with no
 // close between, which drifted a counter up permanently and killed pull-to-refresh.

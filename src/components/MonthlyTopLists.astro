@@ -8,7 +8,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   <slot name="intro" />
   <div class="section-header shrink-0">
     <h4>Over the last month</h4>
-    <div class="monthly-range" role="group" aria-label="Category">
+    <div class="monthly-range glass-segmented" role="group" aria-label="Category">
       <div id="monthlyRangeHighlight" class="sliding-highlight monthly-range-highlight"></div>
       <button class="range-btn is-active" data-cat="tracks" type="button">Songs</button>
       <button class="range-btn" data-cat="albums" type="button">Albums</button>
@@ -69,26 +69,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     color: #fff;
   }
 
+  /* Track, pill and labels: .glass-segmented in Layout.astro. */
   .monthly-range {
-    position: relative;
-    display: flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
     flex-shrink: 0;
   }
 
-  .monthly-range-highlight {
-    border-radius: 999px;
-    /* Clears toward glass as the lens lifts (--lens, liquidGlass.ts). */
-    background: rgba(255, 255, 255, calc(0.1 - 0.08 * var(--lens, 0)));
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 2px 8px rgba(0, 0, 0, 0.25);
-  }
 
   .monthly-range .range-btn {
     position: relative;
@@ -98,7 +83,6 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     border: none;
     border-radius: 999px;
     background: none;
-    color: var(--text-muted);
     font-size: 13px;
     font-weight: 500;
     font-family: var(--font-body);
@@ -106,9 +90,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     white-space: nowrap;
   }
 
-  .monthly-range .range-btn.is-active {
-    color: #fff;
-  }
+
 
   @media (max-width: 767px) {
     .monthly-section {
@@ -137,6 +119,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
   import { createInfiniteScroll, type InfiniteScrollController } from "../utils/infiniteScroll";
   import { bindEntityClicks } from "../utils/events";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
+  import { whenIdle } from "../utils/dom";
 
   type TopCategory = "tracks" | "albums" | "artists";
 
@@ -288,6 +271,19 @@ import SwipeableDeck from "./SwipeableDeck.astro";
       }
 
       ensureActivePage();
+      // The other pages render while nothing else is happening, so the first
+      // tap on Albums or Artists slides to a finished list instead of building
+      // it in the pill's first frame.
+      prerenderPages();
+    }
+
+    function prerenderPages() {
+      const pending = CATEGORIES.find(cat => !renderedPages.has(cat));
+      if (!pending || !hasTopLists) return;
+      whenIdle(() => {
+        renderCategoryPage(pending);
+        prerenderPages();
+      });
     }
 
     function selectCategory(cat: TopCategory, animateHighlight = true) {

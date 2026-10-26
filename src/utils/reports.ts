@@ -226,3 +226,38 @@ export function buildReport(
 export function rangeNoun(range: ReportRange): string {
   return range === 'week' ? 'weeks' : range === 'month' ? 'months' : 'years';
 }
+
+// Card markup shared by the server render and Reports.astro, so the card has
+// its final shape at first paint instead of growing when the script runs.
+function deltaHTML(current: number, previous: number): string {
+  if (previous <= 0 && current <= 0) return '';
+  if (previous <= 0) return '<span class="delta-up">↑ new</span>';
+  const pct = Math.round(((current - previous) / previous) * 100);
+  if (pct === 0) return '<span>→ 0%</span>';
+  return pct > 0
+    ? `<span class="delta-up">↑ ${pct}%</span>`
+    : `<span class="delta-down">↓ ${Math.abs(pct)}%</span>`;
+}
+
+export function reportVsHTML(view: ReportView): string {
+  return `vs. ${view.previousTotal.toLocaleString()} (${view.compareLabel}) ${deltaHTML(view.currentTotal, view.previousTotal)}`;
+}
+
+export function reportLegendHTML(view: ReportView): string {
+  return `<span><i style="background:rgb(255,77,97)"></i>${view.thisLabel}</span><span><i style="background:rgb(97,23,36)"></i>${view.lastLabel}</span>`;
+}
+
+export function reportXAxisHTML(view: ReportView): string {
+  const sparse = view.buckets.length > 16;
+  return view.buckets
+    .map((b, i) => {
+      if (!sparse) return `<span>${b.label}</span>`;
+      const show = i === 0 || i === view.buckets.length - 1 || i % Math.ceil(view.buckets.length / 6) === 0;
+      return `<span>${show ? b.label : ''}</span>`;
+    })
+    .join('');
+}
+
+export function reportRankText(view: ReportView): string {
+  return `This ${view.range} ranks above ${view.percentile}% of my ${rangeNoun(view.range)}`;
+}

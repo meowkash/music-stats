@@ -1,11 +1,12 @@
 ---
 import { getBootSnapshot } from "../utils/bootSnapshot";
 import { recapThemeVars } from "../utils/recapTheme";
+import { isDisplayYear } from "../utils/displayYears";
 const { recaps } = getBootSnapshot();
 ---
 
 <div class="recaps-stories shrink-0" id="recapsCard">
-  <div class="recap-rail" id="recapYearRail">{recaps.years.map((entry, i) => <button class="recap-story" data-year={entry.year} type="button" style={`${recapThemeVars(entry.year)};--ring-index:${i}`} aria-label={`${entry.year} recap`}><span class="recap-story-ring" aria-hidden="true"><span class="recap-story-avatar">♪</span></span><span class="recap-story-year">{entry.year}</span></button>)}</div>
+  <div class="recap-rail" id="recapYearRail">{recaps.years.filter((entry) => isDisplayYear(entry.year)).map((entry, i) => <button class="recap-story" data-year={entry.year} type="button" style={`${recapThemeVars(entry.year)};--ring-index:${i}`} aria-label={`${entry.year} recap`}><span class="recap-story-ring" aria-hidden="true"><span class="recap-story-avatar">♪</span></span><span class="recap-story-year">{entry.year}</span></button>)}</div>
 </div>
 
 <style>
@@ -165,6 +166,13 @@ const { recaps } = getBootSnapshot();
     object-fit: cover;
     display: block;
     filter: brightness(1.14) saturate(1.1) contrast(1.06);
+    /* Fades in over the fallback icon once decoded, rather than popping. */
+    opacity: 0;
+    transition: opacity var(--duration-slow) var(--ios-spring);
+  }
+
+  .recap-story-photo.is-loaded {
+    opacity: 1;
   }
 
   .recap-story-avatar::after {
@@ -182,7 +190,7 @@ const { recaps } = getBootSnapshot();
     opacity: 0.92;
   }
 
-  .recap-story-avatar:has(.recap-story-photo) svg {
+  .recap-story-avatar:has(.recap-story-photo.is-loaded) svg {
     display: none;
   }
 
@@ -211,6 +219,7 @@ const { recaps } = getBootSnapshot();
   import { RECAP_OPEN_EVENT, type RecapIndexEntry } from "../utils/recapStories";
   import { escapeHTML, getArtistArtworkUrl, getArtworkFallbackIcon, loadArtworkCache } from "../utils/ui";
   import { getThumbArtworkSources } from "../utils/artwork";
+  import { isDisplayYear } from "../utils/displayYears";
 
   onReady(() => {
     const rail = document.getElementById("recapYearRail") as HTMLDivElement;
@@ -231,13 +240,16 @@ const { recaps } = getBootSnapshot();
       </button>`;
     }
 
+    // Rebuilding recreates every <img>, which re-decodes and re-fades the
+    // photos, so an unchanged rail is left alone.
+    let renderedHTML = "";
     function renderRail(entries: RecapIndexEntry[]) {
-      if (!entries.length) {
-        rail.innerHTML =
-          '<div class="no-data-message">No recaps yet — check back after a few more months of listening.</div>';
-        return;
-      }
-      rail.innerHTML = entries.map((entry, i) => cardHTML(entry, i)).join("");
+      const html = entries.length
+        ? entries.map((entry, i) => cardHTML(entry, i)).join("")
+        : '<div class="no-data-message">No recaps yet — check back after a few more months of listening.</div>';
+      if (html === renderedHTML) return;
+      renderedHTML = html;
+      rail.innerHTML = html;
     }
 
     rail.addEventListener("click", (event) => {
@@ -247,6 +259,15 @@ const { recaps } = getBootSnapshot();
         new CustomEvent(RECAP_OPEN_EVENT, { detail: { year: Number(card.dataset.year) } }),
       );
     });
+
+    rail.addEventListener(
+      "load",
+      (event) => {
+        const img = event.target;
+        if (img instanceof HTMLImageElement && img.classList.contains("recap-story-photo")) img.classList.add("is-loaded");
+      },
+      true,
+    );
 
     rail.addEventListener(
       "error",
@@ -261,15 +282,17 @@ const { recaps } = getBootSnapshot();
     async function load() {
       try {
         const { years } = await fetchAppJson<{ years: RecapIndexEntry[] }>("/data/recaps.json");
-        renderRail(years ?? []);
+        renderRail((years ?? []).filter((entry) => isDisplayYear(entry.year)));
       } catch (err) {
         console.error("Failed to load recaps:", err);
+        renderedHTML = "";
         rail.innerHTML = '<div class="no-data-message">Failed to load recaps</div>';
       }
     }
 
-    load();
-    void loadArtworkCache().then(() => load()).catch(() => {});
+    // The server-rendered rail stands until photos can be resolved, so it is
+    // replaced once with the finished cards rather than twice.
+    void loadArtworkCache().catch(() => {}).then(() => load());
     onPathsUpdated(["/data/recaps.json", "/data/artwork.json"], () => load());
   });
 </script>

@@ -1,64 +1,56 @@
 export type Easing = (t: number) => number;
 
-// Smooth decelerate without the expo-out stall. Matches CSS `--ios-spring`.
-// Ease-out-expo (0.16, 1, 0.3, 1) spends too long in the last 10% and reads as lag.
-export const IOS_SPRING_POINTS = [0.22, 1, 0.36, 1] as const;
+// The app's one motion: a near-critically damped spring. It leaves rest
+// gently, so nothing lurches on its first frame (an ease-out covers a quarter
+// of the distance there and reads as a jump), is visibly moving within two
+// frames, and lands softly with no visible bounce (0.15% overshoot). JS springs,
+// CSS transitions (--ios-spring) and WAAPI all share it: tune the feel here.
+export const SMOOTH_RESPONSE = 0.46;
+export const SMOOTH_DAMPING_RATIO = 0.9;
+const OMEGA = (2 * Math.PI) / SMOOTH_RESPONSE;
+const OMEGA_D = OMEGA * Math.sqrt(1 - SMOOTH_DAMPING_RATIO ** 2);
+export const SPRING_SMOOTH = {
+  stiffness: OMEGA ** 2,
+  damping: 2 * SMOOTH_DAMPING_RATIO * OMEGA,
+} as const;
 
-/** iOS-like page spring: almost critically damped, slight settle, no bounce. */
-export const SPRING_PAGE = { stiffness: 340, damping: 36 } as const;
-/** Horizontal pagers (rankings, recents) — stiffer so a page-width fling doesn't crawl. */
-export const SPRING_PAGER = { stiffness: 820, damping: 52 } as const;
-/** Nav pill / tab index — a touch snappier than a full-page slide. */
-export const SPRING_NAV = { stiffness: 420, damping: 38 } as const;
-
-function bezierAxis(t: number, p1: number, p2: number): number {
-  const inv = 1 - t;
-  return 3 * inv * inv * t * p1 + 3 * inv * t * t * p2 + t * t * t;
+/** Step response of SPRING_SMOOTH from rest, `seconds` after it starts. */
+function smoothStep(seconds: number): number {
+  const decay = Math.exp(-SMOOTH_DAMPING_RATIO * OMEGA * seconds);
+  return 1 - decay * (Math.cos(OMEGA_D * seconds) + ((SMOOTH_DAMPING_RATIO * OMEGA) / OMEGA_D) * Math.sin(OMEGA_D * seconds));
 }
 
-/** Evaluates a CSS cubic-bezier timing function at progress `t`. */
-export function cubicBezier(x1: number, y1: number, x2: number, y2: number): Easing {
-  return (t: number) => {
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-
-    // Solve x(u) = t for u, then evaluate y(u).
-    let lo = 0;
-    let hi = 1;
-    let u = t;
-    for (let i = 0; i < 20; i++) {
-      const x = bezierAxis(u, x1, x2);
-      if (Math.abs(x - t) < 1e-4) break;
-      if (x < t) lo = u;
-      else hi = u;
-      u = (lo + hi) / 2;
-    }
-    return bezierAxis(u, y1, y2);
-  };
-}
-
-/** Precomputed iOS-spring samples — avoids solving the cubic every rAF tick. */
-const EASE_LUT_SIZE = 128;
-const EASE_LUT = (() => {
-  const solve = cubicBezier(...IOS_SPRING_POINTS);
-  const table = new Float64Array(EASE_LUT_SIZE + 1);
-  for (let i = 0; i <= EASE_LUT_SIZE; i++) {
-    table[i] = solve(i / EASE_LUT_SIZE);
+/** How long the spring takes to settle within 0.2%: the CSS duration that
+ *  reproduces it exactly (--duration-smooth). Derived, so tuning the spring
+ *  above keeps CSS in step. */
+export const SMOOTH_MS = (() => {
+  let settledSince = 0;
+  for (let ms = 0; ms < 3000; ms++) {
+    if (Math.abs(1 - smoothStep(ms / 1000)) > 0.002) settledSince = ms + 1;
+    else if (ms - settledSince > 300) break;
   }
-  return table;
+  return settledSince;
 })();
 
-export const easeIos: Easing = (t: number) => {
+/** SPRING_SMOOTH as a 0..1 easing over SMOOTH_MS. */
+export const easeSmooth: Easing = (t) => {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
-  const scaled = t * EASE_LUT_SIZE;
-  const i = scaled | 0;
-  const frac = scaled - i;
-  return EASE_LUT[i] + (EASE_LUT[i + 1] - EASE_LUT[i]) * frac;
+  return smoothStep((t * SMOOTH_MS) / 1000) / smoothStep(SMOOTH_MS / 1000);
 };
 
-/** Decelerate into the target without crossing it. */
-export const easeOutCubic: Easing = (t) => 1 - (1 - t) ** 3;
+/** easeSmooth for CSS: sampled densely where it curves, sparsely in the tail. */
+export const SMOOTH_EASE_LINEAR = `linear(${[0, 0.02, 0.05, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.36, 0.43, 0.5, 0.6, 0.72, 0.86, 1]
+  .map((t) => `${easeSmooth(t).toFixed(4)} ${(t * 100).toFixed(0)}%`)
+  .join(', ')})`;
+/** Closest cubic-bezier to easeSmooth (0.6% RMS) for engines without linear(). */
+export const SMOOTH_EASE_FALLBACK = 'cubic-bezier(0.3, 0.3, 0.25, 1)';
+
+/** The easing string for transitions and WAAPI written from script. */
+export const SMOOTH_EASE_CSS =
+  typeof CSS !== 'undefined' && CSS.supports?.('transition-timing-function', 'linear(0, 1)')
+    ? SMOOTH_EASE_LINEAR
+    : SMOOTH_EASE_FALLBACK;
 
 export function rafTween(
   from: number,
@@ -66,7 +58,7 @@ export function rafTween(
   durationMs: number,
   onUpdate: (value: number) => void,
   onComplete?: () => void,
-  easing: Easing = easeIos,
+  easing: Easing = easeSmooth,
 ): () => void {
   if (durationMs <= 0 || from === to) {
     onUpdate(to);
@@ -108,50 +100,77 @@ export interface SpringOptions {
   damping?: number;
   /** Units per second. Gesture flings should pass their last velocity here. */
   velocity?: number;
+  /** Distance from the target that counts as arrived, in the value's units. */
   restDelta?: number;
-  restSpeed?: number;
 }
 
-// Critically-damped-ish Hookean spring. Duration-based tweens fight the finger
-// on interrupt; this continues from wherever the gesture left the value.
+/** Stops a spring; `velocity()` is its speed right now, in units per second,
+ *  so whatever replaces it can carry the motion on instead of restarting. */
+export type SpringStop = (() => void) & { velocity: () => number };
+
+// Closed form rather than per-frame integration: the pose depends only on the
+// time since the start, so it matches the CSS curve exactly and a slow frame
+// never slows the motion down. Interrupting it hands its velocity on.
 export function springTween(
   from: number,
   to: number,
   onUpdate: (value: number) => void,
   onComplete?: () => void,
   options: SpringOptions = {},
-): () => void {
-  const stiffness = options.stiffness ?? SPRING_PAGE.stiffness;
-  const damping = options.damping ?? SPRING_PAGE.damping;
+): SpringStop {
+  const stiffness = options.stiffness ?? SPRING_SMOOTH.stiffness;
+  const damping = options.damping ?? SPRING_SMOOTH.damping;
   const restDelta = options.restDelta ?? Math.max(0.001, Math.abs(to - from) * 0.001);
-  const restSpeed = options.restSpeed ?? 0.15;
-  let x = from;
-  let v = options.velocity ?? 0;
+  const omega = Math.sqrt(stiffness);
+  const zeta = damping / (2 * omega);
+  const x0 = from - to;
+  const v0 = options.velocity ?? 0;
+  const start = performance.now();
   let cancelled = false;
   let rafId = 0;
-  let last = performance.now();
 
-  if (from === to && Math.abs(v) < restSpeed) {
+  /** [offset from target, velocity] at `t` seconds. */
+  function state(t: number): [number, number] {
+    if (zeta < 1) {
+      const wd = omega * Math.sqrt(1 - zeta * zeta);
+      const a = x0;
+      const b = (v0 + zeta * omega * x0) / wd;
+      const e = Math.exp(-zeta * omega * t);
+      const cos = Math.cos(wd * t);
+      const sin = Math.sin(wd * t);
+      return [e * (a * cos + b * sin), e * ((b * wd - zeta * omega * a) * cos - (a * wd + zeta * omega * b) * sin)];
+    }
+    // Critically damped (over-damping is treated as critical: same rest, no ring).
+    const b = v0 + omega * x0;
+    const e = Math.exp(-omega * t);
+    return [e * (x0 + b * t), e * (b - omega * (x0 + b * t))];
+  }
+
+  const stop = (() => {
+    cancelled = true;
+    cancelAnimationFrame(rafId);
+  }) as SpringStop;
+  stop.velocity = () => (cancelled ? 0 : state((performance.now() - start) / 1000)[1]);
+
+  if (Math.abs(x0) < restDelta && Math.abs(v0) * 0.05 < restDelta) {
     onUpdate(to);
     onComplete?.();
-    return () => {};
+    cancelled = true;
+    return stop;
   }
 
   const tick = (now: number) => {
     if (cancelled) return;
-    const dt = Math.min((now - last) / 1000, 1 / 30);
-    last = now;
-    const accel = -stiffness * (x - to) - damping * v;
-    v += accel * dt;
-    x += v * dt;
-
-    const settled = Math.abs(x - to) < restDelta && Math.abs(v) < restSpeed;
+    const [offset, velocity] = state(Math.max(0, now - start) / 1000);
+    // Arrived once it is within restDelta and would not leave it in 50ms.
+    const settled = Math.abs(offset) < restDelta && Math.abs(velocity) * 0.05 < restDelta;
     try {
-      onUpdate(settled ? to : x);
+      onUpdate(settled ? to : to + offset);
     } catch (err) {
       console.error('[Motion] springTween onUpdate threw:', err);
     }
     if (settled) {
+      cancelled = true;
       onComplete?.();
       return;
     }
@@ -159,11 +178,7 @@ export function springTween(
   };
 
   rafId = requestAnimationFrame(tick);
-
-  return () => {
-    cancelled = true;
-    cancelAnimationFrame(rafId);
-  };
+  return stop;
 }
 
 export interface Rgba {
@@ -273,3 +288,117 @@ export function createCssPaintCache() {
 
   return { scratch, color, translate3d, reset };
 }
+
+export interface SpringParams {
+  /** Seconds for one undamped oscillation: lower is quicker. */
+  response: number;
+  /** 1 lands without overshoot; below 1 overshoots once, which reads as bounce. */
+  dampingRatio: number;
+}
+
+// Measured from iOS 26's Liquid Glass tab bar (60fps recording): the
+// selection snaps across in ~130ms and overshoots ~4%, the bar swells 4.3%
+// within ~100ms of touch-down, and on release dips just under rest size.
+/** Selection glide to a tab or segment: quick, with one small overshoot. */
+export const SPRING_SNAP: SpringParams = { response: 0.24, dampingRatio: 0.72 };
+// A tapped pill moves as two edges (fitted to iOS 26 frame by frame): the
+// leading edge leaps almost straight to the new tab, and the trailing edge is
+// pulled after it, so the pill stretches across both tabs and then gathers
+// itself in on arrival — the stretch carries the bounce, not the centre.
+/** The pill's leading edge on a tap. */
+export const SPRING_LEAD: SpringParams = { response: 0.065, dampingRatio: 0.8 };
+/** The trailing edge, chasing the leading one. */
+export const SPRING_TRAIL: SpringParams = { response: 0.3, dampingRatio: 1 };
+/** A travelling pill's fill returning once it has landed. */
+export const SPRING_FILL: SpringParams = { response: 0.22, dampingRatio: 1 };
+/** Touch-down: the bar swells and the pill lifts into a lens at once. */
+export const SPRING_PRESS: SpringParams = { response: 0.18, dampingRatio: 0.86 };
+/** Release: the lens settles back into the pill with a slight undershoot. */
+export const SPRING_RELEASE: SpringParams = { response: 0.3, dampingRatio: 0.72 };
+
+/** A value that springs toward a target which can change at any time; each
+ *  retarget continues from the current position and velocity. */
+export interface SpringValue {
+  readonly value: number;
+  readonly velocity: number;
+  readonly target: number;
+  /** Springs toward `target`; `velocity` (units/s) replaces the current one.
+   *  `at` is when this leg starts (defaults to now): a value retargeted every
+   *  frame passes the previous frame's time so it still advances. */
+  to: (target: number, options?: { velocity?: number; params?: SpringParams; at?: number }) => void;
+  /** Places the value instantly, at rest. */
+  jump: (value: number) => void;
+  /** Advances to `now`; returns whether it is still moving. */
+  step: (now: number) => boolean;
+}
+
+export function createSpringValue(initial: number, params: SpringParams, restDelta = 0.001): SpringValue {
+  let value = initial, velocity = 0, target = initial;
+  let x0 = 0, v0 = 0, start = 0, omega = 1, zeta = 1, resting = true;
+
+  function to(next: number, options: { velocity?: number; params?: SpringParams; at?: number } = {}) {
+    const p = options.params ?? params;
+    if (options.velocity !== undefined) velocity = options.velocity;
+    target = next;
+    x0 = value - target;
+    v0 = velocity;
+    omega = (2 * Math.PI) / p.response;
+    zeta = p.dampingRatio;
+    start = options.at ?? performance.now();
+    resting = Math.abs(x0) < restDelta && Math.abs(v0) * 0.05 < restDelta;
+    if (resting) { value = target; velocity = 0; }
+  }
+
+  function step(now: number): boolean {
+    if (resting) return false;
+    const t = Math.max(0, now - start) / 1000;
+    let offset: number;
+    if (zeta < 1) {
+      const wd = omega * Math.sqrt(1 - zeta * zeta);
+      const b = (v0 + zeta * omega * x0) / wd;
+      const e = Math.exp(-zeta * omega * t);
+      const cos = Math.cos(wd * t), sin = Math.sin(wd * t);
+      offset = e * (x0 * cos + b * sin);
+      velocity = e * ((b * wd - zeta * omega * x0) * cos - (x0 * wd + zeta * omega * b) * sin);
+    } else {
+      const b = v0 + omega * x0;
+      const e = Math.exp(-omega * t);
+      offset = e * (x0 + b * t);
+      velocity = e * (b - omega * (x0 + b * t));
+    }
+    value = target + offset;
+    if (Math.abs(offset) < restDelta && Math.abs(velocity) * 0.05 < restDelta) {
+      value = target;
+      velocity = 0;
+      resting = true;
+    }
+    return !resting;
+  }
+
+  return {
+    get value() { return value; },
+    get velocity() { return velocity; },
+    get target() { return target; },
+    to,
+    jump(next: number) { value = target = next; velocity = 0; resting = true; },
+    step,
+  };
+}
+
+// iOS 26 glass buttons swell under the finger and spring back with a small
+// bounce. As a CSS curve: a quick underdamped spring sampled into linear()
+// (values past 1 are the overshoot), with a cubic-bezier fallback.
+const BOUNCE_OMEGA = (2 * Math.PI) / 0.3;
+const BOUNCE_ZETA = 0.62;
+const BOUNCE_MS = 420;
+function bounceStep(seconds: number): number {
+  const wd = BOUNCE_OMEGA * Math.sqrt(1 - BOUNCE_ZETA ** 2);
+  const decay = Math.exp(-BOUNCE_ZETA * BOUNCE_OMEGA * seconds);
+  return 1 - decay * (Math.cos(wd * seconds) + ((BOUNCE_ZETA * BOUNCE_OMEGA) / wd) * Math.sin(wd * seconds));
+}
+/** The bounce curve and the duration it is sampled over. */
+export const BOUNCE_EASE_LINEAR = `linear(${Array.from({ length: 25 }, (_, i) => i / 24)
+  .map((t) => `${(t === 1 ? 1 : bounceStep((t * BOUNCE_MS) / 1000)).toFixed(4)} ${(t * 100).toFixed(1)}%`)
+  .join(', ')})`;
+export const BOUNCE_EASE_FALLBACK = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+export const BOUNCE_DURATION_MS = BOUNCE_MS;

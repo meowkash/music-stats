@@ -1,6 +1,9 @@
-/** iOS-style cross-dissolve timing for in-sheet navigation */
-export const OVERLAY_CROSSFADE_MS = 220;
-export const OVERLAY_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+import { SMOOTH_EASE_CSS } from './motion';
+
+/** Cross-dissolve for in-sheet navigation, on the app's spring curve. A
+ *  little under the full spring: the outgoing page only has to clear. */
+export const OVERLAY_CROSSFADE_MS = 360;
+export const OVERLAY_EASE = SMOOTH_EASE_CSS;
 export const OVERLAY_SLIDE_PX = 28;
 
 export type OverlayNavDirection = 'forward' | 'back';

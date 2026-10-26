@@ -1,12 +1,13 @@
 ---
 import { getBootSnapshot } from "../utils/bootSnapshot";
+import { reportLegendHTML, reportRankText, reportVsHTML, reportXAxisHTML } from "../utils/reports";
 const { report } = getBootSnapshot();
 ---
 
 <div class="glass-card reports-card" id="reportsCard">
   <!-- Chart + summary only; trends tiles were dropped so this fits phones. -->
   <div class="reports-header">
-    <div class="reports-range" role="group" aria-label="Range">
+    <div class="reports-range glass-segmented" role="group" aria-label="Range">
       <div id="reportsRangeHighlight" class="sliding-highlight reports-range-highlight"></div>
       <button class="range-btn is-active" data-range="week" type="button">Last week</button>
       <button class="range-btn" data-range="month" type="button">Last month</button>
@@ -26,17 +27,17 @@ const { report } = getBootSnapshot();
 
   <div class="reports-hero">
     <h2 class="reports-total"><span id="reportsTotal">{report.currentTotal.toLocaleString()}</span> Plays</h2>
-    <p class="reports-vs" id="reportsVs"></p>
+    <p class="reports-vs" id="reportsVs" set:html={reportVsHTML(report)}></p>
   </div>
 
   <div class="reports-plot">
     <div class="reports-y" id="reportsYAxis"></div>
     <canvas id="reportsChart" aria-hidden="true"></canvas>
   </div>
-  <div class="reports-x" id="reportsXAxis"></div>
+  <div class="reports-x" id="reportsXAxis" set:html={reportXAxisHTML(report)}></div>
 
-  <div class="reports-legend" id="reportsLegend"></div>
-  <p class="reports-rank" id="reportsRank"></p>
+  <div class="reports-legend" id="reportsLegend" set:html={reportLegendHTML(report)}></div>
+  <p class="reports-rank" id="reportsRank">{reportRankText(report)}</p>
 </div>
 
 <style>
@@ -57,26 +58,11 @@ const { report } = getBootSnapshot();
     flex-shrink: 0;
   }
 
+  /* Track, pill and labels: .glass-segmented in Layout.astro. */
   .reports-range {
-    position: relative;
-    display: flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
     flex-shrink: 0;
   }
 
-  .reports-range-highlight {
-    border-radius: 999px;
-    /* Clears toward glass as the lens lifts (--lens, liquidGlass.ts). */
-    background: rgba(255, 255, 255, calc(0.1 - 0.08 * var(--lens, 0)));
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 2px 8px rgba(0, 0, 0, 0.25);
-  }
 
   .reports-range .range-btn {
     position: relative;
@@ -85,7 +71,6 @@ const { report } = getBootSnapshot();
     border: none;
     border-radius: 999px;
     background: none;
-    color: var(--text-muted);
     font-size: 13px;
     font-weight: 500;
     font-family: var(--font-body);
@@ -93,9 +78,7 @@ const { report } = getBootSnapshot();
     white-space: nowrap;
   }
 
-  .reports-range .range-btn.is-active {
-    color: #fff;
-  }
+
 
   .reports-period {
     display: flex;
@@ -271,9 +254,10 @@ const { report } = getBootSnapshot();
 <script>
   import { fetchAppJson, onPathsUpdated } from "../utils/dataStore";
   import type { YearlyTotals } from "../types/music";
-  import { buildReport, rangeNoun, type ReportRange } from "../utils/reports";
+  import { buildReport, reportLegendHTML, reportRankText, reportVsHTML, reportXAxisHTML, type ReportRange } from "../utils/reports";
   import { createReportsChart } from "../utils/reportsChart";
   import { createSlidingHighlight } from "../utils/slidingHighlight";
+  import { displayYearlyTotals } from "../utils/displayYears";
 
   const CURRENT: [number, number, number, number] = [1, 0.3, 0.38, 1];
   const PREVIOUS: [number, number, number, number] = [0.38, 0.09, 0.14, 1];
@@ -301,16 +285,6 @@ const { report } = getBootSnapshot();
     if (initial) rangeHighlight.sync(initial, false);
     rangeHighlight.observe();
 
-    function deltaHTML(current: number, previous: number): string {
-      if (previous <= 0 && current <= 0) return "";
-      if (previous <= 0) return `<span class="delta-up">↑ new</span>`;
-      const pct = Math.round(((current - previous) / previous) * 100);
-      if (pct === 0) return `<span>→ 0%</span>`;
-      return pct > 0
-        ? `<span class="delta-up">↑ ${pct}%</span>`
-        : `<span class="delta-down">↓ ${Math.abs(pct)}%</span>`;
-    }
-
     function render(animate = true) {
       if (!totals) return;
       const view = buildReport(totals, [], range, offset);
@@ -322,27 +296,14 @@ const { report } = getBootSnapshot();
 
       if (totalEl) totalEl.textContent = view.currentTotal.toLocaleString();
       if (periodEl) periodEl.textContent = view.rangeLabel;
-      if (vsEl) {
-        vsEl.innerHTML = `vs. ${view.previousTotal.toLocaleString()} (${view.compareLabel}) ${deltaHTML(view.currentTotal, view.previousTotal)}`;
-      }
-      if (legendEl) {
-        legendEl.innerHTML = `<span><i style="background:rgb(255,77,97)"></i>${view.thisLabel}</span><span><i style="background:rgb(97,23,36)"></i>${view.lastLabel}</span>`;
-      }
-      if (rankEl) {
-        rankEl.textContent = `This ${range} ranks above ${view.percentile}% of my ${rangeNoun(range)}`;
-      }
+      if (vsEl) vsEl.innerHTML = reportVsHTML(view);
+      if (legendEl) legendEl.innerHTML = reportLegendHTML(view);
+      if (rankEl) rankEl.textContent = reportRankText(view);
 
       prevBtn.disabled = !view.canPrev;
       nextBtn.disabled = !view.canNext;
 
-      const sparse = view.buckets.length > 16;
-      xAxis.innerHTML = view.buckets
-        .map((b, i) => {
-          if (!sparse) return `<span>${b.label}</span>`;
-          const show = i === 0 || i === view.buckets.length - 1 || i % Math.ceil(view.buckets.length / 6) === 0;
-          return `<span>${show ? b.label : ""}</span>`;
-        })
-        .join("");
+      xAxis.innerHTML = reportXAxisHTML(view);
 
       chart.setData(
         {
@@ -383,7 +344,7 @@ const { report } = getBootSnapshot();
 
     async function load() {
       try {
-        totals = await fetchAppJson<YearlyTotals>("/data/yearly-totals.json");
+        totals = displayYearlyTotals(await fetchAppJson<YearlyTotals>("/data/yearly-totals.json"));
         render(false);
       } catch (err) {
         console.error("Failed to load reports:", err);

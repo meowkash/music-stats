@@ -22,10 +22,17 @@ export interface LensProfile {
   magnify: number;
   /** Rings from the rim inward, each refracting more gently than the last. */
   bands: LensBand[];
+  /** Main-axis stretch per px/ms of lens speed, and its ceiling. */
+  stretchPerSpeed: number;
+  maxStretch: number;
 }
 
+// iOS 26 magnifies what sits under a lifted lens by ~1.18 (measured) and
+// pulls the lens into a wide capsule while it travels.
 export const NAV_LENS: LensProfile = {
-  magnify: 1.32,
+  magnify: 1.18,
+  stretchPerSpeed: 0.3,
+  maxStretch: 0.45,
   bands: [
     { width: 0.04, magnify: 0.4 },
     { width: 0.045, magnify: 0.68 },
@@ -33,8 +40,12 @@ export const NAV_LENS: LensProfile = {
     { width: 0.05, magnify: 1.16 },
   ],
 };
+// A lifted segment barely enlarges its label (Health app): the effect is in
+// the rim, not the core.
 export const SEGMENT_LENS: LensProfile = {
-  magnify: 1.26,
+  magnify: 1.08,
+  stretchPerSpeed: 0.26,
+  maxStretch: 0.4,
   bands: [
     { width: 0.05, magnify: 0.5 },
     { width: 0.05, magnify: 0.76 },
@@ -42,9 +53,6 @@ export const SEGMENT_LENS: LensProfile = {
   ],
 };
 
-/** Main-axis stretch per px/ms of lens speed, and its ceiling. */
-const STRETCH_PER_SPEED = 0.05;
-const MAX_STRETCH = 0.14;
 /** Specular glint travel per px/ms, as a % of lens width. */
 const GLINT_PER_SPEED = 14;
 
@@ -65,9 +73,18 @@ const COPIED = [
   'text-overflow', 'flex-shrink', 'fill', 'stroke', 'stroke-width',
 ] as const;
 
-function copyLook(source: Element, target: HTMLElement | SVGElement) {
+function copyLook(source: Element, target: HTMLElement | SVGElement, rootColor?: string) {
   const computed = getComputedStyle(source);
-  for (const prop of COPIED) target.style.setProperty(prop, computed.getPropertyValue(prop));
+  for (const prop of COPIED) {
+    const value = computed.getPropertyValue(prop);
+    // Whatever took the button's own colour keeps following it, so one
+    // colour on the copy recolours its icon and label together.
+    if (rootColor && (prop === 'color' || prop === 'fill' || prop === 'stroke') && value === rootColor) {
+      target.style.setProperty(prop, prop === 'color' ? 'inherit' : 'currentColor');
+      continue;
+    }
+    target.style.setProperty(prop, value);
+  }
   target.style.margin = '0';
   target.removeAttribute('id');
   target.removeAttribute('class');
@@ -80,7 +97,8 @@ function snapshot(button: HTMLElement, rect: PillPose['rect']): HTMLElement {
   const copy = button.cloneNode(true) as HTMLElement;
   const sources = [button, ...button.querySelectorAll('*')];
   const targets = [copy, ...copy.querySelectorAll('*')] as (HTMLElement | SVGElement)[];
-  sources.forEach((source, i) => copyLook(source, targets[i]));
+  const rootColor = getComputedStyle(button).color;
+  sources.forEach((source, i) => copyLook(source, targets[i], i === 0 ? undefined : rootColor));
   copy.removeAttribute('type');
   copy.tabIndex = -1;
   Object.assign(copy.style, {
@@ -121,21 +139,27 @@ export interface LiquidLensOptions {
   /** Button rect in the pill's offset-parent coordinates. */
   rectAt: (index: number) => PillPose['rect'] | null;
   profile: LensProfile;
+  /** Colour each refracted copy is drawn in: iOS shows everything under the
+   *  lens in its selected state. */
+  copyColor?: (index: number) => string;
 }
 
 export interface LiquidLens {
   /** Feeds the lens's unstretched main-axis centre; returns the jelly stretch
    *  for this frame, from how fast the lens is travelling. */
   stretchFor: (center: number) => number;
-  /** Refracts whatever the painted pose covers. Strength 0..1 follows the lift. */
-  paint: (pose: PillPose, strength: number) => void;
+  /** Refracts whatever the painted pose covers. `strength` (0..1) is how
+   *  much glass shows — rim refraction, and the selected look underneath;
+   *  `magnify` (0..1, default `strength`) is how far the core enlarges, which
+   *  iOS reserves for a lifted lens: a tapped pill bends only at its edges. */
+  paint: (pose: PillPose, strength: number, magnify?: number) => void;
   /** Mirrors a colour painted on a real button into its refracted copies. */
   setColor: (index: number, color: string) => void;
   clear: () => void;
 }
 
 export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
-  const { host, buttons, rectAt, profile } = options;
+  const { host, buttons, rectAt, profile, copyColor } = options;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const root = document.createElement('div');
@@ -166,7 +190,11 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
 
   function mount() {
     // Snapshot on every lift: the active button's look may have changed.
-    const made = buttons.map((btn, i) => snapshot(btn, rectAt(i) ?? { left: 0, top: 0, width: 0, height: 0 }));
+    const made = buttons.map((btn, i) => {
+      const copy = snapshot(btn, rectAt(i) ?? { left: 0, top: 0, width: 0, height: 0 });
+      if (copyColor) copy.style.color = copyColor(i);
+      return copy;
+    });
     copies = layers.map(({ content }, i) => {
       const set = i === 0 ? made : made.map((copy) => copy.cloneNode(true) as HTMLElement);
       content.replaceChildren(...set);
@@ -187,7 +215,7 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
     lastCenter = center;
     lastTime = now;
     if (reduced.matches) return 0;
-    return Math.min(Math.abs(speed) * STRETCH_PER_SPEED, MAX_STRETCH);
+    return Math.min(Math.abs(speed) * profile.stretchPerSpeed, profile.maxStretch);
   }
 
   function paintGlint(strength: number) {
@@ -248,7 +276,7 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
     }
   }
 
-  function paint(pose: PillPose, strength: number) {
+  function paint(pose: PillPose, strength: number, magnifyStrength = strength) {
     if (reduced.matches || strength <= 0.01 || pose.rect.height <= 0) {
       clear();
       return;
@@ -268,7 +296,10 @@ export function createLiquidLens(options: LiquidLensOptions): LiquidLens {
     const height = h * pose.scaleY;
     const cx = pose.x + width / 2;
     const cy = pose.y + height / 2;
-    for (const { content, magnify } of layers) place(content, 1 + (magnify - 1) * strength, pose, cx, cy);
+    layers.forEach(({ content, magnify }, i) => {
+      const k = i === layers.length - 1 ? magnifyStrength : strength;
+      place(content, 1 + (magnify - 1) * k, pose, cx, cy);
+    });
     const radius = Math.min(w, h) / 2;
     cutHoles(pose.x, pose.y, width, height, radius * pose.scaleX, radius * pose.scaleY);
   }

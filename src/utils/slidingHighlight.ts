@@ -1,8 +1,14 @@
 import {
   colorToCss,
-  rafTween,
+  createSpringValue,
   lerpColorInto,
   parseColor,
+  SPRING_FILL,
+  SPRING_LEAD,
+  SPRING_PRESS,
+  SPRING_RELEASE,
+  SPRING_SNAP,
+  SPRING_TRAIL,
   withAlpha,
   type Rgba,
 } from './motion';
@@ -27,11 +33,17 @@ interface ResolvedAccent {
 }
 
 export interface PillRenderOptions {
-  /** Uniform scale around the pill centre — used for the drag "grab" effect. */
+  /** Scale around the pill centre — used for the lifted lens. */
   scale?: number;
+  /** Cross-axis scale when it differs from `scale`: a lifted lens grows more
+   *  across the bar than along it. */
+  scaleAcross?: number;
   /** Jelly deformation: grows the main axis by this fraction and thins the
    *  cross axis to suit, as a fast-moving lens does. */
   stretch?: number;
+  /** Main-axis span (offset-parent coordinates) the scaled pill must stay
+   *  inside: iOS keeps a lifted lens within the bar at its first and last tab. */
+  bounds?: { min: number; max: number };
 }
 
 /** What render() last wrote: the unscaled rect plus the transform on it. */
@@ -62,6 +74,9 @@ export interface PillTrack {
   rectAt: (index: number) => Rect | null;
   /** Renders the pill at a fractional index. Interpolates geometry and colour. */
   render: (fraction: number, options?: PillRenderOptions) => PillPose | null;
+  /** Renders the pill stretched to cover both fractional positions, as a
+   *  pill does mid-hop when its two edges move apart. */
+  renderSpan: (from: number, to: number, options?: PillRenderOptions) => PillPose | null;
   /** Renders the pill at an explicit rect (used for direct A→B glides). */
   renderRect: (rect: Rect, accentIndex?: number, options?: PillRenderOptions) => PillPose;
   /** Fractional index currently on screen. */
@@ -141,11 +156,18 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
     const scale = renderOptions.scale ?? 1;
     const stretch = renderOptions.stretch ?? 0;
     const along = scale * (1 + stretch);
-    const across = scale / (1 + stretch * 0.6);
+    // A travelling pill keeps (nearly) its height while it stretches.
+    const across = (renderOptions.scaleAcross ?? scale) / (1 + stretch * 0.15);
     const scaleX = horizontal ? along : across;
     const scaleY = horizontal ? across : along;
-    const x = rect.left - (rect.width * (scaleX - 1)) / 2;
-    const y = rect.top - (rect.height * (scaleY - 1)) / 2;
+    let x = rect.left - (rect.width * (scaleX - 1)) / 2;
+    let y = rect.top - (rect.height * (scaleY - 1)) / 2;
+    const bounds = renderOptions.bounds;
+    if (bounds) {
+      const size = horizontal ? rect.width * scaleX : rect.height * scaleY;
+      const start = Math.min(Math.max(horizontal ? x : y, bounds.min), Math.max(bounds.min, bounds.max - size));
+      if (horizontal) x = start; else y = start;
+    }
 
     highlightEl.style.width = `${rect.width}px`;
     highlightEl.style.height = `${rect.height}px`;
@@ -194,6 +216,37 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
     return { ...rects[index] };
   }
 
+  /** The pill's rect at a fractional index; past either end (a drag
+   *  rubber-banding) it carries on along the axis by the end step. */
+  function rectAtFraction(fraction: number): Rect {
+    const clamped = Math.min(Math.max(fraction, 0), rects.length - 1);
+    const i0 = Math.floor(clamped);
+    const i1 = Math.min(i0 + 1, rects.length - 1);
+    const rect = lerpRect(rects[i0], rects[i1], clamped - i0);
+    const over = fraction - clamped;
+    if (over && rects.length > 1) {
+      const [a, b] = over < 0 ? [rects[0], rects[1]] : [rects[rects.length - 2], rects[rects.length - 1]];
+      if (horizontal) rect.left += over * (b.left - a.left);
+      else rect.top += over * (b.top - a.top);
+    }
+    return rect;
+  }
+
+  function renderSpan(from: number, to: number, renderOptions: PillRenderOptions = {}) {
+    if (rects.length === 0) return null;
+    const a = rectAtFraction(from), b = rectAtFraction(to);
+    // Rows that wrap (Rankings' range chips) cannot stretch across a line
+    // break: the pill keeps the shape of whichever end it is nearer.
+    if (Math.abs(a.top - b.top) > 2 && horizontal) return render((from + to) / 2, renderOptions);
+    const left = Math.min(a.left, b.left), top = Math.min(a.top, b.top);
+    const right = Math.max(a.left + a.width, b.left + b.width), bottom = Math.max(a.top + a.height, b.top + b.height);
+    const centre = (from + to) / 2;
+    appliedFraction = Math.min(Math.max(centre, 0), rects.length - 1);
+    const pose = place({ left, top, width: right - left, height: bottom - top }, renderOptions);
+    paintAccent(Math.floor(appliedFraction), appliedFraction - Math.floor(appliedFraction));
+    return pose;
+  }
+
   function render(fraction: number, renderOptions: PillRenderOptions = {}) {
     if (rects.length === 0) return null;
 
@@ -202,7 +255,7 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
     const i0 = Math.floor(clamped);
     const i1 = Math.min(i0 + 1, rects.length - 1);
     const t = clamped - i0;
-    const pose = place(lerpRect(rects[i0], rects[i1], t), renderOptions);
+    const pose = place(rectAtFraction(fraction), renderOptions);
 
     const from = accents[i0];
     const to = accents[i1];
@@ -228,6 +281,7 @@ export function createPillTrack(options: PillTrackOptions): PillTrack {
     fractionAt,
     rectAt,
     render,
+    renderSpan,
     renderRect,
     applied: () => appliedFraction,
   };
@@ -238,149 +292,277 @@ export interface SlidingHighlightOptions {
   buttons: NodeListOf<Element> | Element[];
   accentFor?: (btn: HTMLElement) => PillAccent | null;
   onSync?: (btn: HTMLElement) => void;
-  durationMs?: number;
   draggable?: boolean;
 }
 
-/** Scale a segmented pill lifts to while held. */
-const LIFT_SCALE = 1.4;
+// A lifted segment overflows its track as iOS 26's does (measured from the
+// Health app: ~1.42x the pill along the track, ~1.5x across it).
+const LIFT_ALONG = 1.42;
+const LIFT_ACROSS = 1.5;
+/** The lens starts settling back into the pill this close to its segment. */
+const DEFLATE_WITHIN = 0.12;
+/** How close (in tabs) the back edge must be before the pill fills in again. */
+const GATHERED = 0.35;
+/** A quick hop bends what is under its edges more gently than a held lens
+ *  (iOS): this share of the lens's refraction and rim shows while it glides. */
+const TAP_REFRACTION = 0.45;
+/** A press held this long without lifting off becomes a lens. */
+const HOLD_MS = 150;
+/** How far a travelling pill's fill clears: iOS keeps most of it, so a
+ *  hop reads as the dark pill bending at its edges rather than as glass. */
+const GLASS_CLEAR = 0.5;
+/** Most a drag can pull the lens past the first or last segment. */
+const RUBBER_LIMIT = 0.35;
+/** 0..1: how strongly a dragged lens dwells on segment centres. */
+const MAGNET = 0.5;
 
-/** One interruptible painted pose for tap, keyboard, hold and drag. Expensive
- * selection callbacks run on release; dragging only paints the small control. */
+/** One spring-driven pill for tap, keyboard, hold and drag, as iOS 26 moves
+ * a segmented control: a tap sends the pill across as glass at its own height
+ * (stretching, bending what is under its edges, its fill clearing mid-hop);
+ * a press held ~150ms or a drag lifts it into a lens. It snaps to the chosen
+ * segment with a small overshoot and settles back into the pill on arrival.
+ * Selection callbacks run on release; dragging only paints the control. */
 export function createSlidingHighlight(options: SlidingHighlightOptions): {
   sync: (btn: HTMLElement, animate?: boolean) => void;
   scrub: (fraction: number) => void;
   observe: () => ResizeObserver;
   destroy: () => void;
 } {
-  const { highlightEl, onSync, durationMs = 190 } = options;
+  const { highlightEl, onSync } = options;
   const buttons = [...options.buttons] as HTMLElement[];
   const group = highlightEl.parentElement!;
   const track = createPillTrack({ highlightEl, buttons, accentFor: options.accentFor });
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   let currentIndex = Math.max(0, buttons.findIndex(btn => btn.matches('.active, .is-active')));
-  let paintedRect: Rect | null = null, scale = 1;
-  let cancel: (() => void) | null = null;
-  let resizeRaf = 0, liftRaf = 0;
-  let pointer: number | null = null, dragging = false;
+  // Leading and trailing edges: the trail chases the lead, so a hop
+  // stretches the pill across both segments before it gathers in.
+  const pos = createSpringValue(currentIndex, SPRING_SNAP, 0.002);
+  const trail = createSpringValue(currentIndex, SPRING_TRAIL, 0.002);
+  const glass = createSpringValue(0, SPRING_PRESS, 0.002);
+  const lift = createSpringValue(0, SPRING_PRESS, 0.002);
+  let raf = 0, resizeRaf = 0, paintedFace = '';
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  let startX = 0, startY = 0, originX = 0, originY = 0, grabX = 0, fraction = currentIndex;
+  let pointer: number | null = null, pressed = false, dragging = false;
+  let startX = 0, startY = 0, originX = 0, originY = 0, grabX = 0;
+  let lastX = Number.NaN, lastTime = 0, speed = 0;
   let suppressUntil = 0;
 
-  const lens = createLiquidLens({ host: highlightEl, buttons, rectAt: track.rectAt, profile: SEGMENT_LENS });
+  // Labels take their colour from how much of the pill covers them, so text
+  // and pill arrive together; while the lens is lifted the selected look
+  // shows only through the glass, as on iOS.
+  const labelColors = readLabelColors();
+  const labelScratch: Rgba = { r: 0, g: 0, b: 0, a: 0 };
+  const paintedLabels = buttons.map(() => '');
+  function readLabelColors(): { idle: Rgba; active: Rgba } | null {
+    const on = buttons.find(btn => btn.matches('.active, .is-active'));
+    const off = buttons.find(btn => btn !== on);
+    const active = on && parseColor(getComputedStyle(on).color);
+    const idle = off && parseColor(getComputedStyle(off).color);
+    return active && idle ? { active, idle } : null;
+  }
+  const lens = createLiquidLens({
+    host: highlightEl, buttons, rectAt: track.rectAt, profile: SEGMENT_LENS,
+    copyColor: labelColors ? () => colorToCss(labelColors.active) : undefined,
+  });
+  function paintLabels(rect: Rect, strength: number) {
+    if (!labelColors) return;
+    group.classList.add('segmented-animating');
+    for (let i = 0; i < buttons.length; i++) {
+      const r = track.rectAt(i);
+      if (!r?.width || !r.height) continue;
+      const ox = Math.min(rect.left + rect.width, r.left + r.width) - Math.max(rect.left, r.left);
+      const oy = Math.min(rect.top + rect.height, r.top + r.height) - Math.max(rect.top, r.top);
+      const cover = ox > 0 && oy > 0 ? Math.min(1, (ox * oy) / (r.width * r.height)) * (1 - strength) : 0;
+      const css = colorToCss(lerpColorInto(labelColors.idle, labelColors.active, Math.round(cover * 24) / 24, labelScratch));
+      if (css === paintedLabels[i]) continue;
+      paintedLabels[i] = css;
+      buttons[i].style.color = css;
+    }
+  }
+  function clearLabels() {
+    group.classList.remove('segmented-animating');
+    buttons.forEach((btn, i) => {
+      if (!paintedLabels[i]) return;
+      paintedLabels[i] = '';
+      btn.style.removeProperty('color');
+    });
+  }
 
   group.classList.add('segmented-control');
-  /** Lens strength follows the lift, so the optics ease in and out with it. */
-  function lensStrength() { return Math.min(Math.max((scale - 1) / (LIFT_SCALE - 1), 0), 1); }
-  function stretchAt(rect: Rect) {
-    return lens.stretchFor(rect.left + rect.width / 2);
+
+  function render() {
+    const l = Math.max(lift.value, -0.08);
+    const lifted = Math.min(Math.max(l, 0), 1);
+    const strength = Math.min(Math.max(Math.max(glass.value, lifted), 0), 1);
+    // A dragged lens stretches with its speed; a hop stretches by its edges.
+    const speedStretch = lens.stretchFor(track.centerAt((pos.value + trail.value) / 2));
+    const pose = track.renderSpan(trail.value, pos.value, {
+      scale: 1 + (LIFT_ALONG - 1) * l,
+      scaleAcross: 1 + (LIFT_ACROSS - 1) * l,
+      stretch: dragging ? speedStretch * strength : 0,
+    });
+    if (!pose) return;
+    const travelling = Math.min(Math.max(glass.value, 0), 1);
+    lens.paint(pose, Math.max(lifted, travelling * TAP_REFRACTION), lifted);
+    paintLabels(pose.rect, strength);
+    const face = (1 - Math.max(lifted, Math.min(Math.max(glass.value, 0), 1) * GLASS_CLEAR)).toFixed(2);
+    if (face !== paintedFace) {
+      paintedFace = face;
+      if (face === '1.00') highlightEl.style.removeProperty('--face');
+      else highlightEl.style.setProperty('--face', face);
+    }
   }
-  function paintTo(rect: Rect, index: number, nextScale = 1) {
-    scale = nextScale;
-    paintedRect = { ...rect };
-    lens.paint(track.renderRect(rect, index, { scale, stretch: stretchAt(rect) }), lensStrength());
-  }
-  function stopLift() { cancelAnimationFrame(liftRaf); liftRaf = 0; }
   function finish() {
+    raf = 0;
+    lastTick = 0;
+    trail.jump(pos.value);
     group.classList.remove('segmented-lens', 'segmented-dragging');
     lens.clear();
+    track.render(currentIndex);
+    clearLabels();
   }
+  let lastTick = 0;
+  function tick(now: number) {
+    const prev = lastTick && now - lastTick < 100 ? lastTick : now - 1000 / 60;
+    lastTick = now;
+    // The trailing edge is pulled after the leading one.
+    const leadMoving = pos.step(now);
+    if (dragging) trail.jump(pos.value);
+    else if (Math.abs(trail.target - pos.value) > 1e-4 || leadMoving) trail.to(pos.value, { params: SPRING_TRAIL, at: prev });
+    // Glass and lens settle back into the pill as it gathers in on arrival:
+    // the front has landed and the back is close.
+    if (!pressed && Math.abs(pos.value - pos.target) < DEFLATE_WITHIN && Math.abs(trail.value - pos.target) < GATHERED) {
+      if (lift.target > 0) lift.to(0, { params: SPRING_RELEASE });
+      if (glass.target > 0) glass.to(0, { params: SPRING_FILL });
+    }
+    const moving = [leadMoving, trail.step(now), glass.step(now), lift.step(now)].some(Boolean);
+    render();
+    if (moving || pressed) raf = requestAnimationFrame(tick);
+    else finish();
+  }
+  function run() {
+    group.classList.add('segmented-lens');
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
   function sync(btn: HTMLElement, animate = true) {
     const index = buttons.indexOf(btn);
     if (index < 0) return;
-    cancel?.(); cancel = null;
-    stopLift();
     track.measure();
-    const to = track.rectAt(index);
     currentIndex = index;
     buttons.forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
     onSync?.(btn);
-    if (!to?.width || !to.height) return;
-    const from = paintedRect ?? to, fromScale = scale;
-    if (!animate || reduced.matches) { paintTo(to, index); finish(); return; }
-    cancel = rafTween(0, 1, durationMs, progress => {
-      paintTo(lerpRect(from, to, progress), index, fromScale + (1 - fromScale) * progress);
-    }, () => { cancel = null; finish(); });
+    const to = track.rectAt(index);
+    if (!to?.width || !to.height || !animate || reduced.matches) {
+      cancelAnimationFrame(raf);
+      pos.jump(index); trail.jump(index); glass.jump(0); lift.jump(0);
+      if (to?.width && to.height) render();
+      finish();
+      return;
+    }
+    // Continues from the pill's current speed (a retarget mid-glide or a
+    // released drag) rather than restarting from a standstill.
+    // Any glide crosses as glass; a lifted lens just carries on as one.
+    if (Math.abs(index - pos.value) > DEFLATE_WITHIN) glass.to(1, { params: SPRING_PRESS });
+    pos.to(index, { velocity: dragging ? speed : undefined, params: SPRING_LEAD });
+    run();
   }
+  /** Places the pill at a fractional segment index, at rest. */
   function scrub(value: number) {
-    cancel?.(); cancel = null;
     if (!track.count()) track.measure();
-    fraction = Math.max(0, Math.min(buttons.length - 1, value));
-    const lo = Math.floor(fraction), hi = Math.ceil(fraction);
-    const a = track.rectAt(lo), b = track.rectAt(hi);
-    if (!a || !b) return;
-    paintedRect = lerpRect(a, b, fraction - lo);
-    const pose = track.render(fraction, { scale, stretch: stretchAt(paintedRect) });
-    if (pose) lens.paint(pose, lensStrength());
+    pos.jump(Math.max(0, Math.min(buttons.length - 1, value)));
+    trail.jump(pos.value);
+    render();
+    if (!raf && !pressed) finish();
   }
-  function fractionAtPoint(x: number, y: number): number {
+  /** Fractional segment index at a point. With `overshoot`, a point past
+   *  the first or last segment's centre runs on beyond the ends (a drag
+   *  rubber-banding), measured in the same steps as between segments. */
+  function fractionAtPoint(x: number, y: number, overshoot = false): number {
     const rects = buttons.map((_, i) => track.rectAt(i)!);
     const nearestRow = rects.reduce((best, rect) => Math.abs(rect.top + rect.height / 2 - y) < Math.abs(best.top + best.height / 2 - y) ? rect : best);
     const row = rects.map((rect, index) => ({ rect, index })).filter(({ rect }) => Math.abs(rect.top - nearestRow.top) < 2);
-    if (x <= row[0].rect.left + row[0].rect.width / 2) return row[0].index;
+    const centre = (i: number) => row[i].rect.left + row[i].rect.width / 2;
+    const step = row.length > 1 ? centre(1) - centre(0) || 1 : 1;
+    if (x <= centre(0)) return row[0].index - (overshoot && row[0].index === 0 ? (centre(0) - x) / step : 0);
     for (let i = 1; i < row.length; i++) {
-      const a = row[i - 1], b = row[i];
-      const lo = a.rect.left + a.rect.width / 2, hi = b.rect.left + b.rect.width / 2;
-      if (x <= hi) return a.index + (b.index - a.index) * (x - lo) / (hi - lo);
+      const lo = centre(i - 1), hi = centre(i);
+      if (x <= hi) return row[i - 1].index + (row[i].index - row[i - 1].index) * (x - lo) / (hi - lo);
     }
-    return row[row.length - 1].index;
+    const end = row[row.length - 1];
+    const past = overshoot && end.index === buttons.length - 1 ? (x - centre(row.length - 1)) / step : 0;
+    return end.index + past;
   }
-  function beginDrag() {
-    if (pointer === null || dragging) return;
+  /** Dwells on segment centres and moves quickly between them; past the
+   *  first or last segment it follows with growing resistance. */
+  function magnetise(value: number): number {
+    const last = buttons.length - 1;
+    if (value < 0) return -(RUBBER_LIMIT * -value) / (-value + RUBBER_LIMIT * 2);
+    if (value > last) return last + (RUBBER_LIMIT * (value - last)) / (value - last + RUBBER_LIMIT * 2);
+    return value - (MAGNET / (2 * Math.PI)) * Math.sin(2 * Math.PI * value);
+  }
+  /** A held press or a drag lifts the pill into a lens where it is. */
+  function liftLens() {
     clearTimeout(holdTimer);
-    cancel?.(); cancel = null;
-    track.measure();
-    const rect = group.getBoundingClientRect();
-    originX = rect.left + group.clientLeft; originY = rect.top + group.clientTop;
-    const current = paintedRect ?? track.rectAt(currentIndex)!;
-    grabX = current.left + current.width / 2 - (startX - originX);
-    fraction = fractionAtPoint(current.left + current.width / 2, current.top + current.height / 2);
-    dragging = true;
-    group.classList.add('segmented-lens', 'segmented-dragging');
-    group.setPointerCapture(pointer);
-    const start = performance.now(), fromScale = scale;
-    function lift(now: number) {
-      const progress = Math.min(1, (now - start) / 150);
-      scale = reduced.matches ? 1 : fromScale + (LIFT_SCALE - fromScale) * (1 - (1 - progress) ** 3);
-      scrub(fraction);
-      if (progress < 1 && dragging) liftRaf = requestAnimationFrame(lift);
-    }
-    liftRaf = requestAnimationFrame(lift);
+    if (reduced.matches || lift.target > 0) return;
+    lift.to(1, { params: SPRING_PRESS });
+    run();
   }
   function onDown(event: PointerEvent) {
     if (event.button !== 0 || !event.isPrimary || pointer !== null) return;
     pointer = event.pointerId; startX = event.clientX; startY = event.clientY;
-    holdTimer = setTimeout(beginDrag, 140);
+    pressed = true; dragging = false;
+    track.measure();
+    const rect = group.getBoundingClientRect();
+    originX = rect.left + group.clientLeft; originY = rect.top + group.clientTop;
+    // A tap never lifts; a press held past HOLD_MS becomes a lens.
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => { if (pressed) liftLens(); }, HOLD_MS);
   }
   function onMove(event: PointerEvent) {
     if (event.pointerId !== pointer) return;
     const dx = event.clientX - startX, dy = event.clientY - startY;
     if (!dragging) {
-      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx) * 1.2) { clearTimeout(holdTimer); pointer = null; return; }
+      // A vertical move is the page scrolling: let go and settle.
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx) * 1.2) { clearTimeout(holdTimer); pointer = null; pressed = false; sync(buttons[currentIndex]); return; }
       if (Math.abs(dx) < 8) return;
-      beginDrag();
+      dragging = true;
+      liftLens();
+      lastX = Number.NaN; speed = 0;
+      group.classList.add('segmented-dragging');
+      if (pointer !== null) group.setPointerCapture(pointer);
+      grabX = track.centerAt(pos.value) - (startX - originX);
     }
     if (event.cancelable) event.preventDefault();
     const decay = Math.max(0, 1 - Math.abs(dx) / 100);
-    scrub(fractionAtPoint(event.clientX - originX + grabX * decay, event.clientY - originY));
+    const raw = fractionAtPoint(event.clientX - originX + grabX * decay, event.clientY - originY, true);
+    const now = performance.now();
+    if (!Number.isNaN(lastX) && now > lastTime) speed = speed * 0.3 + ((raw - lastX) / (now - lastTime)) * 700;
+    lastX = raw; lastTime = now;
+    pos.jump(magnetise(raw));
+    trail.jump(pos.value);
   }
   function end(event: PointerEvent, cancelled = false) {
     if (event.pointerId !== pointer) return;
-    clearTimeout(holdTimer);
     const id = pointer; pointer = null;
-    if (!dragging) return;
-    dragging = false; stopLift();
+    const wasDragging = dragging;
+    clearTimeout(holdTimer);
+    pressed = false;
     if (group.hasPointerCapture(id)) group.releasePointerCapture(id);
     group.classList.remove('segmented-dragging');
-    suppressUntil = performance.now() + 500;
-    // A press held in place is a slow tap: it picks the segment under the
-    // finger, not the one the lens lifted from.
-    const held = Math.abs(event.clientX - startX) < 8 && Math.abs(event.clientY - startY) < 8;
+    const now = performance.now();
+    suppressUntil = now + 500;
+    // Speed only counts if the finger was still moving when it lifted; a
+    // pause before release leaves the last move's speed behind.
+    if (now - lastTime > 50) speed = 0;
+    // A tap, quick or held, picks the segment under the finger; so does a
+    // drag, wherever the lens is resting.
     const target = cancelled ? currentIndex
-      : Math.round(held ? fractionAtPoint(startX - originX, startY - originY) : fraction);
+      : Math.max(0, Math.min(buttons.length - 1, Math.round(wasDragging ? pos.value : fractionAtPoint(startX - originX, startY - originY))));
     if (!cancelled) buttons[target].click();
     // A selected button's handler may deliberately be a no-op.
-    if (!cancel || currentIndex !== target) sync(buttons[target]);
+    if (currentIndex !== target || pos.target !== target || lift.target !== 0) sync(buttons[target]);
+    dragging = false;
   }
   function onCancel(event: PointerEvent) { end(event, true); }
   function onClick(event: MouseEvent) {
@@ -396,7 +578,7 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
   }
   const ro = new ResizeObserver(() => {
     cancelAnimationFrame(resizeRaf);
-    resizeRaf = requestAnimationFrame(() => { if (!cancel && !dragging) sync(buttons[currentIndex], false); });
+    resizeRaf = requestAnimationFrame(() => { if (!raf && !pressed) sync(buttons[currentIndex], false); });
   });
   if (options.draggable !== false) {
     group.addEventListener('pointerdown', onDown);
@@ -410,7 +592,7 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     sync, scrub,
     observe: () => { buttons.forEach(btn => ro.observe(btn)); return ro; },
     destroy: () => {
-      clearTimeout(holdTimer); cancel?.(); stopLift(); cancelAnimationFrame(resizeRaf); ro.disconnect(); finish();
+      clearTimeout(holdTimer); cancelAnimationFrame(raf); cancelAnimationFrame(resizeRaf); ro.disconnect(); finish();
       group.removeEventListener('pointerdown', onDown); group.removeEventListener('pointermove', onMove);
       group.removeEventListener('pointerup', end); group.removeEventListener('pointercancel', onCancel);
       group.removeEventListener('click', onClick, true); group.removeEventListener('keydown', onKey);

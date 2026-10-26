@@ -1,4 +1,4 @@
-import { rafTween, easeOutCubic } from './motion';
+import { springTween, type SpringStop } from './motion';
 import { bindWheelPan } from './wheelPan';
 import {
   ENGAGE_DISTANCE,
@@ -24,7 +24,7 @@ export interface PagerSwipeOptions {
 
 export interface PagerSwipe {
   index: () => number;
-  goTo: (index: number, animate?: boolean) => void;
+  goTo: (index: number, animate?: boolean, releaseVelocity?: number) => void;
   measure: () => void;
   setPageCount: (count: number) => void;
 }
@@ -45,7 +45,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   let lastTime = 0;
   let velocity = 0;
   let offset = 0;
-  let cancelTween: (() => void) | null = null;
+  let cancelTween: SpringStop | null = null;
   let pendingOffset: number | null = null;
   let dragRafId: number | null = null;
   let lastPaintX = Number.NaN;
@@ -108,8 +108,11 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     return value;
   }
 
-  function goTo(target: number, animate = true) {
+  /** `releaseVelocity` (px/ms) is the finger's speed on release; a page
+   *  already in motion carries its own speed into the new target. */
+  function goTo(target: number, animate = true, releaseVelocity?: number) {
     const clamped = Math.min(Math.max(target, 0), pageCount - 1);
+    const carried = releaseVelocity !== undefined ? releaseVelocity * 1000 : cancelTween?.velocity() ?? 0;
     cancelTween?.();
 
     if (!animate) {
@@ -124,12 +127,9 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
     setMoving(true);
     const dest = restingX(clamped);
     const from = Number.isNaN(lastPaintX) ? restingX() + offset : lastPaintX;
-    const distance = Math.abs(dest - from);
-    const duration = Math.min(180, Math.max(110, distance * 0.32));
-    cancelTween = rafTween(
+    cancelTween = springTween(
       from,
       dest,
-      duration,
       paint,
       () => {
         cancelTween = null;
@@ -139,7 +139,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
         setMoving(false);
         onSettled(index);
       },
-      easeOutCubic,
+      { velocity: carried, restDelta: 0.5 },
     );
   }
 
@@ -198,7 +198,7 @@ export function bindPagerSwipe(options: PagerSwipeOptions): PagerSwipe {
   function commit(endVelocity: number, moved: boolean) {
     const absX = restingX(index) + offset;
     const exactPage = -absX / (width || 1);
-    goTo(commitAdjacentIndex(index, exactPage, endVelocity, moved), true);
+    goTo(commitAdjacentIndex(index, exactPage, endVelocity, moved), true, moved ? endVelocity : 0);
   }
 
   const onEnd = () => {

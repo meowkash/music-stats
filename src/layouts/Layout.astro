@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import appleSplashTags from "./splash-tags.html?raw";
 import { TAB_ORDER } from "../utils/tabs";
 import { TAB_SURFACES, TAB_THEME_COLORS, TAB_BOTTOM_COLORS, cssWash } from "../utils/tabTheme";
+import { BOUNCE_DURATION_MS, BOUNCE_EASE_FALLBACK, BOUNCE_EASE_LINEAR, SMOOTH_EASE_FALLBACK, SMOOTH_EASE_LINEAR, SMOOTH_MS } from "../utils/motion";
 import cacheData from "../../public/cache-version.json";
 import logoMarkSvg from "../../public/logo-mark.svg?raw";
 
@@ -47,6 +48,11 @@ const washStyles = [
 		(tab) =>
 			`body[data-active-tab="${tab}"] #app-bg-gradient .bg-layer[data-tab="${tab}"]`,
 	).join(",")}{opacity:1}`,
+	// The app's spring (utils/motion.ts), so CSS transitions move exactly as
+	// the JS-driven glides do. Doubled :root outranks the stylesheet's tokens
+	// wherever the bundler happens to place them.
+	`:root:root{--ios-spring:${SMOOTH_EASE_FALLBACK};--duration-smooth:${SMOOTH_MS}ms;--ios-bounce:${BOUNCE_EASE_FALLBACK};--duration-bounce:${BOUNCE_DURATION_MS}ms}`,
+	`@supports (transition-timing-function: linear(0, 1)){:root:root{--ios-spring:${SMOOTH_EASE_LINEAR};--ios-bounce:${BOUNCE_EASE_LINEAR}}}`,
 ].join("");
 ---
 
@@ -187,8 +193,8 @@ const washStyles = [
 				pointer-events: none;
 				opacity: 0;
 				transition:
-					transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-					opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+					transform 0.5s var(--ios-spring),
+					opacity 0.4s var(--ios-spring);
 			}
 
 			#data-update-toast.visible {
@@ -340,16 +346,27 @@ const washStyles = [
 		<!-- Inline dismiss: must not depend on JS bundles (offline reload may block module load) -->
 		<script is:inline>
 			(function () {
+				var root = document.documentElement;
 				function hideSplash() {
 					var el = document.getElementById("pwa-splash-screen");
 					if (el) el.classList.add("hidden");
 				}
-				if (document.readyState === "loading") {
-					document.addEventListener("DOMContentLoaded", hideSplash, { once: true });
-				} else {
-					hideSplash();
+				// Held until the app has hydrated, so the fade reveals the finished
+				// page instead of its pieces settling one by one; two frames let the
+				// hydrated pose paint first. The cap means a slow or failed module
+				// load never strands anyone on the splash.
+				function hideWhenReady() {
+					if (root.dataset.appReady !== "true") return false;
+					requestAnimationFrame(function () { requestAnimationFrame(hideSplash); });
+					return true;
 				}
-				setTimeout(hideSplash, 700);
+				if (!hideWhenReady()) {
+					var observer = new MutationObserver(function () {
+						if (hideWhenReady()) observer.disconnect();
+					});
+					observer.observe(root, { attributes: true, attributeFilter: ["data-app-ready"] });
+				}
+				setTimeout(hideSplash, 1200);
 			})();
 		</script>
 
@@ -438,12 +455,17 @@ const washStyles = [
 		--font-numeric-weight: 700;
 
 		/* Motion tokens — every transition uses one of these so nothing animates
-		   on a different curve or timing than its neighbours. */
-		--ios-spring: cubic-bezier(0.22, 1, 0.36, 1);
-		--duration-fast: 0.14s;
-		--duration-normal: 0.24s;
-		--duration-slow: 0.38s;
-		--duration-nav: 0.28s;
+		   on a different curve or timing than its neighbours. --ios-spring is
+		   the app's spring (utils/motion.ts, injected with washStyles); it
+		   eases out of rest and lands softly, so durations read shorter than
+		   they are. --duration-smooth is the full spring; shorter tokens are
+		   the same shape compressed for small state changes. */
+		--ios-spring: cubic-bezier(0.3, 0.3, 0.25, 1);
+		--duration-smooth: 425ms; /* overridden from SMOOTH_MS */
+		--duration-fast: 0.2s;
+		--duration-normal: 0.32s;
+		--duration-slow: var(--duration-smooth);
+		--duration-nav: var(--duration-smooth);
 		/* Explicit property list — `all` also animates layout properties,
 		   which drops frames whenever an element reflows. */
 		--transition-smooth:
@@ -482,15 +504,13 @@ const washStyles = [
 			inset 0 1px 0 rgba(255, 255, 255, 0.22),
 			inset 0 -1px 0 rgba(255, 255, 255, 0.05),
 			inset 0 0 18px rgba(255, 255, 255, 0.04);
-		/* Snappier than --duration-slow: at 500ms the eye reads the soft landing
-		   as lag at the start of the gesture, even on a spring curve. */
-		/* A 92lvh sheet needs travel time to read as a slide rather than a snap.
-		   Both curves are front-loaded, so most of the distance is covered early
-		   and the motion still feels immediate. Keep CLOSE_SETTLE_MS in
-		   utils/overlayState.ts >= --duration-sheet-out. */
-		--duration-sheet-in: 0.36s;
-		--duration-sheet-out: 0.26s;
-		--ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
+		/* A 92lvh sheet rises on the app's spring, stretched a little so its
+		   travel reads as a glide rather than a snap; it still answers within a
+		   frame or two. The exit accelerates away and leaves at speed. Keep
+		   CLOSE_SETTLE_MS in utils/overlayState.ts >= --duration-sheet-out. */
+		--duration-sheet-in: 0.52s;
+		--duration-sheet-out: 0.34s;
+		--ease-sheet: var(--ios-spring);
 		--ease-sheet-out: cubic-bezier(0.4, 0, 0.7, 0.2);
 		--z-nav: 100;
 		/* Mobile bottom nav — safe-area anchored (Safari + PWA consistent) */
@@ -664,37 +684,55 @@ const washStyles = [
 	   Used by the entity detail overlay and the statistics top-lists sheet. */
 
 	/* Canonical sheet control (back / close) */
+	/* iOS 26 glass button (measured from the Health app): a 44pt circle of
+	   barely-tinted glass — ~6% white over black — whose rim catches the light
+	   only along its top and bottom, with no drop shadow. Under the finger it
+	   swells and brightens, and springs back with a small bounce. */
 	.nav-circle-btn {
-		width: 36px;
-		height: 36px;
+		width: 44px;
+		height: 44px;
 		border-radius: 50%;
-		background: rgba(20, 20, 26, 0.32);
-		backdrop-filter: var(--glass-blur);
-		-webkit-backdrop-filter: var(--glass-blur);
-		border: 1px solid var(--glass-border);
-		box-shadow: var(--glass-rim), 0 4px 14px rgba(0, 0, 0, 0.3);
-		color: var(--text-primary);
+		border: none;
+		background: rgba(46, 46, 48, 0.36);
+		backdrop-filter: blur(12px) saturate(150%) brightness(0.9);
+		-webkit-backdrop-filter: blur(12px) saturate(150%) brightness(0.9);
+		box-shadow:
+			inset 0 1px 0.5px rgba(255, 255, 255, 0.2),
+			inset 0 -1px 0.5px rgba(255, 255, 255, 0.11),
+			inset 0 0 6px rgba(255, 255, 255, 0.04);
+		color: #fff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: var(--transition-smooth);
+		transition:
+			transform var(--duration-bounce) var(--ios-bounce),
+			background-color var(--duration-normal) var(--ios-spring),
+			box-shadow var(--duration-normal) var(--ios-spring);
 	}
 
 	.nav-circle-btn svg {
-		width: 18px;
-		height: 18px;
+		width: 24px;
+		height: 24px;
+		stroke-width: 2.6;
 	}
 
 	@media (hover: hover) and (pointer: fine) {
 		.nav-circle-btn:hover {
-			background: rgba(255, 255, 255, 0.16);
-			transform: scale(1.05);
+			background-color: rgba(70, 70, 74, 0.42);
 		}
 	}
 
-	.nav-circle-btn.is-pressed {
-		background: rgba(255, 255, 255, 0.16);
+	/* Doubled class: outranks the generic `button.is-pressed` shrink below. */
+	.nav-circle-btn.nav-circle-btn.is-pressed,
+	.nav-circle-btn.nav-circle-btn:active {
+		transform: scale(1.16) !important;
+		transition-duration: 0.18s, var(--duration-fast), var(--duration-fast) !important;
+		background-color: rgba(120, 120, 128, 0.42);
+		box-shadow:
+			inset 0 1px 0.5px rgba(255, 255, 255, 0.34),
+			inset 0 -1px 0.5px rgba(255, 255, 255, 0.18),
+			inset 0 0 10px rgba(255, 255, 255, 0.1);
 	}
 
 	.app-sheet-backdrop {
@@ -775,14 +813,14 @@ const washStyles = [
 		.sheet-drag-handle {
 			display: block;
 			position: absolute;
-			top: 10px;
+			/* iOS grabber: 36 x 5, 5pt from the top, flat. */
+			top: 5px;
 			left: 50%;
 			transform: translateX(-50%);
-			width: 40px;
+			width: 36px;
 			height: 5px;
 			border-radius: 2.5px;
-			background: rgba(255, 255, 255, 0.45);
-			box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+			background: rgba(255, 255, 255, 0.36);
 			flex-shrink: 0;
 			cursor: grab;
 			z-index: 50;
@@ -934,8 +972,7 @@ const washStyles = [
 		button:active,
 		.tab-btn:active,
 		.range-btn:active,
-		.sub-tab-btn:active,
-		.nav-circle-btn:active {
+		.sub-tab-btn:active {
 			transform: scale(0.96) !important;
 			transition-duration: 0.05s !important;
 		}
@@ -953,13 +990,13 @@ const washStyles = [
 		}
 	}
 
-	/* Touch / pen press — cleared on move, scroll, or lift (pressFeedback.ts). */
+	/* Touch / pen press — cleared on move, scroll, or lift (pressFeedback.ts).
+	   Glass buttons (.nav-circle-btn) swell instead; see their own rule. */
 	.hover-scale.is-pressed,
 	button.is-pressed,
 	.tab-btn.is-pressed,
 	.range-btn.is-pressed,
 	.sub-tab-btn.is-pressed,
-	.nav-circle-btn.is-pressed,
 	.years-info-btn.is-pressed {
 		transform: scale(0.96) !important;
 		transition-duration: 0.05s !important;
@@ -1105,14 +1142,14 @@ const washStyles = [
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
+		/* A still placeholder: an animated sweep repaints every frame, which
+		   costs the most mid-scroll, exactly where rows are still loading.
+		   The artwork fades in over it instead. */
 		background: linear-gradient(
-			100deg,
-			rgba(255, 255, 255, 0.02) 0%,
-			rgba(255, 255, 255, 0.1) 50%,
-			rgba(255, 255, 255, 0.02) 100%
+			135deg,
+			rgba(255, 255, 255, 0.07) 0%,
+			rgba(255, 255, 255, 0.03) 100%
 		);
-		background-size: 200% 200%;
-		animation: artwork-shimmer 1.4s ease-in-out infinite;
 		z-index: 1;
 		pointer-events: none;
 		opacity: 1;
@@ -1126,15 +1163,6 @@ const washStyles = [
 	.overlay-album-card-artwork .artwork-shimmer.artwork-shimmer-hide,
 	.carousel-artwork-wrapper .artwork-shimmer.artwork-shimmer-hide {
 		opacity: 0;
-	}
-
-	@keyframes artwork-shimmer {
-		0%, 100% {
-			background-position: 0% 50%;
-		}
-		50% {
-			background-position: 100% 50%;
-		}
 	}
 
 	.scrobble-row-thumb .artwork-fallback,
@@ -1248,6 +1276,41 @@ const washStyles = [
 		user-select: none;
 		-webkit-user-select: none;
 	}
+	/* The tab sliders (Reports range, Recents categories, Rankings tabs), as
+	   iOS 26 draws a segmented control (measured from the Health app): a faint
+	   flat track, a solid grey pill filling nearly its height, and white
+	   labels throughout. The pill's fill clears while it travels as glass and
+	   when it lifts into a lens (--face, slidingHighlight.ts). */
+	.glass-segmented {
+		position: relative;
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		border-radius: 999px;
+		background: rgba(118, 118, 140, 0.11);
+	}
+	.glass-segmented > .sliding-highlight {
+		border-radius: 999px;
+		background: rgba(118, 118, 128, calc(0.55 * var(--face, 1)));
+	}
+	.glass-segmented > button {
+		color: rgba(255, 255, 255, 0.86);
+	}
+	.glass-segmented > button:is(.active, .is-active) {
+		color: #fff;
+	}
+	/* Until slidingHighlight.ts hydrates the control (it adds
+	   .segmented-control), the selected button wears the pill itself, so the
+	   pill is on screen at first paint and the hand-off is invisible. */
+	.glass-segmented:not(.segmented-control) > button:is(.active, .is-active) {
+		background: rgba(118, 118, 128, 0.55);
+	}
+
+	/* slidingHighlight.ts paints label colour per frame from the pill; a CSS
+	   colour transition would trail behind it. */
+	.segmented-control.segmented-animating > button {
+		transition-property: background-color, border-color, opacity, transform;
+	}
 	/* Liquid-glass optics (liquidGlass.ts): copies of the buttons under the
 	   lens, compressed through the rim bands and magnified through the core.
 	   They exist only while a lens is lifted; the transforms are written per
@@ -1277,37 +1340,35 @@ const washStyles = [
 		position: absolute;
 		inset: -1px;
 		border-radius: inherit;
-		opacity: 0;
-		transition: opacity 150ms ease-out;
+		/* Follows the lift spring (--lens) frame by frame. */
+		opacity: var(--lens, 0);
 		pointer-events: none;
 	}
-	/* Glass body under the refracted labels: a faint fill, a lift shadow and a
-	   glint that slides against the direction of travel. */
+	/* Glass body under the refracted labels, as iOS draws a lifted segment:
+	   clear, with a hairline bright edge, a thin dark outline and dark bands
+	   along the top and bottom where it bends what lies past the track. */
 	.segmented-control .sliding-highlight::before {
-		background:
-			radial-gradient(60% 50% at var(--lens-glint-x, 50%) 0%, rgba(255, 255, 255, 0.3), transparent 72%),
-			radial-gradient(50% 40% at calc(100% - var(--lens-glint-x, 50%)) 100%, rgba(255, 255, 255, 0.12), transparent 72%),
-			linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(170, 210, 255, 0.015) 45%, rgba(230, 180, 255, 0.03));
+		background: rgba(255, 255, 255, 0.035);
 		box-shadow:
-			0 8px 22px rgba(0, 0, 0, 0.28),
-			inset 0 1.5px 1px -0.5px rgba(255, 255, 255, 0.5),
-			inset 0 -1.5px 1px -0.5px rgba(255, 255, 255, 0.2),
-			inset 6px 0 10px -8px rgba(255, 130, 175, 0.35),
-			inset -6px 0 10px -8px rgba(120, 215, 255, 0.35);
+			0 6px 16px rgba(0, 0, 0, 0.3),
+			0 0 0 0.75px rgba(0, 0, 0, 0.6),
+			inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+			inset 0 5px 5px -3px rgba(0, 0, 0, 0.55),
+			inset 0 -5px 5px -3px rgba(0, 0, 0, 0.55);
 	}
-	/* Above the refracted copies: a chromatic rim, light splitting at the
-	   glass edge. Its hue turns with the glint. */
+	/* Above the refracted copies: a faint chromatic rim, light splitting at
+	   the glass edge. Its hue turns with the glint. */
 	.segmented-control .sliding-highlight::after {
 		z-index: 1;
-		padding: 1.25px;
+		padding: 1px;
 		background:
 			conic-gradient(
 				from var(--lens-glint-angle, 200deg),
-				rgba(255, 150, 195, 0.75),
-				rgba(255, 240, 190, 0.5),
-				rgba(160, 230, 255, 0.75),
-				rgba(195, 175, 255, 0.6),
-				rgba(255, 150, 195, 0.75)
+				rgba(255, 150, 195, 0.16),
+				rgba(255, 240, 190, 0.08),
+				rgba(130, 235, 200, 0.16),
+				rgba(150, 180, 255, 0.16),
+				rgba(255, 150, 195, 0.16)
 			);
 		-webkit-mask:
 			linear-gradient(#000 0 0) content-box,
@@ -1317,8 +1378,6 @@ const washStyles = [
 			linear-gradient(#000 0 0) content-box exclude,
 			linear-gradient(#000 0 0);
 	}
-	.segmented-control.segmented-lens .sliding-highlight::before,
-	.segmented-control.segmented-lens .sliding-highlight::after { opacity: 1; }
 	.segmented-control.segmented-dragging { cursor: grabbing; }
 	.segmented-control.segmented-dragging .sliding-highlight { will-change: transform; }
 	.segmented-control.segmented-dragging > button.is-pressed,

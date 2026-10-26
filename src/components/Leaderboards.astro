@@ -38,7 +38,7 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   <!-- Sub-Tabs (Songs, Albums, Artists) -->
   <div class="leaderboard-tabs shrink-0">
-    <div class="leaderboard-tab-group" style="position: relative;">
+    <div class="leaderboard-tab-group glass-segmented">
       <div id="subTabHighlight" class="sub-tab-highlight sliding-highlight">
       </div>
       <button class="sub-tab-btn active" data-tab="songs">Songs</button>
@@ -151,15 +151,8 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     display: none;
   }
 
-  .leaderboard-tab-group {
-    display: flex;
-    position: relative;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-  }
+  /* Track, pill and labels of .leaderboard-tab-group: .glass-segmented in
+     Layout.astro. */
 
   .search-bar-row {
     display: flex;
@@ -338,10 +331,11 @@ import SwipeableDeck from "./SwipeableDeck.astro";
 
   .range-highlight {
     border-radius: var(--radius-pill);
-    /* Tinted glass rather than solid paint while the lens is lifted. */
+    /* Tinted glass rather than solid paint while it travels or is lifted
+       (--face, slidingHighlight.ts). */
     background: color-mix(
       in srgb,
-      var(--range-color, var(--accent-pink)) calc(100% - 72% * var(--lens, 0)),
+      var(--range-color, var(--accent-pink)) calc(28% + 72% * var(--face, 1)),
       transparent
     );
     box-shadow: 0 4px 12px var(--range-glow, var(--accent-pink-glow));
@@ -421,25 +415,22 @@ import SwipeableDeck from "./SwipeableDeck.astro";
     border-radius: 999px;
     font-size: 13px;
     font-weight: 500;
-    color: var(--text-muted);
     cursor: pointer;
     white-space: nowrap;
     font-family: var(--font-body);
   }
 
-  .sub-tab-btn.active {
-    color: #fff;
+
+
+  /* Until slidingHighlight.ts hydrates the range chips (it adds
+     .segmented-control), the selected chip wears the pill's accent itself,
+     so the hand-off is invisible (getCategoryAccent is one colour for every
+     category). */
+  .quick-ranges:not(.segmented-control) > .range-btn.active {
+    background: #14a3b4;
+    box-shadow: 0 4px 12px rgba(20, 163, 180, 0.45);
   }
 
-  .sub-tab-highlight {
-    border-radius: 999px;
-    /* Clears toward glass as the lens lifts (--lens, liquidGlass.ts). */
-    background: rgba(255, 255, 255, calc(0.1 - 0.08 * var(--lens, 0)));
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 2px 8px rgba(0, 0, 0, 0.25);
-  }
 
   /* Search bar — always open: the field takes whatever width the toggles
      leave, so Unified sliding in just narrows it. */
