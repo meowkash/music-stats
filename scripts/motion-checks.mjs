@@ -10,9 +10,47 @@ export async function checkMobileMotion(browser, origin) {
   page.on('pageerror', error => errors.push(error.stack || error.message));
   page.on('requestfailed', request => { if (request.resourceType() === 'script') failedScripts.push({ url: request.url(), error: request.failure() }); });
   await context.route(url => url.hostname !== new URL(origin).hostname, route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') }));
+  // Recent input, so a tab that never settles in CI says what the page received.
+  await context.addInitScript(() => {
+    const log = window.__inputLog = [];
+    for (const type of ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup', 'pointercancel', 'click', 'contextmenu']) {
+      addEventListener(type, event => {
+        const el = event.target instanceof Element ? event.target.closest('button') ?? event.target : null;
+        log.push(`${Math.round(performance.now())} ${type} ${el ? `${el.tagName.toLowerCase()}.${(el.getAttribute('class') ?? '').split(' ')[0]}${el.dataset?.tab ? `[${el.dataset.tab}]` : ''}` : '?'}`);
+        if (log.length > 30) log.shift();
+      }, true);
+    }
+  });
+  // Evaluated without rAF polling, so it also reports whether frames still run.
+  function navDiagnostics(name) {
+    return page.evaluate(name => new Promise(resolve => {
+      const snapshot = framesRunning => {
+        const rect = document.querySelector(`.tab-btn[data-tab="${name}"]`)?.getBoundingClientRect();
+        const hit = rect && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return {
+          framesRunning, visibility: document.visibilityState, focused: document.hasFocus(),
+          activeTab: document.body.dataset.activeTab, bar: document.querySelector('.main-tab-bar')?.className,
+          activeButtons: [...document.querySelectorAll('.tab-btn.active')].map(el => el.dataset.tab),
+          panels: [...document.querySelectorAll('.panel-section')].map(el => `${el.id}.${[...el.classList].join('.')}`),
+          animating: [...document.querySelectorAll('.nav-animating, .segmented-lens, .sheet-closing')].map(el => el.className),
+          overlay: document.getElementById('detailsOverlayPanel')?.className,
+          hit: hit ? `${hit.tagName.toLowerCase()}.${(hit.getAttribute('class') ?? '').split(' ')[0]} in ${hit.closest('button')?.dataset.tab ?? '-'}` : null,
+          input: window.__inputLog,
+        };
+      };
+      const timer = setTimeout(() => resolve(snapshot(false)), 1000);
+      requestAnimationFrame(() => { clearTimeout(timer); resolve(snapshot(true)); });
+    }), name);
+  }
   async function tab(name) {
     await page.locator(`.tab-btn[data-tab="${name}"]`).tap();
-    await page.waitForFunction(name => document.body.dataset.activeTab === name && !document.querySelector('.nav-animating'), name);
+    try {
+      await page.waitForFunction(name => document.body.dataset.activeTab === name && !document.querySelector('.nav-animating'), name, { timeout: 10000 });
+    } catch (error) {
+      const diagnostics = await navDiagnostics(name).catch(e => ({ unavailable: e.message }));
+      await page.screenshot({ path: `/tmp/music-tab-${name}-failure.png` }).catch(() => {});
+      throw new Error(`Tab ${name} did not settle: ${JSON.stringify(diagnostics, null, 2)}`, { cause: error });
+    }
   }
   async function touch(type, selector, x, y) {
     await page.locator(selector).evaluate((target, { type, x, y }) => {

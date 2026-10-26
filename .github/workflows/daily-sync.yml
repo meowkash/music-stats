@@ -122,6 +122,14 @@ jobs:
       - name: Verify startup, refresh, offline, and scrolling
         run: npm run test:browser
 
+      - name: Upload browser regression screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-regression-screenshots
+          path: /tmp/music-*.png
+          if-no-files-found: ignore
+
       - name: Upload Updated Database back to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
