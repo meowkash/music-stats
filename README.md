@@ -16,11 +16,11 @@ Use Node 22.12 or newer and `npm ci`. Restore the private inputs into `src/data`
 - `npx playwright install webkit`, then `npm run test:mobile -- http://<LAN-address>:4321` — Safari touch checks against an already running Astro dev server. This deliberately tests plain HTTP without Web Crypto. Set `MOBILE_BROWSER=chromium` and optionally `BENCH_BROWSER_CHANNEL=msedge` to use Chromium instead.
 - `npm run bench -- --repeat=3` — performance checks against the tracked baseline. Set `BENCH_BROWSER_CHANNEL=msedge` to use an installed Edge browser. Frame budgets account for display cadence; first-movement latency starts at the click that opens the sheet, excluding automation setup and press duration.
 
-Browser regressions build into a temporary directory, use synthetic update data in isolated browser profiles, and write results to `Verification/Runtime/regressions.json`. They do not alter account history or deploy anything.
+Browser regressions build into a temporary directory, use synthetic update data in isolated browser profiles, and write results to `Verification/Runtime/regressions.json` (gitignored). They do not alter account history or deploy anything.
 
 An iPhone opening the dev server through its LAN HTTP address lacks Web Crypto even though desktop `localhost` provides it. SHA-256 verification uses the native API when available and a matching JavaScript implementation otherwise; integrity checks remain enabled. The browser suite includes touch flows over a LAN HTTP origin, and the separate mobile command checks the actual dev server. Stories open from their small recap payload and enrich artwork/colors afterward. Failed detail loads retain the sheet and expose a retry action.
 
-Mobile checks also cover sheet spacing/overflow, forward and back motion frames, text retention through swipe dismissal, press feedback, draggable segmented controls, gesture cancellation, rapid navbar retargeting, and status-bar color synchronization. See [the motion notes](Verification/Runtime/MobileMotion.md) for the lifecycle decisions and test limits. The performance suite includes internal sheet navigation and uses real touch input for dismissal.
+Mobile checks also cover sheet spacing/overflow, forward and back motion frames, text retention through swipe dismissal, press feedback, draggable segmented controls, gesture cancellation, rapid navbar retargeting, and status-bar color synchronization. The performance suite includes internal sheet navigation and uses real touch input for dismissal.
 
 ## Runtime ownership
 

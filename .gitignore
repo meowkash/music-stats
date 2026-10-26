@@ -29,7 +29,6 @@ AGENTS.md
 
 /public/data
 /src/data/
-/src/data_old/
 !src/data/artist-overrides.json
 
 # generated at build time by scripts/generate-sw.js
@@ -40,3 +39,6 @@ AGENTS.md
 
 # benchmark run history (baseline.json is tracked)
 bench/records/
+
+# local test evidence written by test:browser / test:mobile
+/Verification/

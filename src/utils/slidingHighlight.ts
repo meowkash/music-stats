@@ -373,7 +373,11 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     if (group.hasPointerCapture(id)) group.releasePointerCapture(id);
     group.classList.remove('segmented-dragging');
     suppressUntil = performance.now() + 500;
-    const target = cancelled ? currentIndex : Math.round(fraction);
+    // A press held in place is a slow tap: it picks the segment under the
+    // finger, not the one the lens lifted from.
+    const held = Math.abs(event.clientX - startX) < 8 && Math.abs(event.clientY - startY) < 8;
+    const target = cancelled ? currentIndex
+      : Math.round(held ? fractionAtPoint(startX - originX, startY - originY) : fraction);
     if (!cancelled) buttons[target].click();
     // A selected button's handler may deliberately be a no-op.
     if (!cancel || currentIndex !== target) sync(buttons[target]);

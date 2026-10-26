@@ -1,8 +1,0 @@
-{
-  "case": "lastfm-error-body",
-  "exit": 0,
-  "before": 2,
-  "after": 1,
-  "log": "Starting Last.FM sync for user: audit-dummy\nReading existing scrobbles.csv...\nFound 2 existing scrobbles in CSV. Latest timestamp: 1702000000 (2023-12-08T01:46:40.000Z)\nFetching scrobbles from timestamp: 1700790400 (2023-11-24T01:46:40.000Z)\nFetching page 1 of 1...\nFetched 0 tracks from API.\nTotal unique scrobbles in database: 1\nSuccessfully wrote database to /private/var/folders/4p/6h8l5xss0m1fzszkyrpj3wh80000gn/T/music-sync-audit-r35Zmd/src/data/scrobbles.csv\nChecking for missing artwork...\nNo new artwork found or needed.\n",
-  "stderr": "No recent tracks returned. Stopping.\n"
-}

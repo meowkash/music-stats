@@ -166,6 +166,18 @@ export async function checkMobileMotion(browser, origin) {
     assert.equal(await group.evaluate(el => el.classList.contains('segmented-lens')), false);
     evidence.push('Cancelling a selector drag restores its selection and removes the lifted state');
 
+    // A press held past the lift delay without moving is still a tap on what is under the finger.
+    const songs = await group.locator('button').first().boundingBox();
+    await page.mouse.move(songs.x + songs.width / 2, songs.y + songs.height / 2); await page.mouse.down();
+    await page.waitForTimeout(240); await page.mouse.up(); await page.waitForTimeout(230);
+    assert.equal(await group.locator('button.active').getAttribute('data-tab'), await group.locator('button').first().getAttribute('data-tab'), 'A held selector tap must select its segment');
+    const stats = await page.locator('.tab-btn[data-tab="statistics"]').boundingBox();
+    await touch('touchstart', '.bottom-nav-container', stats.x + stats.width / 2, stats.y + stats.height / 2);
+    await page.waitForTimeout(240);
+    await touch('touchend', '.bottom-nav-container', stats.x + stats.width / 2, stats.y + stats.height / 2);
+    await page.waitForFunction(() => document.body.dataset.activeTab === 'statistics' && !document.querySelector('.nav-animating'), null, { timeout: 2000 });
+    evidence.push('Held taps on a selector or the navbar select what is under the finger');
+
     const positions = {};
     for (const name of ['dashboard', 'recents', 'statistics']) {
       const rect = await page.locator(`.tab-btn[data-tab="${name}"]`).boundingBox();

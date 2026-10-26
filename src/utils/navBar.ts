@@ -357,6 +357,8 @@ export function initNavBar(): void {
   let liftScale = 1;
   let liftRafId: number | null = null;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether the finger left the tap slop; a hold that never moves is a slow tap. */
+  let travelled = false;
 
   // Grows the pill into the lens over LIFT_MS with a slight overshoot. Runs
   // on its own rAF so the lift finishes even if the finger holds still.
@@ -415,6 +417,7 @@ export function initNavBar(): void {
 
     dragging = true;
     engaged = false;
+    travelled = false;
     velocity = 0;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -448,6 +451,7 @@ export function initNavBar(): void {
     const dx = clientX - startX;
     const dy = clientY - startY;
     const vertical = isVerticalNav();
+    if (Math.abs(dx) >= ENGAGE_DISTANCE || Math.abs(dy) >= ENGAGE_DISTANCE) travelled = true;
 
     if (!engaged) {
       if (Math.abs(dx) < ENGAGE_DISTANCE && Math.abs(dy) < ENGAGE_DISTANCE) return;
@@ -492,10 +496,12 @@ export function initNavBar(): void {
 
     const centers = track.centers();
     const spacing = centers.length > 1 ? Math.abs(centers[1] - centers[0]) || 1 : 1;
-    const target = Math.min(
-      Math.max(Math.round(fraction + (velocity * 90) / spacing), 0),
-      buttons.length - 1,
-    );
+    // A hold released in place picks the tab under the finger, like a tap
+    // whose click the lift suppressed.
+    const landing = travelled
+      ? fraction + (velocity * 90) / spacing
+      : track.fractionAt((isVerticalNav() ? startY : startX) - barOrigin);
+    const target = Math.min(Math.max(Math.round(landing), 0), buttons.length - 1);
 
     // velocity is px/ms along the bar; convert to tab-index units per second.
     // The loupe has settled on a choice: only now does the page move.
