@@ -346,6 +346,13 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
   let startX = 0, startY = 0, originX = 0, originY = 0, grabX = 0;
   let lastX = Number.NaN, lastTime = 0, speed = 0;
   let suppressUntil = 0;
+  // Rankings' range chips wrap onto two rows, where a path through the
+  // intermediate indices sweeps over chips the finger never touched (to the
+  // row's end, down to the next row's start, then out to the target). There a
+  // hop glides straight from where the pill is to the chosen chip, still on
+  // the lead spring: `start`..`end` is the stretch of pos.value it covers.
+  let glide: { from: Rect; to: Rect; start: number; end: number } | null = null;
+  let lastRect: Rect | null = null;
 
   // Labels take their colour from how much of the pill covers them, so text
   // and pill arrive together; while the lens is lifted the selected look
@@ -396,12 +403,16 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     const strength = Math.min(Math.max(Math.max(glass.value, lifted), 0), 1);
     // A dragged lens stretches with its speed; a hop stretches by its edges.
     const speedStretch = lens.stretchFor(track.centerAt((pos.value + trail.value) / 2));
-    const pose = track.renderSpan(trail.value, pos.value, {
+    const renderOptions = {
       scale: 1 + (LIFT_ALONG - 1) * l,
       scaleAcross: 1 + (LIFT_ACROSS - 1) * l,
       stretch: dragging ? speedStretch * strength : 0,
-    });
+    };
+    const pose = glide
+      ? track.renderRect(glideSpan(glide), Math.round(pos.target), renderOptions)
+      : track.renderSpan(trail.value, pos.value, renderOptions);
     if (!pose) return;
+    lastRect = pose.rect;
     const travelling = Math.min(Math.max(glass.value, 0), 1);
     lens.paint(pose, Math.max(lifted, travelling * TAP_REFRACTION), lifted);
     paintLabels(pose.rect, strength);
@@ -412,13 +423,23 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
       else highlightEl.style.setProperty('--face', face);
     }
   }
+  /** Both edges along the straight path; they only stretch the pill while
+   *  on one row, since a pill cannot span a line break. */
+  function glideSpan({ from, to, start, end }: NonNullable<typeof glide>): Rect {
+    const at = (value: number) => lerpRect(from, to, end === start ? 1 : (value - start) / (end - start));
+    const lead = at(pos.value), back = at(trail.value);
+    if (Math.abs(lead.top - back.top) > 2) return lead;
+    const left = Math.min(lead.left, back.left);
+    return { left, top: lead.top, width: Math.max(lead.left + lead.width, back.left + back.width) - left, height: lead.height };
+  }
   function finish() {
     raf = 0;
     lastTick = 0;
+    glide = null;
     trail.jump(pos.value);
     group.classList.remove('segmented-lens', 'segmented-dragging');
     lens.clear();
-    track.render(currentIndex);
+    lastRect = track.render(currentIndex)?.rect ?? lastRect;
     clearLabels();
   }
   let lastTick = 0;
@@ -455,6 +476,7 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     const to = track.rectAt(index);
     if (!to?.width || !to.height || !animate || reduced.matches) {
       cancelAnimationFrame(raf);
+      glide = null;
       pos.jump(index); trail.jump(index); glass.jump(0); lift.jump(0);
       if (to?.width && to.height) render();
       finish();
@@ -464,11 +486,20 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     // released drag) rather than restarting from a standstill.
     // Any glide crosses as glass; a lifted lens just carries on as one.
     if (Math.abs(index - pos.value) > DEFLATE_WITHIN) glass.to(1, { params: SPRING_PRESS });
+    glide = wraps() && lastRect && Math.abs(index - pos.value) > 1e-3
+      ? { from: { ...lastRect }, to, start: pos.value, end: index }
+      : null;
     pos.to(index, { velocity: dragging ? speed : undefined, params: SPRING_LEAD });
     run();
   }
+  /** Whether the buttons sit on more than one row (measured). */
+  function wraps(): boolean {
+    const first = track.rectAt(0);
+    return !!first && buttons.some((_, i) => Math.abs((track.rectAt(i)?.top ?? first.top) - first.top) > 2);
+  }
   /** Places the pill at a fractional segment index, at rest. */
   function scrub(value: number) {
+    glide = null;
     if (!track.count()) track.measure();
     pos.jump(Math.max(0, Math.min(buttons.length - 1, value)));
     trail.jump(pos.value);
@@ -539,6 +570,7 @@ export function createSlidingHighlight(options: SlidingHighlightOptions): {
     const now = performance.now();
     if (!Number.isNaN(lastX) && now > lastTime) speed = speed * 0.3 + ((raw - lastX) / (now - lastTime)) * 700;
     lastX = raw; lastTime = now;
+    glide = null;
     pos.jump(magnetise(raw));
     trail.jump(pos.value);
   }

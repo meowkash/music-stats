@@ -2,7 +2,7 @@
 // format is N small content-addressed files; the app still consumes one object
 // per dataset, so nothing above dataStore has to know this happened.
 
-export type DatasetKind = 'flat' | 'buckets';
+export type DatasetKind = 'flat' | 'buckets' | 'arrays';
 
 export interface DatasetSpec {
   kind: DatasetKind;
@@ -28,6 +28,17 @@ export function shardIndex(key: string, count: number): number {
 
 /** Reassembles shards into the object the app expects. */
 export function mergeShards(shards: unknown[], kind: DatasetKind): unknown {
+  // Index-range chunks of positional arrays (meta.json), concatenated in order.
+  if (kind === 'arrays') {
+    const merged: Record<string, unknown[]> = {};
+    for (const shard of shards) {
+      if (!shard || typeof shard !== 'object') continue;
+      for (const [key, values] of Object.entries(shard as Record<string, unknown>)) {
+        if (Array.isArray(values)) (merged[key] ??= []).push(...values);
+      }
+    }
+    return merged;
+  }
   if (kind === 'buckets') {
     const merged: Record<string, Record<string, unknown>> = {};
     for (const shard of shards) {

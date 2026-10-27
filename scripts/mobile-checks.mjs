@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { devices } from 'playwright';
 import { checkMobileMotion } from './motion-checks.mjs';
+import { checkLayoutRegressions } from './layout-regressions.mjs';
+import { checkArtworkRecovery } from './artwork-checks.mjs';
 
 /** Touch-driven checks shared by the build suite and the running dev server. */
 export async function checkMobileSurfaces(browser, origin, { insecure = false } = {}) {
@@ -104,7 +106,8 @@ export async function checkMobileSurfaces(browser, origin, { insecure = false } 
   }
   {
     const { context, page } = await fresh();
-    const meta = manifest.files.find(file => file.path === '/data/meta.json');
+    const metaPath = manifest.datasets?.['/data/meta.json']?.files[0] ?? '/data/meta.json';
+    const meta = manifest.files.find(file => file.path === metaPath);
     let tamper = true;
     await context.route(url => url.pathname === (meta.url ?? meta.path), route => tamper
       ? route.fulfill({ status: 200, contentType: 'application/json', body: '{"tampered":true}' })
@@ -124,5 +127,7 @@ export async function checkMobileSurfaces(browser, origin, { insecure = false } 
   assert.deepEqual(errors, [], JSON.stringify({ errors, failedRequests }));
   if (networkDiagnostics.length) evidence.push({ handledWebKitNetworkDiagnostics: networkDiagnostics.length });
   evidence.push(...await checkMobileMotion(browser, origin));
+  evidence.push(...await checkLayoutRegressions(browser, origin));
+  evidence.push(...await checkArtworkRecovery(browser, origin));
   return evidence;
 }

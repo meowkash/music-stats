@@ -12,6 +12,7 @@ import {
   resolveArtistArtworkFromCache,
   resolveArtistArtworkFromCandidates,
   resolveLegacyArtworkKey,
+  sanitizeArtistArtwork,
   storeArtworkInCache,
 } from './artwork-keys.js';
 import { resolveArtwork } from './resolve-artwork/index.js';
@@ -147,7 +148,7 @@ async function fetchEntityArtwork(type, entity) {
   const attempts = [];
 
   const result = await resolveArtwork(
-    { type, name: entity.name, artistName: entity.artistName || '' },
+    { type, name: entity.name, artistName: entity.artistName || '', tracks: entity.tracks },
     { lastfmKey: API_KEY, seriesCache, onAttempt: (a) => attempts.push(a) },
   );
 
@@ -288,13 +289,17 @@ async function main() {
   }
 
   if (pruneDead) await pruneDeadUrls(artworkCache);
+  // Before the artist passes, so a cleared artist is looked up this run.
+  const cleared = sanitizeArtistArtwork(artworkCache);
+  if (cleared) console.log(`Cleared ${cleared} artist images that were a compilation's cover.`);
   applyOverrides(artworkCache);
 
   const meta = JSON.parse(fs.readFileSync(META_PATH, 'utf-8'));
 
+  // Top tracks let a compilation be found through the songs on it.
   const albums = Object.values(catalog.albums || {})
     .sort((a, b) => b.scrobbles - a.scrobbles)
-    .map(a => ({ name: a.name, artistName: a.artistName }));
+    .map(a => ({ name: a.name, artistName: a.artistName, tracks: (a.tracks ?? []).slice(0, 2).map(t => ({ name: t.name, artistName: a.artistName })) }));
 
   const artists = Object.values(catalog.artists || {})
     .sort((a, b) => b.scrobbles - a.scrobbles)

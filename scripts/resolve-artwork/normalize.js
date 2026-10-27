@@ -50,6 +50,19 @@ export function isCompilationAlbum(albumName) {
     || parseEpisodic(title) !== null;
 }
 
+/** Whether a release title names the artist ("Hannah Montana 2" for Hannah
+ *  Montana) — the one case where a compilation's cover is that artist's. */
+export function titleNamesArtist(albumName, artistName) {
+  const artist = normalizeForCompare(primaryArtist(artistName));
+  return !!artist && ` ${normalizeForCompare(albumName)} `.includes(` ${artist} `);
+}
+
+/** A compilation's cover belongs to the release, not to each performer on it:
+ *  ZAYN is not the Fifty Shades Darker poster. */
+export function isArtistsOwnCover(albumName, artistName) {
+  return !isCompilationAlbum(albumName) || titleNamesArtist(albumName, artistName);
+}
+
 /** Editions and guest credits share a release; unrelated lead artists do not.
  * Scrobbles carry track artists, so explicitly named compilations use their
  * title as identity. Catalog release IDs would be needed for ambiguous cases.
@@ -74,16 +87,16 @@ export function stripDecorations(title) {
   return out.trim() || String(title).trim();
 }
 
-/** Lowercase, unaccent, drop punctuation — the form used for comparison only. */
+/** Lowercase, unaccent, drop punctuation — the form used for comparison only.
+ *  Letters and digits of every script survive: an ASCII-only filter turned
+ *  "Голая - Single" and "Худшая - Single" into the same "single", and Ed
+ *  Sheeran's "+", "=" and "÷" into nothing, merging each set into one album.
+ *  A title that is only symbols is its own key. */
 export function normalizeForCompare(value) {
   if (!value) return '';
-  return String(value)
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+  const raw = String(value).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const words = raw.replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return words || raw.replace(/\s+/g, '');
 }
 
 export function tokenize(value) {

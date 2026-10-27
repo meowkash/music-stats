@@ -7,11 +7,13 @@ import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { checkMobileSurfaces } from './mobile-checks.mjs';
+import { checkTextSizeAdjust } from './layout-regressions.mjs';
 const project = process.cwd();
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'music-browser-regression-'));
 const dist = path.join(directory, 'dist');
 const result = spawnSync(process.execPath, ['node_modules/astro/bin/astro.mjs', 'build', '--outDir', dist], { stdio: 'inherit' });
 assert.equal(result.status, 0, 'Astro build failed');
+const builtCss = checkTextSizeAdjust(fs.readFileSync(path.join(dist, 'index.html'), 'utf8'));
 await build({ stdin: { contents: `export * from './src/utils/dataStore.ts'; export * from './src/utils/infiniteScroll.ts'; export { saveActiveManifest, loadActiveManifest } from './src/utils/persist/generations.ts';`, resolveDir: project }, bundle: true, format: 'esm', outfile: path.join(dist, 'fixture.js'), logLevel: 'silent' });
 let manifestDelay = 0;
 const overrides = new Map();
@@ -34,7 +36,7 @@ const server = http.createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '0.0.0.0', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
-const evidence = [];
+const evidence = [builtCss];
 async function context(options = {}) {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, serviceWorkers: 'block', ...options });
   await context.route(url => url.hostname !== '127.0.0.1', route => route.abort());
@@ -131,6 +133,8 @@ try {
   assert.ok(virtual.count <= 150); assert.ok(virtual.first > 7900); assert.equal(virtual.restored, 0); assert.equal(virtual.disconnected, 1); evidence.push({ virtual });
 
   const c = await context(), p = await c.newPage(); const errors = []; p.on('pageerror', error => errors.push(error.message));
+  // Content-addressed bodies this page has fetched, in order.
+  const downloads = []; p.on('request', request => { const { pathname } = new URL(request.url()); if (pathname.startsWith('/data/versions/')) downloads.push(pathname); });
   await p.goto(origin, { waitUntil: 'domcontentloaded' });
   await p.click('.tab-btn[data-tab="rankings"]');
   await p.waitForFunction(() => document.body.dataset.activeTab === 'rankings');
@@ -149,7 +153,8 @@ try {
   const before = await p.evaluate(async url => { const { Chart } = await import(url); return Chart.getChart('yearlyCompareChart').data.datasets.find(d => d.label === '2026').data.at(-1); }, `/_astro/${chartFile}`);
   const next = JSON.parse(fs.readFileSync(path.join(dist, 'data/manifest.json'), 'utf8'));
   const { createHash } = await import('node:crypto');
-  for (const pathname of ['/data/yearly-totals.json', '/data/meta.json']) {
+  // meta.json ships as index-range chunks; rename the tracks in every one.
+  for (const pathname of ['/data/yearly-totals.json', ...next.datasets['/data/meta.json'].files]) {
     const data = JSON.parse(fs.readFileSync(path.join(dist, pathname), 'utf8'));
     if (pathname.includes('totals')) data['2026'][data['2026'].length - 1] += 123;
     else data.tracks = data.tracks.map(t => ['UPDATED ' + t[0], ...t.slice(1)]);
@@ -157,6 +162,7 @@ try {
     const file = next.files.find(f => f.path === pathname); Object.assign(file, { hash, bytes: Buffer.byteLength(body), url: `/data/versions/${hash}.json` }); overrides.set(file.url, body);
   }
   next.generation = 'fixture-next-generation'; overrides.set('/data/manifest.json', JSON.stringify(next));
+  const beforeSwap = downloads.length;
   await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await p.waitForFunction(expected => window.__Chart.getChart('yearlyCompareChart')?.data.datasets.find(d => d.label === '2026')?.data.at(-1) === expected, before + 123, { timeout: 30000 });
   assert.equal(await p.locator('#yearsFilterPopover input[value="2023"]').isChecked(), false);
@@ -174,7 +180,21 @@ try {
   // rather than a fixed time, so retiming the exit cannot break the check.
   await p.keyboard.press('Escape');
   await p.waitForFunction(() => document.querySelectorAll('#overlaySongsList .scrobble-row').length === 0, null, { timeout: 2000 });
-  assert.deepEqual(errors, []); evidence.push('A real generation swap refreshes chart/rankings, preserves filters, and details release bounded lists on close'); await c.close();
+  assert.deepEqual(errors, []); evidence.push('A real generation swap refreshes chart/rankings, preserves filters, and details release bounded lists on close');
+  // A new build re-downloads only what changed: nothing this device already
+  // holds is fetched again, by the swap or by relaunching on the new build.
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+  await p.click('.tab-btn[data-tab="rankings"]'); await p.waitForFunction(() => document.body.dataset.activeTab === 'rankings');
+  await p.click('.quick-ranges [data-range="all"]'); await p.waitForSelector('#leaderboardListSongs .scrobble-row');
+  await p.waitForTimeout(1500);
+  const held = new Set(downloads.slice(0, beforeSwap)), after = downloads.slice(beforeSwap);
+  const changedUrls = new Set([...overrides.keys()].filter(key => key.startsWith('/data/versions/')));
+  assert.deepEqual(after.filter(url => held.has(url)), [], 'Already-stored data was downloaded again after a new generation');
+  assert.deepEqual(after.filter((url, i) => after.indexOf(url) !== i), [], 'A body was downloaded twice');
+  assert.ok(after.some(url => changedUrls.has(url)), 'The changed files should have been downloaded');
+  evidence.push({ incremental: 'A generation swap and a relaunch fetch only bodies the device does not hold', fetchedAfterSwap: after.length, changed: changedUrls.size });
+  await c.close();
 
   // Exercise the real service worker: all lazy bundles must survive offline,
   // and a failed critical download must never replace a working controller.

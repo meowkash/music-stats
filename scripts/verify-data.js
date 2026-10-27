@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
+import { mergeShards } from './data-files.js';
 const directory = path.resolve(process.argv[2] || 'dist/data');
 const read = name => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'));
 const manifest = read('manifest.json');
-assert.ok(manifest.generation && manifest.files.length && manifest.schemaVersion === 2, 'Invalid manifest');
+assert.ok(manifest.generation && manifest.files.length && manifest.schemaVersion === 3, 'Invalid manifest');
 for (const file of manifest.files) {
   const name = file.path.replace(/^\/data\//, '');
   const bytes = fs.readFileSync(path.join(directory, name));
@@ -15,6 +16,11 @@ for (const file of manifest.files) {
 }
 const meta = read('meta.json');
 assert.ok(Array.isArray(meta.tracks) && meta.tracks.length > 0);
+// The client never downloads meta.json itself, only its chunks.
+const metaChunks = manifest.datasets?.['/data/meta.json'];
+assert.equal(metaChunks?.kind, 'arrays', 'meta.json must ship as index-range chunks');
+assert.ok(!manifest.files.some(file => file.path === '/data/meta.json'), 'The meta.json monolith must not be in the manifest');
+assert.deepEqual(mergeShards(metaChunks.files.map(file => read(file.replace(/^\/data\//, ''))), 'arrays'), meta, 'meta chunks do not reassemble into meta.json');
 for (const [name, artist, album, duration] of meta.tracks) {
   assert.equal(typeof name, 'string');
   assert.equal(typeof meta.artists[artist], 'string');

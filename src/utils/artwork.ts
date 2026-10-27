@@ -1,3 +1,5 @@
+import { isArtistsOwnCover } from '../../scripts/resolve-artwork/normalize.js';
+
 const ANIMATED_URL_PATTERN = /\.gif(\?|$)|[?&]animated=|\/animated\//i;
 
 export function isStaticArtworkUrl(url: string | null): boolean {
@@ -191,7 +193,8 @@ function getFallbackIndex(cache: Record<string, string>): ArtworkFallbackIndex {
     const artistName = body.slice(split + 1);
 
     // First write wins, matching the original "first match in key order" scans.
-    if (artistName && !byArtist.has(artistName)) byArtist.set(artistName, url);
+    // A compilation's cover stands in for its release, never for a performer on it.
+    if (artistName && !byArtist.has(artistName) && isArtistsOwnCover(albumName, artistName)) byArtist.set(artistName, url);
     if (albumName && artistName) {
       const key = `${looseKey(albumName)}|${looseKey(artistName)}`;
       if (!byAlbumName.has(key)) byAlbumName.set(key, url);

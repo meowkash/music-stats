@@ -28,7 +28,7 @@ function inline<T>(id: string): T | null {
 }
 export function validateManifest(value: unknown): Manifest {
   const m = value as Manifest;
-  if (!m || (m.schemaVersion !== undefined && m.schemaVersion > 2) || typeof m.generation !== 'string' || !Array.isArray(m.files) || !m.files.length) throw new Error('Invalid data manifest');
+  if (!m || (m.schemaVersion !== undefined && m.schemaVersion > 3) || typeof m.generation !== 'string' || !Array.isArray(m.files) || !m.files.length) throw new Error('Invalid data manifest');
   const paths = new Set<string>();
   for (const file of m.files) {
     if (!/^\/data\/[a-zA-Z0-9_./-]+\.json$/.test(file.path) || file.path.includes('..') || !/^[a-f0-9]{16}$/.test(file.hash) || !Number.isFinite(file.bytes) || paths.has(file.path)) throw new Error('Invalid manifest file');
@@ -36,7 +36,7 @@ export function validateManifest(value: unknown): Manifest {
     paths.add(file.path);
   }
   for (const spec of Object.values(m.datasets ?? {})) {
-    if (!['flat', 'buckets'].includes(spec.kind) || !spec.files.length || spec.files.some(p => !paths.has(p))) throw new Error('Incomplete manifest dataset');
+    if (!['flat', 'buckets', 'arrays'].includes(spec.kind) || !spec.files.length || spec.files.some(p => !paths.has(p))) throw new Error('Incomplete manifest dataset');
   }
   return m;
 }
@@ -142,7 +142,10 @@ export function stageUpdate(): Promise<RefreshResult> {
       }
       // Verify all required bodies, including unchanged files evicted by storage.
       await leaseGeneration(remote, activeManifest ?? undefined).catch(() => {});
-      const result = await syncFiles(remote.files.filter(file => file.path !== remote.artworkPath), CACHE_VERSION);
+      // The prefetch list is not needed to show the new generation; the gentle
+      // backfill fetches it afterwards.
+      const deferred = new Set(remote.artworkPath ? remote.datasets?.[remote.artworkPath]?.files ?? [remote.artworkPath] : []);
+      const result = await syncFiles(remote.files.filter(file => !deferred.has(file.path)), CACHE_VERSION);
       persistent &&= result.persistent;
       const changedPaths = await commit(remote);
       if (persistent && 'locks' in navigator) await navigator.locks.request('music-stats-gc', () => collectGarbage(remote)).catch(() => {});

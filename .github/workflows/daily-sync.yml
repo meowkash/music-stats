@@ -116,6 +116,9 @@ jobs:
             console.log('✓ tracks', meta.tracks.length);
           "
 
+      - name: Verify a day of scrobbles re-ships only what changed
+        run: npm run test:churn
+
       - name: Install browser for regression checks
         run: npx playwright install --with-deps chromium
 

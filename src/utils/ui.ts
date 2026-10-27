@@ -50,14 +50,23 @@ export function escapeHTML(str: string): string {
 }
 
 let artworkCache: Record<string, string> | null = null;
+// Rows rendered without the index show placeholders until it lands, so a
+// failed load keeps retrying (and the 'data-updated' below repaints them).
+let artworkCacheRetry: ReturnType<typeof setTimeout> | null = null;
+let artworkCacheRetryMs = 2000;
 
 export async function loadArtworkCache(): Promise<Record<string, string>> {
   if (artworkCache) return artworkCache;
   try {
     artworkCache = await fetchAppJson<Record<string, string>>('/data/artwork.json');
+    artworkCacheRetryMs = 2000;
     window.dispatchEvent(new CustomEvent('data-updated', { detail: { path: '/data/artwork.json', data: artworkCache } }));
   } catch (e) {
     console.error('Failed to load artwork.json', e);
+    if (artworkCacheRetry === null) {
+      artworkCacheRetry = setTimeout(() => { artworkCacheRetry = null; void loadArtworkCache().catch(() => {}); }, artworkCacheRetryMs);
+      artworkCacheRetryMs = Math.min(artworkCacheRetryMs * 2, 60000);
+    }
     throw e;
   }
   return artworkCache;
@@ -224,6 +233,71 @@ function showArtworkFallback(thumb: HTMLElement) {
   if (img) img.remove();
 }
 
+// A cover that failed every source (offline, a CDN blip) is not given up on:
+// it retries with backoff, and at once when the network or the app comes back,
+// so it appears without a relaunch. Retries probe with a detached image so the
+// placeholder stays put until the real one can replace it.
+const RECOVERY_DELAYS_MS = [4000, 8000, 16000, 32000, 64000, 120000];
+const ARTWORK_PROBE_TIMEOUT_MS = 8000;
+const stranded = new Map<HTMLElement, () => void>();
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let recoveryRound = 0;
+
+function probeArtwork(sources: string[]): Promise<string | null> {
+  return sources.reduce<Promise<string | null>>((found, src) => found.then(hit => hit ?? new Promise(resolve => {
+    const probe = new Image();
+    const timer = setTimeout(() => { probe.src = ''; resolve(null); }, ARTWORK_PROBE_TIMEOUT_MS);
+    probe.crossOrigin = 'anonymous';
+    probe.onload = () => { clearTimeout(timer); resolve(probe.naturalWidth > 0 ? src : null); };
+    probe.onerror = () => { clearTimeout(timer); resolve(null); };
+    probe.src = src;
+  })), Promise.resolve(null));
+}
+
+function recoverArtwork(): void {
+  for (const [thumb, retry] of [...stranded]) {
+    stranded.delete(thumb);
+    if (thumb.isConnected) retry();
+  }
+}
+
+function scheduleRecovery(): void {
+  if (recoveryTimer !== null || !stranded.size || recoveryRound >= RECOVERY_DELAYS_MS.length) return;
+  recoveryTimer = setTimeout(() => { recoveryTimer = null; recoveryRound++; recoverArtwork(); }, RECOVERY_DELAYS_MS[recoveryRound]);
+}
+
+function recoverNow(): void {
+  if (document.hidden) return;
+  if (!artworkCache) void loadArtworkCache().catch(() => {});
+  recoveryRound = 0;
+  if (recoveryTimer !== null) { clearTimeout(recoveryTimer); recoveryTimer = null; }
+  recoverArtwork();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', recoverNow);
+  document.addEventListener('visibilitychange', recoverNow);
+}
+
+/** Shows the placeholder now and swaps the cover in once a source loads. */
+function strandArtwork(thumb: HTMLElement, img: HTMLImageElement, sources: string[]): void {
+  showArtworkFallback(thumb);
+  stranded.set(thumb, () => {
+    void probeArtwork(sources).then(src => {
+      if (!thumb.isConnected) return;
+      if (!src) { strandArtwork(thumb, img, sources); return; }
+      thumb.querySelector('.artwork-fallback')?.remove();
+      thumb.classList.remove('artwork-error');
+      img.removeAttribute('loading');
+      img.style.opacity = '';
+      img.src = src;
+      thumb.appendChild(img);
+      markArtworkLoaded(thumb);
+    });
+  });
+  scheduleRecovery();
+}
+
 function markArtworkLoaded(thumb: HTMLElement) {
   thumb.classList.remove('artwork-loading');
   thumb.classList.add('artwork-loaded');
@@ -348,7 +422,7 @@ function bindArtworkImage(img: HTMLImageElement) {
       img.style.opacity = '';
       markArtworkLoaded(thumb);
     },
-    onFailure: () => showArtworkFallback(thumb),
+    onFailure: () => strandArtwork(thumb, img, sources),
   });
 }
 
@@ -361,6 +435,7 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
 
   thumb.querySelector('.artwork-shimmer')?.remove();
 
+  const sources = [...new Set([img.src, img.dataset.fallbackSrc].filter((src): src is string => !!src && src !== window.location.href))];
   const markLoaded = () => {
     thumb.classList.add('artwork-loaded');
     img.style.opacity = '';
@@ -374,11 +449,11 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
       // Already failed before binding
       const fallbackSrc = img.dataset.fallbackSrc;
       if (fallbackSrc && img.src !== fallbackSrc && img.src !== window.location.href) {
-        img.onerror = () => showArtworkFallback(thumb);
+        img.onerror = () => strandArtwork(thumb, img, sources);
         img.src = fallbackSrc;
         return;
       }
-      showArtworkFallback(thumb);
+      strandArtwork(thumb, img, sources);
       return;
     }
   }
@@ -387,11 +462,11 @@ function bindOverlayAlbumCardImage(img: HTMLImageElement) {
   img.onerror = () => {
     const fallbackSrc = img.dataset.fallbackSrc;
     if (fallbackSrc && img.src !== fallbackSrc) {
-      img.onerror = () => showArtworkFallback(thumb);
+      img.onerror = () => strandArtwork(thumb, img, sources);
       img.src = fallbackSrc;
       return;
     }
-    showArtworkFallback(thumb);
+    strandArtwork(thumb, img, sources);
   };
 }
 

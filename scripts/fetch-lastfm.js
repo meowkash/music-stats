@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isStaticArtworkUrl, normalizeStaticArtworkUrl } from './artwork-utils.js';
-import { artworkCacheKey, storeArtworkInCache } from './artwork-keys.js';
+import { artworkCacheKey, harvestScrobbleArtwork, storeArtworkInCache } from './artwork-keys.js';
 
 import { csvRecords } from './scrobble-source.js';
 import { loadEnv } from './lastfm-client.js';
@@ -186,15 +186,12 @@ async function main() {
         if (track.image && Array.isArray(track.image)) {
           const img = track.image.find(i => i.size === 'extralarge') || track.image.find(i => i.size === 'large');
           if (img && img['#text'] && isStaticArtworkUrl(img['#text'])) {
-            const artistName = track.artist['#text'] || '';
-            const albumName = track.album['#text'] || '';
-            const normalized = normalizeStaticArtworkUrl(img['#text']);
-            if (normalized) {
-              if (albumName) {
-                storeArtworkInCache(artworkCache, 'album', albumName, artistName, normalized);
-              }
-              storeArtworkInCache(artworkCache, 'track', track.name, artistName, normalized);
-            }
+            harvestScrobbleArtwork(artworkCache, {
+              trackName: track.name,
+              artistName: track.artist['#text'] || '',
+              albumName: track.album['#text'] || '',
+              url: normalizeStaticArtworkUrl(img['#text']),
+            });
           }
         }
       }

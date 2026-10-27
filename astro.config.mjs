@@ -36,9 +36,12 @@ export default defineConfig({
     // Latest Safari only — skip downleveling that costs parse and runtime.
     // Do not also list es2023: safari18 already implies it, and esbuild errors
     // with "'es2023' is already specified" when both are present.
+    // iOS must be listed separately: Lightning CSS treats safari18 as desktop
+    // Safari and strips -webkit-text-size-adjust, the only form iOS honours —
+    // without it text autosizing inflates every font after a rotation.
     build: {
-      target: 'safari18',
-      cssTarget: 'safari18',
+      target: ['safari18', 'ios18'],
+      cssTarget: ['safari18', 'ios18'],
     },
   },
 });

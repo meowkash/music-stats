@@ -2,12 +2,15 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
+  CHUNKED_DATASETS,
   SHARDED_DATASETS,
   SHARD_COUNT,
   datasetDirName,
   listDataFiles,
   readDataset,
   shardFileName,
+  writeChunks,
+  writeDataset,
 } from './data-files.js';
 
 // The contract the client downloads against. Files are content-hashed; artwork
@@ -23,7 +26,9 @@ function hashBytes(buffer) {
 
 function collectDataFiles() {
   // Recursive: the sharded datasets live in per-dataset subdirectories.
-  return listDataFiles(DATA_DIR, new Set([MANIFEST_NAME])).filter(rel => !rel.startsWith('versions/')).map((rel) => {
+  // Chunked datasets ship as their chunks; the monolith stays for build tools.
+  const exclude = new Set([MANIFEST_NAME, ...Object.keys(CHUNKED_DATASETS)]);
+  return listDataFiles(DATA_DIR, exclude).filter(rel => !rel.startsWith('versions/')).map((rel) => {
     const bytes = fs.readFileSync(path.join(DATA_DIR, rel));
     const hash = hashBytes(bytes);
     const versionDir = path.join(DATA_DIR, 'versions');
@@ -55,6 +60,14 @@ function collectDatasets() {
       files.push(`/data/${datasetDirName(name)}/${shard}`);
     }
 
+    if (files.length) datasets[`/data/${name}`] = { kind: spec.kind, files };
+  }
+
+  for (const [name, spec] of Object.entries(CHUNKED_DATASETS)) {
+    const dir = path.join(DATA_DIR, datasetDirName(name));
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir).filter((file) => file.endsWith('.json')).sort()
+      .map((file) => `/data/${datasetDirName(name)}/${file}`);
     if (files.length) datasets[`/data/${name}`] = { kind: spec.kind, files };
   }
 
@@ -100,9 +113,11 @@ function artworkWeights() {
   return weights;
 }
 
+// { url: weight } with weight = log2 of the best play count among the keys
+// sharing that URL; the client sorts it heaviest first.
 function collectArtworkUrls() {
   const cache = readJson('artwork.json');
-  if (!cache) return [];
+  if (!cache) return {};
 
   const weights = artworkWeights();
   // artwork.json stores each URL under both a prefixed and a legacy key, so the
@@ -115,26 +130,30 @@ function collectArtworkUrls() {
     byUrl.set(url, Math.max(byUrl.get(url) ?? 0, weight));
   }
 
-  return [...byUrl.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([url]) => url);
+  return Object.fromEntries(
+    [...byUrl.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([url, weight]) => [url, Math.floor(Math.log2(weight + 1))]),
+  );
 }
 
-function generationId(files, artworkUrls) {
+function generationId(files) {
   const digest = crypto.createHash('sha256');
   for (const file of files) digest.update(`${file.path}:${file.hash}\n`);
-  digest.update(`artwork:${artworkUrls.length}:${hashBytes(artworkUrls.join('\n'))}`);
   return digest.digest('hex').slice(0, 16);
 }
 
 const artwork = collectArtworkUrls();
-fs.writeFileSync(path.join(DATA_DIR, 'artwork-urls.json'), JSON.stringify(artwork));
+writeDataset(DATA_DIR, 'artwork-urls.json', artwork);
+for (const name of Object.keys(CHUNKED_DATASETS)) {
+  const data = readDataset(DATA_DIR, name);
+  if (data) writeChunks(DATA_DIR, name, data);
+}
 const files = collectDataFiles();
 const datasets = collectDatasets();
 
 const manifest = {
-  schemaVersion: 2,
-  generation: generationId(files, artwork),
+  // 3: meta.json arrives as 'arrays' chunks, which a v2 client cannot merge.
+  schemaVersion: 3,
+  generation: generationId(files),
   builtAt: new Date().toISOString(),
   files,
   datasets,
@@ -148,5 +167,5 @@ const totalBytes = files.reduce((sum, f) => sum + f.bytes, 0);
 console.log(
   `Generated manifest ${manifest.generation}: ${files.length} files ` +
     `(${(totalBytes / 1024).toFixed(0)} KB), ${Object.keys(datasets).length} sharded datasets, ` +
-    `${artwork.length} artwork URLs`,
+    `${Object.keys(artwork).length} artwork URLs`,
 );

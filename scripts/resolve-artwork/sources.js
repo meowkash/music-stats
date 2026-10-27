@@ -37,6 +37,8 @@ export async function searchItunes(term, entity) {
     .map((result) => ({
       name: nameFor(result),
       artistName: result.artistName ?? '',
+      // The release a song sits on: how a compilation is found through its tracks.
+      album: entity === 'song' ? result.collectionName ?? '' : undefined,
       url: upscaleItunes(result.artworkUrl100),
       source: 'itunes',
     }))
@@ -51,6 +53,7 @@ export async function searchDeezer(term, type) {
     .map((result) => ({
       name: result.title ?? result.name ?? '',
       artistName: result.artist?.name ?? result.name ?? '',
+      album: type === 'track' ? result.album?.title ?? '' : undefined,
       // xl is 1000x1000 for albums, 1000x1000 for artist pictures
       url: result.cover_xl ?? result.picture_xl ?? result.album?.cover_xl ?? null,
       source: 'deezer',
@@ -127,6 +130,6 @@ export async function searchLastfm(apiKey, { type, name, artistName }) {
 
   const image = lastfmImage(data.track?.album?.image) ?? lastfmImage(data.track?.image);
   return image
-    ? [{ name: data.track?.name ?? name, artistName: data.track?.artist?.name ?? artistName, url: image, source: 'lastfm' }]
+    ? [{ name: data.track?.name ?? name, artistName: data.track?.artist?.name ?? artistName, album: data.track?.album?.title ?? '', url: image, source: 'lastfm' }]
     : [];
 }

@@ -1,5 +1,5 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
-import { promoteCanonicalArtworkCache } from './artwork-keys.js';
+import { promoteCanonicalArtworkCache, sanitizeArtistArtwork } from './artwork-keys.js';
 import { canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { createAlbumGroups } from './album-groups.js';
 import { parseCSVLine, csvRecords } from './scrobble-source.js';
@@ -447,8 +447,10 @@ function main() {
   // Promote raw-artist artwork onto canonical display names, then publish cache
   if (fs.existsSync(ARTWORK_PATH)) {
     const artworkCache = JSON.parse(fs.readFileSync(ARTWORK_PATH, 'utf-8'));
+    const cleared = sanitizeArtistArtwork(artworkCache);
+    if (cleared > 0) console.log(`Cleared ${cleared} artist images that were a compilation's cover`);
     const promoted = promoteCanonicalArtworkCache(artworkCache, canonicalArtists, { artists, rawToCanonical });
-    if (promoted > 0) {
+    if (promoted > 0 || cleared > 0) {
       fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
       console.log(`Promoted artwork for ${promoted} canonical artists`);
     }

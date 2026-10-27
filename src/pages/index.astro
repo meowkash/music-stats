@@ -212,7 +212,9 @@ import { TAB_THEME_COLORS, TAB_BOTTOM_COLORS } from "../utils/tabTheme";
       const manifest = getActiveManifest();
       if (!manifest) return;
       void (async () => {
-        const artwork = manifest.artworkPath ? await fetchAppJson<string[]>(manifest.artworkPath) : manifest.artwork;
+        // { url: weight } since the list was sharded; heaviest first.
+        const list = manifest.artworkPath ? await fetchAppJson<string[] | Record<string, number>>(manifest.artworkPath) : manifest.artwork;
+        const artwork = Array.isArray(list) ? list : Object.entries(list).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([url]) => url);
         if (manifest === getActiveManifest()) await prefetchArtwork({ ...manifest, artwork });
       })().catch(() => {});
     }, 2000);

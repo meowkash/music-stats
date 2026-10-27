@@ -982,6 +982,17 @@ const washStyles = [
 		box-shadow: 0 0 10px var(--accent-pink-glow);
 	}
 
+	/* iOS zooms the page into any focused field whose text is under 16px and
+	   never zooms back out. !important so no component rule can undercut it;
+	   scripts/mobile-checks.mjs fails the build if one does. */
+	@media (pointer: coarse) {
+		input,
+		select,
+		textarea {
+			font-size: 16px !important;
+		}
+	}
+
 	/* Kill iOS grey flash; press feedback is handled below / via .is-pressed. */
 	button,
 	a,

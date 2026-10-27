@@ -29,9 +29,10 @@ self.onmessage = (event: MessageEvent<QueryRequest>) => {
       const snapshot = snapshots.get(request.manifest.generation);
       const years = Array.from({ length: Number(request.end.slice(0, 4)) - Number(request.start.slice(0, 4)) + 1 }, (_, i) => String(Number(request.start.slice(0, 4)) + i)).filter(y => request.manifest.files.some(f => f.path === `/data/year-${y}.json`));
       const read = async <T>(path: string) => {
-        const file = request.manifest.files.find(f => f.path === path);
-        if (!file) throw new Error(`Missing query source: ${path}`);
-        return await readFiles([file], undefined, request.version) as T;
+        const dataset = request.manifest.datasets?.[path];
+        const files = (dataset?.files ?? [path]).map(p => request.manifest.files.find(f => f.path === p));
+        if (files.some(file => !file)) throw new Error(`Missing query source: ${path}`);
+        return await readFiles(files as NonNullable<typeof files[number]>[], dataset?.kind, request.version) as T;
       };
       const meta = snapshot?.meta ?? await read<MetaData>('/data/meta.json');
       const key = `${request.manifest.generation}:${request.start}:${request.end}`;

@@ -19,16 +19,53 @@ import path from 'path';
 // because the index is a hash: 40 plays of 40 distinct tracks dirtied 28 of 64
 // shards. An artist's tracks, albums and aliases now land together, so a day
 // spent on a few artists dirties a few shards.
+//
+// `artwork-urls.json` is the prefetch list: { url: log2(plays) }. Exact play
+// counts reordered the whole list every build; the coarse weight only moves
+// when a count doubles, so a day's listening dirties the shards of new covers.
 export const SHARDED_DATASETS = {
   'artwork.json': { kind: 'flat' },
   'colors.json': { kind: 'flat' },
   'catalog.json': { kind: 'buckets', groupBy: 'canonicalArtist' },
+  'artwork-urls.json': { kind: 'flat' },
 };
 
-// ~60 KB per shard for artwork/catalog at current data volumes. meta.json is
-// deliberately absent: its buckets are positional arrays whose index *is* the
-// entity id, and at 740 KB it isn't worth the reassembly complexity.
+// ~60 KB per shard for artwork/catalog at current data volumes.
 export const SHARD_COUNT = 64;
+
+// meta.json's buckets are positional arrays whose index *is* the entity id,
+// and ids are only ever appended. Split by index range, every chunk but the
+// tail stays byte-identical between builds, where hashing would scatter new
+// ids everywhere. Build scripts keep reading the monolith; only the client
+// downloads chunks (generate-manifest.js writes them last).
+export const CHUNKED_DATASETS = {
+  'meta.json': { kind: 'arrays', size: 512 },
+};
+
+/** Chunk i holds entries [i * size, (i + 1) * size) of every array. */
+export function chunkArrays(data, size) {
+  const length = Math.max(1, ...Object.values(data).map((value) => value.length));
+  return Array.from({ length: Math.ceil(length / size) }, (_, i) =>
+    Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.slice(i * size, (i + 1) * size)])),
+  );
+}
+
+/** Writes a chunked dataset next to its monolith, dropping chunks that no longer exist. */
+export function writeChunks(dataDir, name, data) {
+  const spec = CHUNKED_DATASETS[name];
+  const dir = path.join(dataDir, datasetDirName(name));
+  fs.mkdirSync(dir, { recursive: true });
+  const chunks = chunkArrays(data, spec.size);
+  const names = new Set(chunks.map((chunk, i) => {
+    const file = shardFileName(i);
+    const next = JSON.stringify(chunk);
+    const target = path.join(dir, file);
+    if (!fs.existsSync(target) || fs.readFileSync(target, 'utf-8') !== next) fs.writeFileSync(target, next);
+    return file;
+  }));
+  for (const file of fs.readdirSync(dir)) if (!names.has(file)) fs.rmSync(path.join(dir, file));
+  return chunks.length;
+}
 
 /**
  * FNV-1a, 32-bit. Must stay byte-identical to shardIndex() in
@@ -137,6 +174,13 @@ export function splitDataset(data, spec, context = {}) {
  * merged wholesale, so changing `groupBy` never requires a reader change.
  */
 export function mergeShards(shards, kind) {
+  if (kind === 'arrays') {
+    const merged = {};
+    for (const shard of shards) {
+      for (const [key, values] of Object.entries(shard)) (merged[key] ??= []).push(...values);
+    }
+    return merged;
+  }
   if (kind === 'buckets') {
     const merged = {};
     for (const shard of shards) {

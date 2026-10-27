@@ -1,4 +1,4 @@
-import { parseEpisodic, primaryArtist, stripDecorations } from './normalize.js';
+import { isCompilationAlbum, normalizeForCompare, parseEpisodic, primaryArtist, stripDecorations } from './normalize.js';
 import { pickBest } from './score.js';
 import { searchDeezer, searchItunes, searchLastfm, searchMusicBrainz } from './sources.js';
 
@@ -13,16 +13,19 @@ const DEEZER_TYPE = { album: 'album', artist: 'artist', track: 'track' };
 
 // Each rung carries the query it is *scored* against, which differs from what it
 // searches: a series lookup is judged against the series, not the episode title.
-export function buildLadder({ type, name, artistName }) {
+export function buildLadder({ type, name, artistName, tracks = [], compilation = false }) {
   const rungs = [];
   const bareArtist = primaryArtist(artistName);
   const undecorated = stripDecorations(name);
   const episodic = parseEpisodic(name);
+  const kind = type === 'album' ? 'album' : undefined;
+  const multiTrack = new Set(tracks.map((track) => normalizeForCompare(stripDecorations(track.name)))).size > 1;
+  const isCompilation = type === 'album' && (compilation || isCompilationAlbum(name));
 
   const push = (rung) => {
     if (!rung.term?.trim()) return;
     if (rungs.some((existing) => existing.term === rung.term && existing.type === rung.type)) return;
-    rungs.push(rung);
+    rungs.push({ ...rung, expect: { kind, multiTrack, ...rung.expect } });
   };
 
   if (type === 'artist') {
@@ -69,6 +72,33 @@ export function buildLadder({ type, name, artistName }) {
     });
   }
 
+  // Scrobbles credit a compilation's songs to their performers, but stores
+  // file the release under Various Artists (or a soundtrack credit), so the
+  // artist check above rejects the right cover on every rung.
+  if (isCompilation) {
+    push({
+      label: 'compilation',
+      type: 'album',
+      term: undecorated,
+      expect: { name: undecorated, artistName, compilation: true },
+      lastfmArtist: 'Various Artists',
+    });
+    // A song search names the release each song is on; its cover is the
+    // compilation's when that release is this album.
+    for (const track of tracks.slice(0, 2)) {
+      const title = stripDecorations(track.name);
+      const performer = track.artistName || artistName;
+      push({
+        label: 'compilation-track',
+        type: 'track',
+        term: `${primaryArtist(performer)} ${title}`,
+        expect: { kind: undefined, name: title, artistName: performer, album: name, viaTrack: true },
+        lastfmName: track.name,
+        lastfmArtist: performer,
+      });
+    }
+  }
+
   push({
     label: 'title-only',
     type,
@@ -96,10 +126,11 @@ async function gatherCandidates(rung, { lastfmKey, artistName, name }) {
     await collect(() => searchDeezer(rung.term, DEEZER_TYPE[rung.type] ?? 'album'));
   }
   if (!pickBest(rung.expect, candidates) && rung.type !== 'artist') {
-    await collect(() => searchMusicBrainz(rung.expect.name, rung.expect.artistName));
+    // MusicBrainz credits a compilation to Various Artists, not the performer.
+    await collect(() => searchMusicBrainz(rung.expect.name, rung.expect.compilation ? '' : rung.expect.artistName));
   }
   if (!pickBest(rung.expect, candidates)) {
-    await collect(() => searchLastfm(lastfmKey, { type: rung.type, name, artistName }));
+    await collect(() => searchLastfm(lastfmKey, { type: rung.type, name: rung.lastfmName ?? name, artistName: rung.lastfmArtist ?? artistName }));
   }
 
   return candidates;
@@ -108,7 +139,7 @@ async function gatherCandidates(rung, { lastfmKey, artistName, name }) {
 // Resolve one entity to an artwork URL, or null when nothing scores as a match.
 export async function resolveArtwork(entity, options = {}) {
   const { lastfmKey, seriesCache, onAttempt } = options;
-  const { type, name, artistName = '' } = entity;
+  const { type, name, artistName = '', tracks, compilation } = entity;
 
   const episodic = type !== 'artist' ? parseEpisodic(name) : null;
   const seriesKey = episodic ? `${primaryArtist(artistName)}|${episodic.series}` : null;
@@ -122,7 +153,7 @@ export async function resolveArtwork(entity, options = {}) {
     }
   }
 
-  for (const rung of buildLadder({ type, name, artistName })) {
+  for (const rung of buildLadder({ type, name, artistName, tracks, compilation })) {
     const candidates = await gatherCandidates(rung, { lastfmKey, artistName, name });
     const best = pickBest(rung.expect, candidates);
 
