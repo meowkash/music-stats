@@ -257,18 +257,28 @@ export function buildArtistAttribution(rawArtists, overrides = loadOverrides(), 
   const rawToCanonical = [];
   const parseReport = [];
 
-  for (const { raw, credits } of parseResults) {
-    const ids = [...new Set(credits.map((c) => canonicalIdFor(c)))];
-    rawToCanonical.push(ids);
-    parseReport.push({ raw, credits, canonicalIds: ids });
-  }
+  // Ids are minted in first-scrobble order, so a new day only appends them.
+  // Raw artists and tracks are both numbered by first appearance; each raw
+  // artist is resolved just before the first track that introduces it. Minting
+  // all raw artists first put title-only credits (feat. X) after them, and every
+  // new raw artist shifted those ids, rewriting every meta chunk and catalog shard.
+  const resolveRawThrough = (rawId) => {
+    while (rawToCanonical.length <= rawId && rawToCanonical.length < parseResults.length) {
+      const { raw, credits } = parseResults[rawToCanonical.length];
+      const ids = [...new Set(credits.map((c) => canonicalIdFor(c)))];
+      rawToCanonical.push(ids);
+      parseReport.push({ raw, credits, canonicalIds: ids });
+    }
+  };
 
   const trackToCanonical = [];
   for (let tId = 0; tId < tracks.length; tId++) {
     const [trackName, artistId] = tracks[tId];
+    resolveRawThrough(artistId);
     const credits = parseScrobbleCredits(rawArtists[artistId], trackName, overrides).map((c) => applyAlias(c, aliases));
     trackToCanonical.push([...new Set(credits.map((c) => canonicalIdFor(c)))]);
   }
+  resolveRawThrough(parseResults.length - 1);
 
   return { canonicalArtists, rawToCanonical, trackToCanonical, parseReport };
 }

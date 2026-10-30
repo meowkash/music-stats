@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { buildArtistAttribution } from './artist-resolve.js';
 import { chunkArrays, mergeShards, writeDataset } from './data-files.js';
 
 // Clients keep every body they have downloaded, keyed by hash, so what a new
@@ -33,6 +34,16 @@ function synthetic() {
   const a = chunkArrays(meta(1300), 512), b = chunkArrays(meta(1306), 512);
   assert.deepEqual(mergeShards(b, 'arrays'), meta(1306));
   assert.equal(JSON.stringify(a.slice(0, -1)), JSON.stringify(b.slice(0, -1)), 'Appending ids rewrote earlier meta chunks');
+
+  // Canonical ids must be append-only too. A credit that only appears in a
+  // title (feat. Guest) used to be numbered after every raw artist, so a day's
+  // new artist shifted it and rewrote every meta chunk and catalog shard.
+  const attribute = (artists, tracks) => buildArtistAttribution(artists, { singleEntities: [], aliases: {} }, [], tracks, []);
+  const day1 = attribute(['A'], [['Song (feat. Guest)', 0]]);
+  const day2 = attribute(['A', 'B'], [['Song (feat. Guest)', 0], ['New', 1]]);
+  for (const key of ['canonicalArtists', 'rawToCanonical', 'trackToCanonical']) {
+    assert.deepEqual(day2[key].slice(0, day1[key].length), day1[key], `A new artist renumbered existing ${key}`);
+  }
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'music-churn-'));
   try {
