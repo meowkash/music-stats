@@ -10,7 +10,7 @@ export const CACHE_VERSION = typeof __CACHE_VERSION__ !== 'undefined' ? __CACHE_
 export const CRITICAL_DATA_PATHS = ['/data/recent.json', '/data/yearly-totals.json', '/data/yearly-stats.json', '/data/recaps.json'] as const;
 export interface DataUpdatedDetail { path: string; data: unknown }
 export interface GenerationSwappedDetail { generation: string; changedPaths: string[] }
-export type RefreshResult = { status: 'updated' | 'unchanged' | 'offline' | 'failed'; changedPaths: string[]; error?: string; persistent?: boolean };
+export type RefreshResult = { status: 'updated' | 'unchanged' | 'offline' | 'failed'; changedPaths: string[]; error?: string; persistent?: boolean; blocked?: boolean };
 let memory = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 let activeManifest: Manifest | null = null;
@@ -153,7 +153,8 @@ export function stageUpdate(): Promise<RefreshResult> {
     } catch (error) {
       if (activeManifest) void leaseGeneration(activeManifest).catch(() => {});
       console.warn('[DataStore] Refresh failed; keeping the previous snapshot', error);
-      return { status: 'failed', changedPaths: [], error: String(error) };
+      // This site only returns 403 when Cloudflare challenges a request.
+      return { status: 'failed', changedPaths: [], error: String(error), blocked: /HTTP 403\b/.test(String(error)) };
     }
   })().finally(() => { staging = null; });
   return staging;

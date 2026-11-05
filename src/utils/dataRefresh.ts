@@ -16,6 +16,9 @@ const MAX_PULL = 150;
 const MIN_PULL_SHOW = 28;
 const PULL_DAMPING = 0.32;
 
+// Must match REVALIDATE_PARAM in src/service-worker.js.
+const REVALIDATE_PARAM = 'revalidate';
+
 const isOverlayTouch = isOverlaySurface;
 
 export function hideSplashScreen(): void {
@@ -113,6 +116,11 @@ async function runManualRefresh(): Promise<void> {
 
   try {
     const result = await refreshAppData();
+    if (result.blocked) {
+      // Fetches can't solve a Cloudflare challenge; a navigation can.
+      location.replace(`/?${REVALIDATE_PARAM}=${Date.now()}`);
+      return;
+    }
     if (result.status === "updated") {
       showUpdateToast('Data updated');
       pulseRefreshAnimation();
@@ -238,6 +246,12 @@ function handleResume(): void {
 export function initDataRefreshUI(): void {
   if (initialized) return;
   initialized = true;
+
+  const url = new URL(location.href);
+  if (url.searchParams.has(REVALIDATE_PARAM)) {
+    url.searchParams.delete(REVALIDATE_PARAM);
+    history.replaceState(history.state, '', url);
+  }
 
   window.addEventListener('data-generation-swapped', handleGenerationSwapped);
   document.addEventListener('visibilitychange', handleResume);

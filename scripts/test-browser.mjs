@@ -19,9 +19,18 @@ let manifestDelay = 0;
 const overrides = new Map();
 const failPaths = new Set();
 const requests = [];
+let challenged = false;
 const server = http.createServer((request, response) => {
-  const pathname = new URL(request.url, 'http://localhost').pathname;
+  const { pathname, searchParams } = new URL(request.url, 'http://localhost');
   requests.push(pathname);
+  if (challenged) {
+    // Like Cloudflare: every request gets a 403 until a page load solves the challenge.
+    const solvable = pathname === '/' && searchParams.has('revalidate');
+    if (solvable) challenged = false;
+    response.writeHead(403, { 'Content-Type': 'text/html', 'cf-mitigated': 'challenge' });
+    response.end(solvable ? '<script>location.reload()</script>' : 'Just a moment...');
+    return;
+  }
   if (failPaths.has(pathname)) { response.writeHead(503); response.end('Simulated outage'); return; }
   if (pathname === '/fixture') { response.writeHead(200, { 'Content-Type': 'text/html' }); response.end('<html><body></body></html>'); return; }
   const filename = path.join(dist, pathname === '/' ? 'index.html' : pathname);
@@ -211,6 +220,34 @@ try {
   await swPage.click('.tab-btn[data-tab="rankings"]'); await swPage.waitForFunction(() => document.body.dataset.activeTab === 'rankings');
   await swPage.click('.quick-ranges [data-range="all"]'); await swPage.waitForSelector('#leaderboardListSongs .scrobble-row');
   await swContext.setOffline(false);
+
+  // A challenged device never reaches the network for a navigation unless the
+  // pull asks for one, so the old toast repeated until a desktop force refresh.
+  const challengeContext = await context({ serviceWorkers: 'allow' });
+  const challengePage = await challengeContext.newPage();
+  await challengePage.goto(origin);
+  await challengePage.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await challengePage.reload();
+  await challengePage.waitForFunction(() => navigator.serviceWorker.controller && document.documentElement.dataset.appReady === 'true', null, { timeout: 30000 });
+  const pullToRefresh = async () => {
+    const touch = await challengeContext.newCDPSession(challengePage);
+    const send = (type, y) => touch.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: 196, y }] });
+    await send('touchStart', 150);
+    for (let y = 170; y <= 650; y += 40) { await send('touchMove', y); await challengePage.waitForTimeout(16); }
+    await send('touchEnd');
+    await touch.detach();
+  };
+  challenged = true;
+  const solved = challengePage.waitForResponse(r => new URL(r.url()).searchParams.has('revalidate') && r.status() === 200, { timeout: 20000 });
+  await pullToRefresh();
+  await solved;
+  assert.equal(challenged, false, 'The revalidating navigation must reach the network, not the cached shell');
+  // The marker is stripped at boot, so its absence also proves the new document ran.
+  await challengePage.waitForFunction(() => !location.search && document.documentElement.dataset.appReady === 'true', null, { timeout: 30000 });
+  await pullToRefresh();
+  await challengePage.waitForFunction(() => document.querySelector('#data-update-toast.visible')?.textContent === 'Already up to date', null, { timeout: 20000 });
+  await challengeContext.close(); evidence.push('Pull-to-refresh clears a Cloudflare challenge through the service worker and refreshes afterwards');
+
   const swSource = fs.readFileSync(path.join(dist, 'sw.js'), 'utf8');
   const version = swSource.match(/const CACHE_VERSION = '([^']+)'/)[1];
   overrides.set('/sw.js', swSource.replaceAll(version, 'test-next-version'));

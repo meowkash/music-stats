@@ -37,6 +37,9 @@ const PWA_ICON_PATHS = new Set([
 
 const SHELL_FALLBACK_URLS = ['/', '/index.html'];
 
+// Must match REVALIDATE_PARAM in src/utils/dataRefresh.ts.
+const REVALIDATE_PARAM = 'revalidate';
+
 // cdn-images.dzcdn.net is here because the resolver falls back to Deezer for
 // artist images, which iTunes' musicArtist entity almost never returns.
 const ARTWORK_HOSTS = ['lastfm.freetls.fastly.net', 'cdn-images.dzcdn.net', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'];
@@ -144,6 +147,11 @@ async function matchShellCache(cache, request) {
 }
 
 async function respondWithShell(event) {
+  // Only a real navigation can pass a Cloudflare challenge, and serving every
+  // navigation from cache would otherwise leave background fetches blocked for good.
+  if (new URL(event.request.url).searchParams.has(REVALIDATE_PARAM)) {
+    try { return await fetch(event.request); } catch { /* Offline: use the shell. */ }
+  }
   const cache = await caches.open(SHELL_CACHE);
   const cached = await matchShellCache(cache, event.request);
   if (cached) return cached;

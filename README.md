@@ -32,7 +32,7 @@ Mobile checks also cover sheet spacing/overflow, forward and back motion frames,
 - IndexedDB writes resolve on transaction completion and reject on failure. A memory-only session can still update correctly, but never claims persistent completeness. Garbage collection retains three generations and unexpired client/staging leases.
 - `src/service-worker.js` is the editable service-worker source; `scripts/generate-sw.js` emits `public/sw.js`. Critical shell/bundle precaching must succeed before installation. A new controller waits for existing clients to close; live data refreshes remain independent of application-code updates.
 
-Refresh checks run on reconnect, foreground resume/pageshow, every five foreground minutes, and pull-to-refresh. Failed reads can retry without recreating the document. Remote manifests cannot silently downgrade the active generation.
+Refresh checks run on reconnect, foreground resume/pageshow, every five foreground minutes, and pull-to-refresh. Failed reads can retry without recreating the document. When Cloudflare challenges a pull-to-refresh, the app navigates to `/?revalidate=…`, the one navigation the service worker sends to the network, because fetches cannot solve a challenge. Remote manifests cannot silently downgrade the active generation.
 
 ## Ingestion and deployment
 
