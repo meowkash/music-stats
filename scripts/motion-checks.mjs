@@ -104,8 +104,12 @@ export async function checkMobileMotion(browser, origin) {
     await tab('recents');
     const row = page.locator('#monthlyListTracks .scrobble-row').first();
     await row.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 9, isPrimary: true, clientX: 100, clientY: 250 });
-    await page.waitForTimeout(100);
-    const pressed = await row.evaluate(el => ({ opacity: +getComputedStyle(el).opacity, scale: new DOMMatrix(getComputedStyle(el).transform).a }));
+    // Read the settled press: a fixed wait can sample before the transition's first
+    // frame, when the scale is still exactly 1, which failed CI intermittently.
+    const pressed = await row.evaluate(async el => {
+      await Promise.all(el.getAnimations().map(animation => animation.finished.catch(() => {})));
+      return { opacity: +getComputedStyle(el).opacity, scale: new DOMMatrix(getComputedStyle(el).transform).a };
+    });
     assert.ok(pressed.opacity > 0.95 && pressed.scale < 1 && pressed.scale > 0.96);
     await row.dispatchEvent('pointercancel', { pointerType: 'touch', pointerId: 9 });
     const title = await openSong();
