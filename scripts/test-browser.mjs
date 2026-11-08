@@ -44,7 +44,7 @@ const server = http.createServer((request, response) => {
 });
 await new Promise(resolve => server.listen(0, '0.0.0.0', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true, ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
+const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}), ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
 const evidence = [builtCss];
 async function context(options = {}) {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, serviceWorkers: 'block', ...options });

@@ -90,6 +90,29 @@ export function sanitizeArtistArtwork(cache) {
   return cleared;
 }
 
+/**
+ * Gives an album the cover it already has under another artist credited on
+ * it. Albums used to take their newest track's artist, so covers resolved
+ * before that was fixed sit under that artist's key; without this the album
+ * would lose its cover and the backfill would re-fetch it. Each album lists
+ * the other artists on that album (not every album sharing its name), the
+ * previous owner first. Returns how many covers were carried over.
+ */
+export function carryAlbumArtwork(cache, albums) {
+  let carried = 0;
+  for (const { name, artistName, others } of albums) {
+    if (!name || !artistName || cache[artworkCacheKey('album', name, artistName)] || cache[resolveLegacyArtworkKey('album', name, artistName)]) continue;
+    for (const other of others) {
+      const url = other === artistName ? null : cache[artworkCacheKey('album', name, other)] ?? cache[resolveLegacyArtworkKey('album', name, other)];
+      if (!url) continue;
+      storeArtworkInCache(cache, 'album', name, artistName, url);
+      carried++;
+      break;
+    }
+  }
+  return carried;
+}
+
 export function rawArtistNamesForCanonical(canonicalId, meta) {
   const names = [];
   const mapping = meta.rawToCanonical;

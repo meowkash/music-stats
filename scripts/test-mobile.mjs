@@ -8,6 +8,7 @@ if (!origin) throw new Error('Usage: npm run test:mobile -- http://<LAN-address>
 const engine = process.env.MOBILE_BROWSER ?? 'webkit';
 const browser = await (engine === 'webkit' ? webkit : chromium).launch({
   headless: true,
+  ...(engine !== 'webkit' && process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}),
   ...(engine !== 'webkit' && process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}),
 });
 try {

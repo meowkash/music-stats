@@ -349,6 +349,7 @@ function main() {
 
   // Pass 1 — bucket every scrobble by year, resolving names once up front.
   const years = new Map();
+  const albumOwner = new Map();
   const rawArtistNames = [];
   const rawArtistIndex = new Map();
   const rawArtistCounts = [];
@@ -405,7 +406,10 @@ function main() {
     if (album) {
       const albumKey = albumGroupKey(artist, album);
       bump(bucket.albums, albumKey);
-      bucket.albumArtist.set(albumKey, artist);
+      // Same owner as the catalog: whoever introduced the album, not the
+      // latest scrobble, which flipped a soundtrack's credit with every play.
+      if (!albumOwner.has(albumKey)) albumOwner.set(albumKey, artist);
+      bucket.albumArtist.set(albumKey, albumOwner.get(albumKey));
       if (!bucket.albumDisplayNames.has(albumKey)) {
         bucket.albumDisplayNames.set(albumKey, canonicalAlbumTitle(album));
       }

@@ -1,5 +1,5 @@
 import { buildArtistAttribution, addTrackCanonicalCredits, loadOverrides } from './artist-resolve.js';
-import { promoteCanonicalArtworkCache, sanitizeArtistArtwork } from './artwork-keys.js';
+import { carryAlbumArtwork, promoteCanonicalArtworkCache, sanitizeArtistArtwork } from './artwork-keys.js';
 import { canonicalAlbumTitle } from './resolve-artwork/normalize.js';
 import { createAlbumGroups } from './album-groups.js';
 import { parseCSVLine, csvRecords } from './scrobble-source.js';
@@ -325,7 +325,11 @@ function main() {
     if (count === 0) continue;
     if (albums[albumId] === '') continue;
 
-    albumArtistId[albumId] = artistId;
+    // An album belongs to the artist whose scrobble introduced it (track ids
+    // run in first-play order, so that is its lowest track). Taking the
+    // newest track's artist re-attributed a soundtrack to whoever was first
+    // played on it last, moving its catalog shard and orphaning its cover.
+    albumArtistId[albumId] ??= artistId;
     albumScrobbles[albumId] = (albumScrobbles[albumId] || 0) + count;
 
     if (!albumTrackCounts[albumId]) {
@@ -449,8 +453,18 @@ function main() {
     const artworkCache = JSON.parse(fs.readFileSync(ARTWORK_PATH, 'utf-8'));
     const cleared = sanitizeArtistArtwork(artworkCache);
     if (cleared > 0) console.log(`Cleared ${cleared} artist images that were a compilation's cover`);
+    // Newest track first, so the artist the album used to show is tried first.
+    const albumArtists = new Map();
+    for (let tId = tracks.length - 1; tId >= 0; tId--) {
+      const [, artistId, albumId] = tracks[tId];
+      if (!catalog.albums[albumId]) continue;
+      const names = albumArtists.get(albumId) ?? albumArtists.set(albumId, []).get(albumId);
+      if (!names.includes(artists[artistId])) names.push(artists[artistId]);
+    }
+    const carried = carryAlbumArtwork(artworkCache, Object.entries(catalog.albums).map(([id, album]) => ({ ...album, others: albumArtists.get(Number(id)) ?? [] })));
+    if (carried > 0) console.log(`Carried ${carried} album covers over to the artist who introduced the album`);
     const promoted = promoteCanonicalArtworkCache(artworkCache, canonicalArtists, { artists, rawToCanonical });
-    if (promoted > 0 || cleared > 0) {
+    if (promoted > 0 || cleared > 0 || carried > 0) {
       fs.writeFileSync(ARTWORK_PATH, JSON.stringify(artworkCache, null, 2), 'utf-8');
       console.log(`Promoted artwork for ${promoted} canonical artists`);
     }

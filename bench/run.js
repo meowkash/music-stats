@@ -217,7 +217,7 @@ async function main() {
     ? scenarios.filter((s) => s.name.includes(flags.only))
     : scenarios;
 
-  const browser = await chromium.launch({ headless: !flags.headed, ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
+  const browser = await chromium.launch({ headless: !flags.headed, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}), ...(process.env.BENCH_BROWSER_CHANNEL ? { channel: process.env.BENCH_BROWSER_CHANNEL } : {}) });
   const results = {};
   const verdicts = [];
   const errors = [];
